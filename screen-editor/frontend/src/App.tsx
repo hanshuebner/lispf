@@ -168,6 +168,31 @@ function selectionCanCreateField(sel: Selection | null, fields: Field[], rows: s
   return true;
 }
 
+function maxRepeatForField(field: Field, fieldIndex: number, fields: Field[], rows: string[]): number {
+  const MAX_APP_ROW = 21;
+  let maxRepeat = MAX_APP_ROW - field.fromRow + 1;
+
+  for (let r = field.fromRow + 1; r <= MAX_APP_ROW; r++) {
+    const hasFieldConflict = fields.some((f, i) => {
+      if (i === fieldIndex) return false;
+      const fEndRow = f.fromRow + (f.repeat || 1) - 1;
+      if (r < f.fromRow || r > fEndRow) return false;
+      return f.fromCol < field.fromCol + field.len && f.fromCol + f.len > field.fromCol;
+    });
+
+    const rowStr = (rows[r] || '').padEnd(80, ' ');
+    const content = rowStr.substring(field.fromCol, field.fromCol + field.len);
+    const hasTextConflict = content.trim().length > 0;
+
+    if (hasFieldConflict || hasTextConflict) {
+      maxRepeat = r - field.fromRow;
+      break;
+    }
+  }
+
+  return Math.max(1, maxRepeat);
+}
+
 function aidKeyDisplayName(key: AidKey): string {
   if (key === 'enter' || key === 'clear') return key.charAt(0).toUpperCase() + key.slice(1);
   return key.toUpperCase();
@@ -313,6 +338,11 @@ export default function App() {
     [selection, screen?.fields, screen?.rows]
   );
 
+  const fieldMaxRepeat = useMemo(() => {
+    if (!screen || selectedFieldIndex === null || selectedFieldIndex >= screen.fields.length) return 21;
+    return maxRepeatForField(screen.fields[selectedFieldIndex], selectedFieldIndex, screen.fields, screen.rows);
+  }, [screen, selectedFieldIndex]);
+
   // --- Screen list ---
 
   const refreshScreenList = useCallback(async () => {
@@ -455,7 +485,8 @@ export default function App() {
   const handleFieldUpdate = useCallback((index: number, field: Field) => {
     updateScreen(s => {
       const fields = [...s.fields];
-      fields[index] = field;
+      const max = maxRepeatForField(field, index, s.fields, s.rows);
+      fields[index] = { ...field, repeat: Math.min(field.repeat, max) };
       return { ...s, fields };
     });
   }, [updateScreen]);
@@ -671,6 +702,7 @@ export default function App() {
               selection={selection}
               canCreateField={canCreateField}
               validationError={validationError}
+              maxRepeat={fieldMaxRepeat}
               onChange={(f) => { if (selectedFieldIndex !== null) handleFieldUpdate(selectedFieldIndex, f); }}
               onDelete={() => { if (selectedFieldIndex !== null) handleFieldDelete(selectedFieldIndex); }}
               onCreateField={handleCreateField}

@@ -5,6 +5,7 @@ interface AttributePanelProps {
   selection: Selection | null;
   canCreateField: boolean;
   validationError: string | null;
+  maxRepeat: number;
   onChange: (field: Field) => void;
   onDelete: () => void;
   onCreateField: () => void;
@@ -79,7 +80,7 @@ const COLORS: Color[] = ['default', 'blue', 'red', 'pink', 'green', 'turquoise',
 const HIGHLIGHTS: Highlighting[] = ['default', 'blink', 'reverse-video', 'underscore'];
 
 export default function AttributePanel({
-  field, selection, canCreateField, validationError, onChange, onDelete, onCreateField,
+  field, selection, canCreateField, validationError, maxRepeat, onChange, onDelete, onCreateField,
 }: AttributePanelProps) {
   // Selection state — show "New Field" button
   if (!field && selection) {
@@ -174,11 +175,11 @@ export default function AttributePanel({
         <input
           style={inputStyle}
           type="number"
-          min={1} max={12}
+          min={1} max={maxRepeat}
           value={field.repeat || 1}
           onChange={e => {
             const v = parseInt(e.target.value) || 1;
-            update({ repeat: Math.max(1, Math.min(12, v)) });
+            update({ repeat: Math.max(1, Math.min(maxRepeat, v)) });
           }}
         />
       </div>
