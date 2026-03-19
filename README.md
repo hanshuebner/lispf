@@ -29,7 +29,7 @@ without restarting the application.
 Clone the repository with submodules:
 
 ```bash
-git clone --recurse-submodules <repo-url>
+git clone --recurse-submodules https://github.com/hanshuebner/lispf
 ```
 
 Or, if already cloned:
