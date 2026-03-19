@@ -14,4 +14,4 @@ Entries written.:
  :fields ((:from (6 18) :len 30 :name session-time :color turquoise)
           (:from (7 18) :len 10 :name entries-written :color turquoise))
  :keys ((:enter "Logoff")
-        (:pf3 "Return" :goto browse)))
+        (:pf3 "Return" :back t)))
