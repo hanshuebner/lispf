@@ -8,14 +8,14 @@ Web-based visual editor for LISPF `.screen` files.
 
 - SBCL with Quicklisp
 - Node.js and npm
-- CL3270 and LISPF systems loadable via ASDF
+- LISPF system loadable via ASDF
 
 ### Running the Lisp backend
 
 Start SBCL and load the system:
 
 ```lisp
-(ql:quickload "screen-editor")
+(ql:quickload "lispf-editor")
 (screen-editor:start-server "screens/" :port 8388)
 ```
 

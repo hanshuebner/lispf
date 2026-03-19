@@ -1,4 +1,4 @@
-(asdf:defsystem #:screen-editor
+(asdf:defsystem #:lispf-editor
   :author "Hans Huebner"
   :license "MIT"
   :description "Web-based visual editor for LISPF .screen files"

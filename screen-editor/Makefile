@@ -22,7 +22,7 @@ $(TARGET): $(FRONTEND_DIST) package.lisp parser.lisp emitter.lisp api.lisp stati
 		--output $(TARGET) \
 		--load $(QUICKLISP_SETUP) \
 		--eval '(dolist (d (list "" "CL3270/" "screen-editor/")) (push (merge-pathnames d "$(ASDF_DIR)/") asdf:*central-registry*))' \
-		--load-system screen-editor \
+		--load-system lispf-editor \
 		--load main.lisp \
 		--entry screen-editor:main
 

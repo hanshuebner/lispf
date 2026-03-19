@@ -97,7 +97,7 @@ Start the Lisp backend:
 
 ```lisp
 (load "load.lisp")
-(asdf:load-system "screen-editor")
+(asdf:load-system "lispf-editor")
 (screen-editor:start-server "examples/guestbook/screens/" :port 8388)
 ```
 

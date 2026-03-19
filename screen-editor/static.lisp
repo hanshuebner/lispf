@@ -23,7 +23,7 @@
   "Read all files from frontend/dist/ into *static-files*."
   (let ((dist-dir (merge-pathnames
                    "frontend/dist/"
-                   (asdf:system-source-directory :screen-editor))))
+                   (asdf:system-source-directory :lispf-editor))))
     (clrhash *static-files*)
     (labels ((walk (dir)
                (dolist (entry (uiop:directory-files dir))
