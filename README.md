@@ -69,24 +69,53 @@ Connect with a 3270 terminal emulator (e.g. wx3270) on localhost:3270.
 
 ## Screen Editor
 
-A web-based WYSIWYG editor for `.screen` files:
+A web-based WYSIWYG editor for `.screen` files.
 
-```lisp
-(asdf:load-system "screen-editor")
-(screen-editor:start-server "path/to/screens/" :port 8388)
-```
+### Standalone binary
 
-Or build and run the standalone binary:
+Build and run:
 
 ```bash
 cd screen-editor && make
-./screen-editor --screen-directory /path/to/screens/
+./screen-editor --screen-directory examples/guestbook/screens/
 ```
+
+This creates a self-contained binary with embedded frontend assets.
+Open http://localhost:8080 in a browser.  Options:
+
+- `--port` — HTTP port (default: 8080)
+- `--screen-directory` — path to `.screen` files (default: `screens/`)
+
+Building requires SBCL with Quicklisp, `buildapp`, and Node.js/npm.
+
+### Development mode
+
+Development mode runs the Lisp backend and Vite frontend dev server
+separately, with hot-reloading on both sides.
+
+Start the Lisp backend:
+
+```lisp
+(load "load.lisp")
+(asdf:load-system "screen-editor")
+(screen-editor:start-server "examples/guestbook/screens/" :port 8388)
+```
+
+In a separate terminal, start the Vite dev server:
+
+```bash
+cd screen-editor/frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:5173 — the Vite dev server proxies `/api`
+requests to the Lisp backend on port 8388.
 
 ## Prerequisites
 
 - SBCL with Quicklisp
-- Node.js and npm (for screen-editor frontend development)
+- Node.js and npm (for building and developing the screen editor)
 
 ## License
 
