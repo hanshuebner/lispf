@@ -54,11 +54,6 @@ with :name, :message, and :date.")
                      (asdf:system-source-directory :lispf))
   :session-class 'guestbook-session)
 
-;;; Welcome screen
-
-(lspf:define-key-handler welcome :enter ()
-  (if *guestbook-entries* 'entry-list 'no-entries))
-
 ;;; Entry list screen
 
 (lspf:define-list-data-getter entry-list (start end)

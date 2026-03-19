@@ -23,4 +23,4 @@
       GGGG    uuuuu   eeee   sssss     tttt  bbbbb    oooo    oooo   kk  kk
 "
  :fields ()
- :keys ((:enter "Continue")))
+ :keys ((:enter "Continue" :goto entry-list)))

@@ -43,13 +43,12 @@
     (assert-on-screen s "WELCOME")
     (assert-screen-contains s "ENTER Continue")))
 
-(define-test enter-on-welcome-goes-to-no-entries ()
+(define-test enter-on-welcome-goes-to-empty-list ()
   (with-guestbook-entries '()
     (with-test-app (s lispf-guestbook::*guestbook-app*)
       (assert-on-screen s "WELCOME")
       (press-enter s)
-      (assert-on-screen s "NO-ENTRIES")
-      (assert-screen-contains s "No entries yet"))))
+      (assert-on-screen s "ENTRY-LIST"))))
 
 (define-test add-entry-and-verify-list ()
   (with-guestbook-entries
@@ -76,8 +75,8 @@
     (with-test-app (s lispf-guestbook::*guestbook-app*)
       (assert-on-screen s "WELCOME")
       (press-enter s)
-      (assert-on-screen s "NO-ENTRIES")
-      ;; PF3 on no-entries goes to bye
+      (assert-on-screen s "ENTRY-LIST")
+      ;; PF3 on entry-list goes to bye
       (press-pf s 3)
       (assert-on-screen s "BYE")
       (assert-screen-contains s "Thank you"))))
@@ -89,6 +88,6 @@
   (load-screen-data-files)
   (format t "~&;;; Running guestbook tests~%")
   (run-tests 'welcome-screen-displays
-             'enter-on-welcome-goes-to-no-entries
+             'enter-on-welcome-goes-to-empty-list
              'add-entry-and-verify-list
              'pf3-exits-to-bye))

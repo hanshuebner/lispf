@@ -390,12 +390,11 @@ Returns (values data-count total) if list data was provided, NIL otherwise."
          (offset (list-offset *session* screen-name)))
     (multiple-value-bind (records total)
         (get-list-data screen-name offset (+ offset page-size))
-      (when records
+      (when total
         (let ((data-count (length records)))
           (dolist (group repeat-groups)
             (distribute-group group records data-count screen-name field-values))
-          (when total
-            (set-page-info field-values context offset page-size total))
+          (set-page-info field-values context offset page-size total)
           ;; Store data count for selected-list-index
           (setf (list-state-value *session* screen-name :data-count)
                 data-count)
