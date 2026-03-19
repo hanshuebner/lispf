@@ -1,0 +1,11 @@
+(:name "no-entries"
+ :screen "
+
+
+
+
+                    No entries yet.  Be the first to sign!
+"
+ :fields ()
+ :keys ((:pf5 "Add" :goto new-entry)
+        (:pf3 "Exit" :goto bye)))

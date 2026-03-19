@@ -55,23 +55,23 @@ with :name, :message, and :date.")
   :session-class 'guestbook-session)
 
 ;;; Welcome screen
-;;; Enter continues to browse (handled by key spec :goto)
+
+(lspf:define-key-handler welcome :enter ()
+  (if *guestbook-entries* 'browse 'no-entries))
 
 ;;; Browse screen
 
 (lspf:define-screen-update browse (author date message entry-counter)
-  (if *guestbook-entries*
-      (let ((index (browse-index lspf:*session*))
-            (entry-count (length *guestbook-entries*)))
-        (let ((entry (nth index *guestbook-entries*)))
-          (setf author (getf entry :name)
-                date (getf entry :date)
-                message (getf entry :message)
-                entry-counter (format nil "Entry ~D of ~D" (1+ index) entry-count)))
-        (when (> entry-count 1)
-          (lspf:show-key :pf7 "Prev")
-          (lspf:show-key :pf8 "Next")))
-      (setf entry-counter "No entries yet. Press PF5 to add the first one.")))
+  (let ((index (browse-index lspf:*session*))
+        (entry-count (length *guestbook-entries*)))
+    (let ((entry (nth index *guestbook-entries*)))
+      (setf author (getf entry :name)
+            date (getf entry :date)
+            message (getf entry :message)
+            entry-counter (format nil "Entry ~D of ~D" (1+ index) entry-count)))
+    (when (> entry-count 1)
+      (lspf:show-key :pf7 "Prev")
+      (lspf:show-key :pf8 "Next"))))
 
 (lspf:define-key-handler browse :pf3 ()
   'bye)

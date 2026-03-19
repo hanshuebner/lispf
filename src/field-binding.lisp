@@ -162,7 +162,7 @@ Example:
     (:enter \"Submit\" (process name message)))"
   (let* ((parsed-clauses (mapcar #'parse-with-screen-clause clauses))
          (all-keys (mapcar #'first parsed-clauses))
-         (exit-key-set (or exit-keys '()))
+         (exit-key-set exit-keys)
          (pf-key-set (set-difference all-keys exit-key-set))
          (pf-key-forms (mapcar #'aid-keyword-to-constant pf-key-set))
          (exit-key-forms (mapcar #'aid-keyword-to-constant exit-key-set))

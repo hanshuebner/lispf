@@ -20,4 +20,4 @@
                    BBBBBBB     OOOOOOO    OOOOOOO   KK    KK
 "
  :fields ()
- :keys ((:enter "Continue" :goto browse)))
+ :keys ((:enter "Continue")))

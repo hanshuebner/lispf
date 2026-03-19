@@ -5,7 +5,7 @@ terminal applications in Common Lisp, inspired by IBM's
 [ISPF](https://en.wikipedia.org/wiki/ISPF) (Interactive System
 Productivity Facility).  It builds on top of the
 [CL3270](https://github.com/marcoxa/CL3270) terminal emulation
-library.
+library, which is included as a git submodule.
 
 ## How it works
 
@@ -23,6 +23,26 @@ Developing a LISPF application follows two steps:
 Screens are loaded lazily from `.screen` files at runtime and
 hot-reloaded when modified on disk, so you can iterate on layouts
 without restarting the application.
+
+## Getting started
+
+Clone the repository with submodules:
+
+```bash
+git clone --recurse-submodules <repo-url>
+```
+
+Or, if already cloned:
+
+```bash
+git submodule update --init
+```
+
+Load the system:
+
+```lisp
+(load "load.lisp")
+```
 
 ## Example: Guestbook
 
@@ -66,7 +86,6 @@ cd screen-editor && make
 ## Prerequisites
 
 - SBCL with Quicklisp
-- [CL3270](https://github.com/marcoxa/CL3270) loadable via ASDF
 - Node.js and npm (for screen-editor frontend development)
 
 ## License

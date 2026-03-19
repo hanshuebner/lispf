@@ -9,4 +9,4 @@
                (:file "api")
                (:file "static")
                (:file "server"))
-  :depends-on (#:cl3270 #:lispf #:hunchentoot #:yason #:alexandria))
+  :depends-on (#:lispf #:hunchentoot #:yason #:alexandria))
