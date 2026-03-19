@@ -13,37 +13,16 @@
 (defconstant +app-rows+ 21
   "Number of application rows in a screen (24 total minus 3 framework rows).")
 
-;;; Registry state
+;;; Per-screen compiled data
 
-(defvar *screen-registry* (make-hash-table :test 'equal)
-  "Maps screen name strings to cl3270:screen objects.")
-
-(defvar *screen-rules-registry* (make-hash-table :test 'equal)
-  "Maps screen name strings to rules hash tables.")
-
-(defvar *screen-keys-registry* (make-hash-table :test 'equal)
-  "Maps screen name strings to key spec lists.")
-
-(defvar *screen-transient-fields-registry* (make-hash-table :test 'equal)
-  "Maps screen name strings to lists of transient field name strings.")
-
-(defvar *screen-repeat-fields-registry* (make-hash-table :test 'equal)
-  "Maps screen name strings to alists of (base-name-string . count).")
-
-(defvar *screen-file-timestamps* (make-hash-table :test 'equal)
-  "Maps screen name strings to file-write-date of the loaded .screen file.")
-
-(defvar *screen-directories* '()
-  "List of directories to search for .screen files.")
-
-(defvar *application-name* ""
-  "Application name displayed in the title line of every screen.")
-
-;;; Directory management
-
-(defun register-screen-directory (directory)
-  "Add DIRECTORY to the screen search path."
-  (pushnew (truename directory) *screen-directories* :test #'equal))
+(defstruct screen-info
+  "All compiled data for a single screen."
+  screen
+  rules
+  keys
+  transient-fields
+  repeat-groups
+  (file-timestamp 0))
 
 ;;; Name resolution
 
@@ -54,10 +33,18 @@
     (symbol (string-downcase (symbol-name screen-name)))))
 
 (defun find-screen-file (name-string)
-  "Search *screen-directories* for NAME-STRING.screen. Returns pathname or nil."
-  (loop for dir in *screen-directories*
+  "Search the current application's directories for NAME-STRING.screen."
+  (loop for dir in (application-screen-directories *application*)
         for path = (merge-pathnames (make-pathname :name name-string :type "screen") dir)
         when (probe-file path) return path))
+
+;;; Directory management
+
+(defun register-screen-directory (directory)
+  "Add DIRECTORY to the current application's screen search path."
+  (pushnew (truename directory)
+           (application-screen-directories *application*)
+           :test #'equal))
 
 ;;; Framework row management
 
@@ -185,7 +172,7 @@ distributes to \"name.0\" ... \"name.N-1\", removes base key."
   "Format the title line: SCREEN-NAME   *APPLICATION-NAME*   date time"
   (let* ((left (string-upcase (screen-name-string screen-name)))
          (right (concatenate 'string (cl3270:today-date) " " (cl3270:now-time)))
-         (center *application-name*)
+         (center (application-name *application*))
          (used (+ (length left) (length center) (length right)))
          (total-gap (max 2 (- 78 used)))
          (left-gap (floor total-gap 2))
@@ -245,8 +232,7 @@ Ensures aid-keyword is a keyword, label is a string, and :goto value is a keywor
           key-specs))
 
 (defun compile-screen-data (name data)
-  "Compile a screen data plist into a screen object with framework fields.
-Returns (values screen rules keys transient-fields repeat-groups)."
+  "Compile a screen data plist into a screen-info struct."
   (let* ((screen-string (pad-screen-string (getf data :screen)))
          (raw-fields (getf data :fields))
          (raw-keys (getf data :keys)))
@@ -260,98 +246,76 @@ Returns (values screen rules keys transient-fields repeat-groups)."
                (app-fields (mapcar #'eval field-forms))
                (all-fields (append app-fields (make-framework-fields)))
                (keys (when raw-keys (normalize-key-specs raw-keys))))
-          (values (apply #'cl3270:make-screen name all-fields)
-                  rules
-                  keys
-                  transient-fields
-                  repeat-groups))))))
+          (make-screen-info
+           :screen (apply #'cl3270:make-screen name all-fields)
+           :rules rules
+           :keys keys
+           :transient-fields transient-fields
+           :repeat-groups repeat-groups))))))
 
 ;;; Registry operations
 
+(defun app-screens ()
+  "Return the screen cache hash table for the current application."
+  (application-screens *application*))
+
 (defun load-and-register-screen (name-string)
-  "Load a screen from disk and register it. Returns the screen object."
+  "Load a screen from disk and register it. Returns the screen-info."
   (let ((path (find-screen-file name-string)))
     (unless path
       (error "Screen file ~A.screen not found in directories: ~S"
-             name-string *screen-directories*))
-    (let ((data (load-screen-data path)))
-      (multiple-value-bind (screen rules keys transient-fields repeat-groups)
-          (compile-screen-data name-string data)
-        (setf (gethash name-string *screen-registry*) screen)
-        (setf (gethash name-string *screen-rules-registry*) rules)
-        (setf (gethash name-string *screen-keys-registry*) keys)
-        (setf (gethash name-string *screen-transient-fields-registry*) transient-fields)
-        (setf (gethash name-string *screen-repeat-fields-registry*) repeat-groups)
-        (setf (gethash name-string *screen-file-timestamps*) (file-write-date path))
-        screen))))
+             name-string (application-screen-directories *application*)))
+    (let ((info (compile-screen-data name-string (load-screen-data path))))
+      (setf (screen-info-file-timestamp info) (file-write-date path))
+      (setf (gethash name-string (app-screens)) info)
+      info)))
 
 (defun screen-file-changed-p (name-string)
-  "Check if the .screen file on disk is newer than the cached version.
-Also returns true if a screen is cached but has no recorded timestamp
-\(loaded before timestamp tracking was added)."
-  (let ((path (find-screen-file name-string))
-        (cached-time (gethash name-string *screen-file-timestamps*)))
-    (when (and path (gethash name-string *screen-registry*))
-      (or (null cached-time)
-          (let ((disk-time (file-write-date path)))
-            (and disk-time (> disk-time cached-time)))))))
-
-(defun get-screen (screen-name)
-  "Get a screen by name, loading from .screen file if not cached or changed on disk.
-SCREEN-NAME may be a symbol (converted to lowercase) or a string."
-  (let ((name-string (ensure-screen-loaded screen-name)))
-    (gethash name-string *screen-registry*)))
+  "Check if the .screen file on disk is newer than the cached version."
+  (let* ((info (gethash name-string (app-screens)))
+         (path (find-screen-file name-string)))
+    (when (and path info)
+      (let ((disk-time (file-write-date path)))
+        (and disk-time (> disk-time (screen-info-file-timestamp info)))))))
 
 (defun ensure-screen-loaded (screen-name)
-  "Ensure SCREEN-NAME is loaded and up-to-date. Reloads if file changed on disk."
+  "Ensure SCREEN-NAME is loaded and up-to-date. Returns the screen-info."
   (let ((name-string (screen-name-string screen-name)))
     (when (screen-file-changed-p name-string)
       (load-and-register-screen name-string))
-    (unless (gethash name-string *screen-registry*)
-      (load-and-register-screen name-string))
-    name-string))
+    (or (gethash name-string (app-screens))
+        (load-and-register-screen name-string))))
+
+(defun get-screen (screen-name)
+  "Get a screen by name, loading from .screen file if not cached or changed on disk."
+  (screen-info-screen (ensure-screen-loaded screen-name)))
 
 (defun get-screen-rules (screen-name)
   "Get the declared rules for a screen. Returns a rules hash table or nil."
-  (let ((name-string (ensure-screen-loaded screen-name)))
-    (gethash name-string *screen-rules-registry*)))
+  (screen-info-rules (ensure-screen-loaded screen-name)))
 
 (defun get-screen-keys (screen-name)
   "Get the declared key specs for a screen. Returns a list of key specs or nil."
-  (let ((name-string (ensure-screen-loaded screen-name)))
-    (gethash name-string *screen-keys-registry*)))
+  (screen-info-keys (ensure-screen-loaded screen-name)))
 
 (defun get-screen-transient-fields (screen-name)
   "Get the list of transient field name strings for a screen."
-  (let ((name-string (ensure-screen-loaded screen-name)))
-    (gethash name-string *screen-transient-fields-registry*)))
+  (screen-info-transient-fields (ensure-screen-loaded screen-name)))
 
 (defun get-screen-repeat-fields (screen-name)
-  "Get the repeat groups alist for a screen. Each entry is (base-name-string . count)."
-  (let ((name-string (ensure-screen-loaded screen-name)))
-    (gethash name-string *screen-repeat-fields-registry*)))
+  "Get the repeat groups alist for a screen."
+  (screen-info-repeat-groups (ensure-screen-loaded screen-name)))
 
 (defun reload-screen (screen-name)
   "Force reload a screen from disk."
   (let ((name-string (screen-name-string screen-name)))
-    (remhash name-string *screen-registry*)
-    (remhash name-string *screen-rules-registry*)
-    (remhash name-string *screen-keys-registry*)
-    (remhash name-string *screen-transient-fields-registry*)
-    (remhash name-string *screen-repeat-fields-registry*)
-    (remhash name-string *screen-file-timestamps*)
+    (remhash name-string (app-screens))
     (load-and-register-screen name-string)))
 
 (defun reload-all-screens ()
-  "Clear the screen cache, forcing all screens to reload on next access."
-  (clrhash *screen-registry*)
-  (clrhash *screen-rules-registry*)
-  (clrhash *screen-keys-registry*)
-  (clrhash *screen-transient-fields-registry*)
-  (clrhash *screen-repeat-fields-registry*)
-  (clrhash *screen-file-timestamps*)
-  (when (boundp '*validated-screens*)
-    (clrhash *validated-screens*)))
+  "Clear the screen cache for the current application."
+  (clrhash (app-screens))
+  (clrhash (application-validated-screens *application*)))
 
 ;;; Rule merging
 

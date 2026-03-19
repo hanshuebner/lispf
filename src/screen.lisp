@@ -4,9 +4,6 @@
   (:use #:cl #:alexandria)
   (:local-nicknames (#:bt #:bordeaux-threads))
   (:export ;; Registry
-           #:*screen-registry*
-           #:*screen-directories*
-           #:*application-name*
            #:register-screen-directory
            #:get-screen
            #:get-screen-rules

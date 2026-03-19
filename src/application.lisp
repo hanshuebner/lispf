@@ -15,7 +15,19 @@
    (screen-directory :initarg :screen-directory :accessor application-screen-directory)
    (package :initarg :package :accessor application-package)
    (session-class :initarg :session-class :accessor application-session-class
-                  :initform 'session)))
+                  :initform 'session)
+   (screens :initform (make-hash-table :test 'equal) :accessor application-screens
+            :documentation "Screen cache: name-string -> screen-info struct.")
+   (screen-directories :initform '() :accessor application-screen-directories
+                       :documentation "List of directories to search for .screen files.")
+   (validated-screens :initform (make-hash-table :test 'eq)
+                      :accessor application-validated-screens
+                      :documentation "Screens whose key handlers have been validated.")))
+
+(defmethod initialize-instance :after ((app application) &key)
+  (let ((dir (application-screen-directory app)))
+    (when dir
+      (pushnew (truename dir) (application-screen-directories app) :test #'equal))))
 
 ;;; Session class
 
@@ -205,15 +217,24 @@ Keys with :back t become exit-keys; all others become pf-keys."
 
 ;;; Screen key handler validation
 
+(defun has-list-data-getter-p (screen-sym)
+  "Return T if SCREEN-SYM has a non-default get-list-data method."
+  (let ((default-method (find-method #'get-list-data '()
+                                     (list (find-class t) (find-class t) (find-class t)))))
+    (find-if (lambda (m) (not (eq m default-method)))
+             (compute-applicable-methods #'get-list-data (list screen-sym 0 0)))))
+
 (defun check-screen-key-handlers (screen-sym key-specs)
   "Check that all key-specs without :back or :goto have a matching handle-key method.
 Signals a warning for any key that would fall through to the default handler."
   (let ((default-method (find-method #'handle-key '()
-                                     (list (find-class t) (find-class t)))))
+                                     (list (find-class t) (find-class t))))
+        (list-screen-p (has-list-data-getter-p screen-sym)))
     (dolist (spec key-specs)
       (destructuring-bind (aid-keyword label &key back goto) spec
         (declare (ignore label))
-        (unless (or back goto)
+        (unless (or back goto
+                    (and list-screen-p (member aid-keyword '(:pf7 :pf8))))
           (let* ((methods (compute-applicable-methods
                            #'handle-key (list screen-sym aid-keyword)))
                  (has-specific (find-if (lambda (m) (not (eq m default-method)))
@@ -222,8 +243,6 @@ Signals a warning for any key that would fall through to the default handler."
               (warn "Screen ~S: no handler for ~S (define with define-key-handler)"
                     screen-sym aid-keyword))))))))
 
-(defvar *validated-screens* (make-hash-table :test 'eq)
-  "Screens whose key handlers have been validated.")
 
 ;;; Server and connection handling
 
@@ -244,14 +263,18 @@ Signals a warning for any key that would fall through to the default handler."
       (format *error-output* "~&;;; ~A: connection error: ~A~%"
               (application-name application) e))))
 
-(defun start-application (application &key (port 3270) (host "127.0.0.1"))
+(defun start-application (application &key (port 3270) (host "127.0.0.1")
+                                          listener-callback)
   "Start APPLICATION, listening for 3270 connections on HOST:PORT.
-Serves multiple users concurrently using threads."
-  (setf *application-name* (application-name application))
+Serves multiple users concurrently using threads.
+When LISTENER-CALLBACK is provided, it is called with the listener socket
+after binding but before the accept loop. Useful for test harnesses."
   (format t "~&;;; ~A: listening on ~A:~D~%" (application-name application) host port)
   (usocket:with-socket-listener (listener host port
                                           :element-type '(unsigned-byte 8)
                                           :reuse-address t)
+    (when listener-callback
+      (funcall listener-callback listener))
     (loop
       (let ((c (usocket:socket-accept listener)))
         (bt:make-thread
@@ -313,10 +336,7 @@ screen transitions. Fields marked :transient in .screen files are excluded."
          (*device-info* devinfo)
          (*session* (make-instance (application-session-class application)
                                    :application application))
-         (*application-name* (application-name application))
          (app-package (application-package application)))
-    ;; Register the screen directory
-    (register-screen-directory (application-screen-directory application))
     ;; Set initial screen
     (setf (session-current-screen *session*)
           (application-entry-screen application))
@@ -333,8 +353,8 @@ screen transitions. Fields marked :transient in .screen files are excluded."
              (dispatch-sym (intern-screen-name name-string app-package))
              (field-values (cl3270:make-dict :test #'equal)))
         ;; Validate key handlers (once per screen)
-        (unless (gethash dispatch-sym *validated-screens*)
-          (setf (gethash dispatch-sym *validated-screens*) t)
+        (unless (gethash dispatch-sym (application-validated-screens *application*))
+          (setf (gethash dispatch-sym (application-validated-screens *application*)) t)
           (check-screen-key-handlers dispatch-sym key-specs))
         ;; Bind context for prepare-screen
         (setf *current-field-values* context)
@@ -385,10 +405,15 @@ screen transitions. Fields marked :transient in .screen files are excluded."
                                        (filter-screen-fields screen repeat-groups
                                                              list-data-count)
                                        screen))
-                   ;; Cursor: override > saved list cursor > first writable field
-                   (saved-cursor (when (and has-list-data (not *next-cursor-row*))
-                                   (getf (list-state *session* dispatch-sym)
-                                         :cursor-row)))
+                   ;; Cursor: override > saved list cursor (clamped) > first writable field
+                   (saved-cursor
+                     (when (and has-list-data (not *next-cursor-row*))
+                       (let ((raw (getf (list-state *session* dispatch-sym)
+                                        :cursor-row)))
+                         (when raw
+                           (let* ((first-row (list-data-row screen repeat-groups))
+                                  (max-row (+ first-row (1- list-data-count))))
+                             (min raw max-row))))))
                    (first-write (unless (or *next-cursor-row* saved-cursor)
                                   (find-if (lambda (f) (cl3270::field-write f))
                                            (cl3270:screen-fields display-screen))))

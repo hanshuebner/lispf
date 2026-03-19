@@ -1,5 +1,6 @@
 (:name "entry-list"
  :screen "
+
  S   Author          Date       Message
 "
  :fields ((:from (2 1) :len 1 :name sel :write t :repeat 17 :highlighting underscore)

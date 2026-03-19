@@ -45,11 +45,8 @@
     (:pf24   'cl3270:+aid-pf24+)))
 
 (defun aid-keyword-display-name (keyword)
-  "Return the display name for an AID keyword, e.g. :PF3 -> \"PF3\", :ENTER -> \"Enter\"."
-  (let ((name (symbol-name keyword)))
-    (if (member keyword '(:enter :clear))
-        (string-capitalize name)
-        name)))
+  "Return the display name for an AID keyword, e.g. :PF3 -> \"PF3\", :ENTER -> \"ENTER\"."
+  (symbol-name keyword))
 
 ;;; Clause parsing
 
