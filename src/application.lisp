@@ -276,12 +276,16 @@ after binding but before the accept loop. Useful for test harnesses."
     (when listener-callback
       (funcall listener-callback listener))
     (loop
-      (let ((c (usocket:socket-accept listener)))
+      (let ((c (usocket:socket-accept listener))
+            (out *standard-output*)
+            (err *error-output*))
         (bt:make-thread
          (lambda ()
-           (unwind-protect
-                (handle-connection application c)
-             (ignore-errors (usocket:socket-close c))))
+           (let ((*standard-output* out)
+                 (*error-output* err))
+             (unwind-protect
+                  (handle-connection application c)
+               (ignore-errors (usocket:socket-close c)))))
          :name (format nil "~A-~A"
                         (application-name application)
                         (usocket:get-peer-address c)))))))

@@ -1,0 +1,47 @@
+;;;; -*- Mode: Lisp; Coding: utf-8 -*-
+
+(defpackage #:lispf-test
+  (:use #:cl #:alexandria)
+  (:local-nicknames (#:bt #:bordeaux-threads))
+  (:export ;; s3270 driver
+           #:s3270-session
+           #:s3270-response
+           #:s3270-response-data
+           #:s3270-response-status
+           #:s3270-response-ok-p
+           #:launch-s3270
+           #:close-s3270
+           #:send-action
+           #:parse-status-line
+           ;; Client
+           #:s3270-connect
+           #:s3270-disconnect
+           #:screen-text
+           #:screen-text-at
+           #:screen-row
+           #:type-text
+           #:press-enter
+           #:press-pf
+           #:press-key
+           #:move-cursor
+           #:tab-forward
+           #:type-at
+           #:cursor-position
+           #:wait-for-field
+           ;; Assertions
+           #:test-failure
+           #:assert-screen-contains
+           #:assert-screen-match
+           #:assert-text-at
+           #:assert-cursor-at
+           #:field-position
+           #:read-field
+           #:assert-field
+           #:type-in-field
+           #:assert-on-screen
+           #:load-test-screen-data
+           ;; Test runner
+           #:define-test
+           #:run-tests
+           ;; Harness
+           #:with-test-app))
