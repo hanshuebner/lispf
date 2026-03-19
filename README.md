@@ -55,9 +55,9 @@ complete multi-screen application with five screens:
 - **new-entry** — form with validated name and multi-line message fields
 - **bye** — session summary showing time spent and entries written
 
-The screens are defined as `.screen` files in `examples/guestbook/screens/`.
-The application logic in `guestbook.lisp` is roughly 80 lines — session
-state, key handlers, and a start function:
+The screens are defined as `.screen` files in [`examples/guestbook/screens/`](examples/guestbook/screens/).
+The [application logic](examples/guestbook/guestbook.lisp) is roughly 80
+lines — session state, key handlers, and a start function:
 
 ```lisp
 (asdf:load-system "lispf")
