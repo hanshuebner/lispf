@@ -36,6 +36,11 @@
            #:application-error-message
            #:generate-incident-id
            #:log-incident
+           ;; List data
+           #:get-list-data
+           #:define-list-data-getter
+           #:list-offset
+           #:selected-list-index
            ;; Key handlers
            #:handle-key
            #:define-key-handler
@@ -44,6 +49,7 @@
            #:define-screen-update
            #:show-key
            #:hide-key
+           #:set-cursor
            ;; Application framework
            #:application
            #:application-name
@@ -61,6 +67,8 @@
            #:*session*
            #:*connection*
            #:*device-info*
+           #:*cursor-row*
+           #:*cursor-col*
            #:*current-field-values*
            #:define-application
            #:run-application

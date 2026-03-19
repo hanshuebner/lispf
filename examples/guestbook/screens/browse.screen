@@ -13,4 +13,4 @@ Message:
  :keys ((:pf7 "")
         (:pf8 "")
         (:pf5 "Add" :goto new-entry)
-        (:pf3 "Exit")))
+        (:pf3 "Back" :back t)))

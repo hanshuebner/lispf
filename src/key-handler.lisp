@@ -70,6 +70,28 @@ Example:
        (with-field-bindings (*current-field-values* ,@field-names)
          ,@body))))
 
+;;; List data getter for repeat field population
+
+(defgeneric get-list-data (screen-name start end)
+  (:documentation "Called by the framework to pull structured data for repeat fields.
+START and END are 0-based indices for the page window.
+Return (values records total-count) where RECORDS is a list of plists
+with keys matching repeat field base names, or NIL if this screen
+has no list data.")
+  (:method (screen-name start end)
+    (declare (ignore screen-name start end))
+    nil))
+
+(defmacro define-list-data-getter (screen-name (start end) &body body)
+  "Define a data getter for repeat field population on SCREEN-NAME.
+The framework calls this with START and END indices (0-based).
+Body should return (values records total-count) where RECORDS is a list
+of plists with keys matching repeat field base names."
+  (let ((screen-sym (intern (string-upcase (string screen-name)) *package*)))
+    `(defmethod get-list-data ((screen-name (eql ',screen-sym)) ,start ,end)
+       (declare (ignorable ,start ,end))
+       ,@body)))
+
 ;;; Screen preparation generic function
 
 (defgeneric prepare-screen (screen-name)

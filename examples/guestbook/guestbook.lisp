@@ -57,7 +57,26 @@ with :name, :message, and :date.")
 ;;; Welcome screen
 
 (lspf:define-key-handler welcome :enter ()
-  (if *guestbook-entries* 'browse 'no-entries))
+  (if *guestbook-entries* 'entry-list 'no-entries))
+
+;;; Entry list screen
+
+(lspf:define-list-data-getter entry-list (start end)
+  (let* ((entries *guestbook-entries*)
+         (total (length entries))
+         (page (subseq entries start (min end total))))
+    (values (loop for e in page
+                  collect (list :author (getf e :name)
+                                :date (getf e :date)
+                                :preview (substitute #\Space #\Newline
+                                                     (getf e :message))))
+            total)))
+
+(lspf:define-key-handler entry-list :enter ()
+  (let ((index (lspf:selected-list-index)))
+    (when index
+      (setf (browse-index lspf:*session*) index)
+      'browse)))
 
 ;;; Browse screen
 
@@ -72,9 +91,6 @@ with :name, :message, and :date.")
     (when (> entry-count 1)
       (lspf:show-key :pf7 "Prev")
       (lspf:show-key :pf8 "Next"))))
-
-(lspf:define-key-handler browse :pf3 ()
-  'bye)
 
 (lspf:define-key-handler browse :pf7 ()
   (when (> (browse-index lspf:*session*) 0)

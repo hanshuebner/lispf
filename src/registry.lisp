@@ -383,6 +383,108 @@ APP-RULES takes precedence over SCREEN-RULES. Returns nil if both are nil."
                 sym (cl3270:screen-name screen)
                 (mapcar #'string-upcase screen-field-names)))))))
 
+;;; List data distribution
+
+(defun truncate-to-field (string field-len)
+  "Truncate STRING to at most FIELD-LEN characters."
+  (if (> (length string) field-len)
+      (subseq string 0 field-len)
+      string))
+
+(defun record-field-value (record key field-len)
+  "Extract KEY from RECORD plist, convert to string, and truncate to FIELD-LEN."
+  (let ((value (getf record key)))
+    (if value
+        (truncate-to-field (princ-to-string value) field-len)
+        "")))
+
+(defun distribute-group (group records data-count screen-name field-values)
+  "Fill field slots for one repeat GROUP from RECORDS into FIELD-VALUES."
+  (destructuring-bind (base-name count &optional stored-len) group
+    (let ((key (intern (string-upcase base-name) :keyword))
+          (field-len (or stored-len
+                        (repeat-field-length (get-screen screen-name) base-name))))
+      (dotimes (i count)
+        (setf (gethash (format nil "~A.~D" base-name i) field-values)
+              (if (< i data-count)
+                  (record-field-value (nth i records) key field-len)
+                  ""))))))
+
+(defun set-page-info (field-values context offset page-size total)
+  "Auto-populate the page-info field in FIELD-VALUES and CONTEXT."
+  (let ((str (format nil "Page ~D of ~D  (~D entr~:@P)"
+                     (1+ (floor offset page-size))
+                     (max 1 (ceiling total page-size))
+                     total)))
+    (setf (gethash "page-info" field-values) str
+          (gethash "page-info" context) str)))
+
+(defun distribute-list-data (screen-name repeat-groups context field-values)
+  "Call get-list-data for SCREEN-NAME and distribute records into FIELD-VALUES.
+Returns (values data-count total) if list data was provided, NIL otherwise."
+  (let* ((page-size (reduce #'max repeat-groups :key #'second :initial-value 0))
+         (offset (list-offset *session* screen-name)))
+    (multiple-value-bind (records total)
+        (get-list-data screen-name offset (+ offset page-size))
+      (when records
+        (let ((data-count (length records)))
+          (dolist (group repeat-groups)
+            (distribute-group group records data-count screen-name field-values))
+          (when total
+            (set-page-info field-values context offset page-size total))
+          ;; Store data count for selected-list-index
+          (setf (list-state-value *session* screen-name :data-count)
+                data-count)
+          (values data-count total))))))
+
+(defun list-data-row (screen repeat-groups)
+  "Return the screen row where the first repeat field instance (.0) starts."
+  (let ((target (format nil "~A.0" (first (first repeat-groups)))))
+    (dolist (f (cl3270:screen-fields screen))
+      (when (string-equal (cl3270:field-name f) target)
+        (return (cl3270:field-row f))))))
+
+(defun selected-list-index ()
+  "Return the absolute index of the list row under the cursor, or NIL.
+Call from a key handler on a screen with a list-data-getter."
+  (let* ((screen-sym (session-current-screen *session*))
+         (repeat-groups (get-screen-repeat-fields screen-sym))
+         (screen (get-screen screen-sym)))
+    (when repeat-groups
+      (let* ((first-row (list-data-row screen repeat-groups))
+             (page-size (reduce #'max repeat-groups :key #'second :initial-value 0))
+             (row-index (- *cursor-row* first-row))
+             (data-count (or (getf (list-state *session* screen-sym) :data-count) 0)))
+        (when (and first-row
+                   (<= 0 row-index (1- page-size))
+                   (< row-index data-count))
+          (+ (list-offset *session* screen-sym) row-index))))))
+
+(defun repeat-field-index (field-name base-names)
+  "Parse FIELD-NAME as \"base.N\". If base is in BASE-NAMES, return N; otherwise NIL."
+  (let ((dot-pos (position #\. field-name :from-end t)))
+    (when dot-pos
+      (let ((base (subseq field-name 0 dot-pos))
+            (idx-str (subseq field-name (1+ dot-pos))))
+        (when (and (plusp (length idx-str))
+                   (every #'digit-char-p idx-str)
+                   (member base base-names :test #'string-equal))
+          (parse-integer idx-str))))))
+
+(defun filter-screen-fields (screen repeat-groups data-count)
+  "Return a screen copy excluding repeat field instances beyond DATA-COUNT.
+Fields belonging to a repeat group with index >= DATA-COUNT are removed."
+  (let ((max-count (reduce #'max repeat-groups :key #'second :initial-value 0)))
+    (if (>= data-count max-count)
+        screen
+        (let ((base-names (mapcar #'first repeat-groups)))
+          (flet ((beyond-data-p (field)
+                   (let ((idx (repeat-field-index (cl3270:field-name field) base-names)))
+                     (and idx (>= idx data-count)))))
+            (apply #'cl3270:make-screen
+                   (cl3270:screen-name screen)
+                   (remove-if #'beyond-data-p (cl3270:screen-fields screen))))))))
+
 ;;; Simple screen display
 
 (defun display-screen (screen-name conn &key devinfo codepage values cursor no-response)
