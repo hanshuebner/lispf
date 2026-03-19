@@ -2,22 +2,25 @@
  :screen "
 
 
-
-
-               GGGGGGG   UU     UU  EEEEEEEEE   SSSSSSS   TTTTTTTTT
-              GG         UU     UU  EE         SS     SS     TT
-              GG         UU     UU  EE         SS            TT
-              GG  GGGGG  UU     UU  EEEEEEE     SSSSSSS      TT
-              GG     GG  UU     UU  EE                SS     TT
-              GG     GG   UU   UU   EE         SS     SS     TT
-               GGGGGGG     UUUUU    EEEEEEEEE   SSSSSSS      TT
-                   BBBBBBB     OOOOOOO    OOOOOOO   KK    KK
-                   BB     BB  OO     OO  OO     OO  KK   KK
-                   BB     BB  OO     OO  OO     OO  KK  KK
-                   BBBBBBB    OO     OO  OO     OO  KKKKK
-                   BB     BB  OO     OO  OO     OO  KK  KK
-                   BB     BB  OO     OO  OO     OO  KK   KK
-                   BBBBBBB     OOOOOOO    OOOOOOO   KK    KK
+    lll                            ffff
+     ll    ii                     ff
+     ll                           ff
+     ll   iii     sssss  ppppp   fffff
+     ll    ii    ss      pp  pp   ff
+     ll    ii     ssss   pp  pp   ff
+     ll    ii        ss  pp  pp   ff
+     ll    ii        ss  pp  pp   ff
+     lll    iii  sssss   ppppp    ff
+                         pp
+                         pp                  bb                      kk
+      GGGG               pp           tt     bb                      kk
+     GG  GG                           tt     bb                      kk
+     GG      uu  uu   eeee    sssss  ttttt   bbbbb    oooo    oooo   kk  kk
+     GG      uu  uu  ee  ee  ss       tt     bb  bb  oo  oo  oo  oo  kk kk
+     GG GGG  uu  uu  eeeeee   ssss    tt     bb  bb  oo  oo  oo  oo  kkkk
+     GG  GG  uu  uu  ee          ss   tt     bb  bb  oo  oo  oo  oo  kkkk
+     GG  GG  uu  uu  ee  ee      ss   tt     bb  bb  oo  oo  oo  oo  kk kk
+      GGGG    uuuuu   eeee   sssss     tttt  bbbbb    oooo    oooo   kk  kk
 "
  :fields ()
  :keys ((:enter "Continue")))

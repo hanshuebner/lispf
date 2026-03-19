@@ -8,9 +8,11 @@ interface ScreenGridProps {
   fields: Field[];
   selectedFieldIndex: number | null;
   selection: Selection | null;
+  overlay: string[] | null;
   onSelectField: (index: number | null) => void;
   onSelectionChange: (sel: Selection | null) => void;
   onRowsChange: (rows: string[]) => void;
+  onOverlayClear: () => void;
 }
 
 const ROWS = 24;
@@ -28,8 +30,8 @@ function clampRow(row: number) {
 }
 
 export default function ScreenGrid({
-  rows, fields, selectedFieldIndex, selection,
-  onSelectField, onSelectionChange, onRowsChange,
+  rows, fields, selectedFieldIndex, selection, overlay,
+  onSelectField, onSelectionChange, onRowsChange, onOverlayClear,
 }: ScreenGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLSpanElement>(null);
@@ -39,6 +41,21 @@ export default function ScreenGrid({
   const [dragEnd, setDragEnd] = useState<{ row: number; col: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [moveOffset, setMoveOffset] = useState<{ dRow: number; dCol: number }>({ dRow: 0, dCol: 0 });
+  const [overlayPos, setOverlayPos] = useState<{ row: number; col: number } | null>(null);
+
+  // Initialize overlay position when overlay appears
+  useEffect(() => {
+    if (overlay) {
+      const overlayWidth = Math.max(0, ...overlay.map(l => l.length));
+      const startRow = cursor ? cursor.row : Math.max(MIN_APP_ROW, Math.floor((MIN_APP_ROW + MAX_APP_ROW - overlay.length) / 2));
+      const startCol = cursor ? cursor.col : Math.max(0, Math.floor((COLS - overlayWidth) / 2));
+      setOverlayPos({ row: Math.max(MIN_APP_ROW, Math.min(MAX_APP_ROW - overlay.length + 1, startRow)), col: Math.max(0, Math.min(COLS - overlayWidth, startCol)) });
+      onSelectionChange(null);
+      setCursor(null);
+    } else {
+      setOverlayPos(null);
+    }
+  }, [overlay]);
 
   useEffect(() => {
     if (measureRef.current) {
@@ -154,6 +171,52 @@ export default function ScreenGrid({
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (document.activeElement && document.activeElement !== document.body) return;
+
+      // Overlay placement mode
+      if (overlay && overlayPos) {
+        const overlayWidth = Math.max(0, ...overlay.map(l => l.length));
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+          e.preventDefault();
+          setOverlayPos(prev => {
+            if (!prev) return prev;
+            const dRow = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
+            const dCol = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
+            const newRow = prev.row + dRow;
+            const newCol = prev.col + dCol;
+            if (newRow < MIN_APP_ROW || newRow + overlay.length - 1 > MAX_APP_ROW) return prev;
+            if (newCol < 0 || newCol + overlayWidth > COLS) return prev;
+            return { row: newRow, col: newCol };
+          });
+          return;
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          // Apply overlay transparently (spaces don't overwrite)
+          const newRows = rows.map(r => r.padEnd(COLS, ' ').substring(0, COLS));
+          for (let i = 0; i < overlay.length; i++) {
+            const r = overlayPos.row + i;
+            if (r > MAX_APP_ROW) break;
+            const rowChars = newRows[r].split('');
+            for (let j = 0; j < overlay[i].length; j++) {
+              const c = overlayPos.col + j;
+              if (c >= COLS) break;
+              if (overlay[i][j] !== ' ') {
+                rowChars[c] = overlay[i][j];
+              }
+            }
+            newRows[r] = rowChars.join('');
+          }
+          onRowsChange(newRows);
+          onOverlayClear();
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onOverlayClear();
+          return;
+        }
+        return; // block all other keys during overlay
+      }
 
       // Selection movement mode
       if (selection && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
@@ -303,11 +366,29 @@ export default function ScreenGrid({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [cursor, selection, moveOffset, isMoving, rows, onRowsChange, onSelectionChange, onSelectField, applyMove]);
+  }, [cursor, selection, moveOffset, isMoving, overlay, overlayPos, rows, onRowsChange, onSelectionChange, onSelectField, onOverlayClear, applyMove]);
 
-  // Compute display rows, applying move preview if active
+  // Compute display rows, applying overlay or move preview if active
   const displayRows = useMemo(() => {
     const base = rows.map(r => r.padEnd(COLS, ' ').substring(0, COLS));
+
+    // Overlay preview (transparent - spaces don't overwrite)
+    if (overlay && overlayPos) {
+      const preview = base.map(r => r.split(''));
+      for (let i = 0; i < overlay.length; i++) {
+        const r = overlayPos.row + i;
+        if (r > MAX_APP_ROW) break;
+        for (let j = 0; j < overlay[i].length; j++) {
+          const c = overlayPos.col + j;
+          if (c >= COLS) break;
+          if (overlay[i][j] !== ' ') {
+            preview[r][c] = overlay[i][j];
+          }
+        }
+      }
+      return preview.map(chars => chars.join(''));
+    }
+
     if (!selection || !isMoving) return base;
 
     const sel = selection;
@@ -333,7 +414,7 @@ export default function ScreenGrid({
     }
 
     return preview.map(chars => chars.join(''));
-  }, [rows, selection, isMoving, moveOffset]);
+  }, [rows, selection, isMoving, moveOffset, overlay, overlayPos]);
 
   // In-progress drag selection
   const dragSel = dragging && dragStart && dragEnd
@@ -358,13 +439,23 @@ export default function ScreenGrid({
       }
     : null;
 
-  const statusLeft = selection
-    ? isMoving
-      ? 'Enter to confirm move, Escape to cancel'
-      : 'Arrows to move, Delete to clear, Enter to deselect, Escape to cancel'
-    : cursor
-      ? 'Type to enter text, drag to select, click a field to edit'
-      : 'Click to place cursor, drag to select, click a field to edit';
+  // Overlay rectangle
+  const overlayRect = overlay && overlayPos ? {
+    fromRow: overlayPos.row,
+    toRow: overlayPos.row + overlay.length - 1,
+    fromCol: overlayPos.col,
+    toCol: overlayPos.col + Math.max(0, ...overlay.map(l => l.length)) - 1,
+  } : null;
+
+  const statusLeft = overlay
+    ? 'Arrows to position, Enter to place, Escape to cancel'
+    : selection
+      ? isMoving
+        ? 'Enter to confirm move, Escape to cancel'
+        : 'Arrows to move, Delete to clear, Enter to deselect, Escape to cancel'
+      : cursor
+        ? 'Type to enter text, drag to select, click a field to edit'
+        : 'Click to place cursor, drag to select, click a field to edit';
   const statusRight = cursor ? `Row ${cursor.row} Col ${cursor.col}` : '';
 
   return (
@@ -433,6 +524,19 @@ export default function ScreenGrid({
               top: selRect.fromRow * cellSize.h,
               width: (selRect.toCol - selRect.fromCol + 1) * cellSize.w,
               height: (selRect.toRow - selRect.fromRow + 1) * cellSize.h,
+            }}
+          />
+        )}
+
+        {/* Overlay placement preview */}
+        {overlayRect && (
+          <div
+            className="screen-grid-drag-selection"
+            style={{
+              left: overlayRect.fromCol * cellSize.w,
+              top: overlayRect.fromRow * cellSize.h,
+              width: (overlayRect.toCol - overlayRect.fromCol + 1) * cellSize.w,
+              height: (overlayRect.toRow - overlayRect.fromRow + 1) * cellSize.h,
             }}
           />
         )}

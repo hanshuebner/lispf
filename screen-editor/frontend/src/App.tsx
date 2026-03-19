@@ -6,6 +6,7 @@ import ScreenList from './components/ScreenList';
 import ScreenGrid from './components/ScreenGrid';
 import AttributePanel from './components/AttributePanel';
 import KeyActionsPanel from './components/KeyActionsPanel';
+import BannerDialog from './components/BannerDialog';
 
 const EMPTY_ROWS = Array.from({ length: 24 }, () => '');
 
@@ -205,6 +206,8 @@ export default function App() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showBannerDialog, setShowBannerDialog] = useState(false);
+  const [bannerOverlay, setBannerOverlay] = useState<string[] | null>(null);
   const [pendingSwitch, setPendingSwitch] = useState<string | null>(null);
   const undoStack = useRef<DefScreen[]>([]);
   const redoStack = useRef<DefScreen[]>([]);
@@ -480,11 +483,21 @@ export default function App() {
     updateScreen(s => ({ ...s, keys }));
   }, [updateScreen]);
 
+  const handleBannerConfirm = useCallback((lines: string[]) => {
+    setShowBannerDialog(false);
+    setBannerOverlay(lines);
+    addLog('Banner text ready — use arrows to position, Enter to place');
+  }, [addLog]);
+
+  const handleOverlayClear = useCallback(() => {
+    setBannerOverlay(null);
+  }, []);
+
   // --- Keyboard shortcuts ---
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (showNewDialog || pendingSwitch) return;
+      if (showNewDialog || showBannerDialog || pendingSwitch) return;
       if (e.key === 'F1') {
         e.preventDefault();
         setShowHelp(h => !h);
@@ -516,7 +529,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleSave, undo, redo, validateCurrentField, showNewDialog, showHelp, pendingSwitch]);
+  }, [handleSave, undo, redo, validateCurrentField, showNewDialog, showBannerDialog, showHelp, pendingSwitch]);
 
   // --- Derived state ---
 
@@ -551,6 +564,12 @@ export default function App() {
           onCancel={() => setShowNewDialog(false)}
         />
       )}
+      {showBannerDialog && (
+        <BannerDialog
+          onConfirm={handleBannerConfirm}
+          onCancel={() => setShowBannerDialog(false)}
+        />
+      )}
       {pendingSwitch && (
         <ConfirmDialog
           message="You have unsaved changes. Discard them and switch screens?"
@@ -577,9 +596,11 @@ export default function App() {
                 fields={screen!.fields}
                 selectedFieldIndex={selectedFieldIndex}
                 selection={selection}
+                overlay={bannerOverlay}
                 onSelectField={handleSelectField}
                 onSelectionChange={handleSelectionChange}
                 onRowsChange={handleRowsChange}
+                onOverlayClear={handleOverlayClear}
               />
             )}
           </div>
@@ -603,6 +624,20 @@ export default function App() {
               disabled={!screen || !dirty}
             >
               Save
+            </button>
+            <button
+              style={{
+                padding: '4px 12px',
+                backgroundColor: '#0f3460',
+                border: '1px solid #444', borderRadius: '3px',
+                color: '#e0e0e0',
+                cursor: screen ? 'pointer' : 'default', fontSize: '14px',
+                opacity: screen ? 1 : 0.5,
+              }}
+              onClick={() => screen && setShowBannerDialog(true)}
+              disabled={!screen}
+            >
+              Banner
             </button>
             <button
               style={{
