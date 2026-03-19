@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/types.ts","./src/vite-env.d.ts","./src/components/attributepanel.tsx","./src/components/fieldoverlay.tsx","./src/components/keyactionspanel.tsx","./src/components/screengrid.tsx","./src/components/screenlist.tsx","./src/components/screenselector.tsx","./src/components/toolbar.tsx"],"version":"5.7.3"}

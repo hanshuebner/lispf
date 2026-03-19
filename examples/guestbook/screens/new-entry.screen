@@ -1,0 +1,13 @@
+(:name "new-entry"
+ :screen "
+
+Your name:
+
+Message:
+"
+ :fields ((:from (1 12) :len 30 :name name :write t :highlighting underscore
+           :required t)
+          (:from (4 0) :len 79 :name message :write t :repeat 5
+           :highlighting underscore))
+ :keys ((:pf5 "Save")
+        (:pf3 "Cancel" :back t)))

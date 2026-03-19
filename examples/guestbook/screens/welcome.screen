@@ -1,0 +1,23 @@
+(:name "welcome"
+ :screen "
+
+
+
+
+               GGGGGGG   UU     UU  EEEEEEEEE   SSSSSSS   TTTTTTTTT
+              GG         UU     UU  EE         SS     SS     TT
+              GG         UU     UU  EE         SS            TT
+              GG  GGGGG  UU     UU  EEEEEEE     SSSSSSS      TT
+              GG     GG  UU     UU  EE                SS     TT
+              GG     GG   UU   UU   EE         SS     SS     TT
+               GGGGGGG     UUUUU    EEEEEEEEE   SSSSSSS      TT
+                   BBBBBBB     OOOOOOO    OOOOOOO   KK    KK
+                   BB     BB  OO     OO  OO     OO  KK   KK
+                   BB     BB  OO     OO  OO     OO  KK  KK
+                   BBBBBBB    OO     OO  OO     OO  KKKKK
+                   BB     BB  OO     OO  OO     OO  KK  KK
+                   BB     BB  OO     OO  OO     OO  KK   KK
+                   BBBBBBB     OOOOOOO    OOOOOOO   KK    KK
+"
+ :fields ()
+ :keys ((:enter "Continue" :goto browse)))

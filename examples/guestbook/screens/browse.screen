@@ -1,0 +1,16 @@
+(:name "browse"
+ :screen "
+
+Author..:
+Date....:
+
+Message:
+"
+ :fields ((:from (1 10) :len 30 :name author :color green :intense t)
+          (:from (2 10) :len 20 :name date :color turquoise)
+          (:from (6 0) :len 79 :name message :repeat 5)
+          (:from (12 0) :len 79 :name entry-counter :color turquoise))
+ :keys ((:pf7 "")
+        (:pf8 "")
+        (:pf5 "Add" :goto new-entry)
+        (:pf3 "Exit")))

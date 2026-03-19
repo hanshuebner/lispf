@@ -1,0 +1,67 @@
+.screen-grid-container {
+  position: relative;
+  display: inline-block;
+  cursor: text;
+}
+
+.screen-grid-pre {
+  font-family: '3270', 'IBM Plex Mono', 'Courier New', monospace;
+  font-size: 16px;
+  line-height: 1.2;
+  background-color: #000;
+  color: #00ff41;
+  padding: 0;
+  margin: 0;
+  white-space: pre;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.screen-grid-cursor {
+  position: absolute;
+  background-color: rgba(0, 255, 65, 0.5);
+  pointer-events: none;
+  z-index: 20;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.screen-grid-drag-selection {
+  position: absolute;
+  background-color: rgba(80, 250, 123, 0.3);
+  border: 1px solid #50fa7b;
+  pointer-events: none;
+  z-index: 15;
+}
+
+.screen-grid-selection-source {
+  position: absolute;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px dashed #555;
+  pointer-events: none;
+  z-index: 14;
+}
+
+.locked-row {
+  color: #5a8a5a;
+  background-color: #080808;
+}
+
+.screen-grid-status {
+  display: flex;
+  justify-content: space-between;
+  font-family: '3270', 'IBM Plex Mono', 'Courier New', monospace;
+  font-size: 14px;
+  color: #aaa;
+  padding: 4px 0;
+}
+
+.field-overlays {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
