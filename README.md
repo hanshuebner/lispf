@@ -47,9 +47,10 @@ Load the system:
 ## Example: Guestbook
 
 The included guestbook example (`examples/guestbook/`) demonstrates a
-complete multi-screen application with four screens:
+complete multi-screen application with five screens:
 
 - **welcome** — ASCII art splash screen, press Enter to continue
+- **no-entries** — shown when the guestbook is empty, prompts to add the first entry
 - **browse** — view guestbook entries, PF7/PF8 to page through them
 - **new-entry** — form with validated name and multi-line message fields
 - **bye** — session summary showing time spent and entries written
