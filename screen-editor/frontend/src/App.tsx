@@ -638,20 +638,6 @@ export default function App() {
     updateScreen(s => ({ ...s, keys }));
   }, [updateScreen]);
 
-  const handleNoCommandChange = useCallback((noCommand: boolean) => {
-    updateScreen(s => {
-      // When toggling noCommand, adjust row 21 (command line)
-      const rows = [...s.rows];
-      if (noCommand) {
-        // Gaining row 21 as app content - clear the command line
-        rows[21] = ''.padEnd(80);
-      } else {
-        // Losing row 21 to framework - show command label
-        rows[21] = ' Command ==>'.padEnd(80);
-      }
-      return { ...s, rows, noCommand: noCommand || undefined };
-    });
-  }, [updateScreen]);
 
   const handleBannerConfirm = useCallback((lines: string[]) => {
     setShowBannerDialog(false);
@@ -871,11 +857,22 @@ export default function App() {
                   Screen Properties
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', color: '#b0b0b0' }}>
-                  <span>Command Screen</span>
+                  <span>Command Field</span>
                   <input
                     type="checkbox"
-                    checked={!screen.noCommand}
-                    onChange={e => handleNoCommandChange(!e.target.checked)}
+                    checked={!!screen.command}
+                    onChange={e => {
+                      const hasCommand = e.target.checked;
+                      updateScreen(s => {
+                        const rows = [...s.rows];
+                        if (hasCommand) {
+                          rows[21] = ' Command ==>'.padEnd(80);
+                        } else {
+                          rows[21] = ''.padEnd(80);
+                        }
+                        return { ...s, rows, command: hasCommand || undefined, noCommand: undefined };
+                      });
+                    }}
                   />
                 </div>
                 <div style={{ marginBottom: '4px' }}>

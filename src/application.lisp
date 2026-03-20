@@ -956,10 +956,12 @@ Returns (values list-data-count list-data-total has-list-data)."
           (let* ((page-size (reduce #'max repeat-groups
                                     :key #'second :initial-value 0))
                  (offset (list-offset *session* dispatch-sym)))
-            (when (> offset 0)
-              (show-key :pf7 "Prev"))
-            (when (< (+ offset page-size) (or total 0))
-              (show-key :pf8 "Next"))))))
+            (multiple-value-bind (prev-label next-label)
+                (paging-labels *application*)
+              (when (> offset 0)
+                (show-key :pf7 prev-label))
+              (when (< (+ offset page-size) (or total 0))
+                (show-key :pf8 next-label)))))))
     (when (and repeat-groups (not has-list-data))
       (split-repeat-field-value
        repeat-groups

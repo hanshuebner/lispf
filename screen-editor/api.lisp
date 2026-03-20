@@ -98,9 +98,9 @@
                       (cons "rows" (coerce (gethash "rows" ht) 'list))
                       (cons "fields" (mapcar #'hash-table-to-field-alist
                                              (coerce (gethash "fields" ht) 'list))))))
-    (let ((no-command (gethash "noCommand" ht)))
-      (when (and no-command (not (eq no-command :null)) (not (eq no-command :false)))
-        (setf result (append result (list (cons "noCommand" t))))))
+    (let ((has-command (gethash "command" ht)))
+      (when (and has-command (not (eq has-command :null)) (not (eq has-command :false)))
+        (setf result (append result (list (cons "command" t))))))
     (let ((menu-name (gethash "menu" ht)))
       (when (and menu-name (not (eq menu-name :null)) (not (equal menu-name "")))
         (setf result (append result (list (cons "menu" menu-name))))))

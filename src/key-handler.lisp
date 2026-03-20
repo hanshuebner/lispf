@@ -151,6 +151,18 @@ Override to localize, e.g. return \"Auswahl ==>\" for German.")
   (:method ((application t))
     "Option  ==>"))
 
+(defgeneric paging-labels (application)
+  (:documentation "Return (values prev-label next-label) for list paging keys.
+Override to localize.")
+  (:method ((application t))
+    (values "Prev" "Next")))
+
+(defgeneric menu-key-labels (application)
+  (:documentation "Return (values enter-label pf3-label) for auto-generated menu screens.
+Override to localize.")
+  (:method ((application t))
+    (values "Select" "Exit")))
+
 ;;; Field attribute overrides
 
 (defun set-field-attribute (field-name &rest attrs)

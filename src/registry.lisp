@@ -308,9 +308,10 @@ when keys are shown or hidden at runtime."
 
 (defun compile-screen-data (name data)
   "Compile a screen data plist into a screen-info struct."
-  (let* ((no-command (getf data :no-command))
-         (menu-name (let ((m (getf data :menu)))
+  (let* ((menu-name (let ((m (getf data :menu)))
                       (when m (string-downcase (string m)))))
+         (has-command (getf data :command))
+         (no-command (and (not has-command) (not menu-name)))
          (aliases (mapcar (lambda (a) (string-downcase (string a)))
                           (getf data :aliases)))
          (screen-string (pad-screen-string (getf data :screen) :no-command no-command))
@@ -382,8 +383,10 @@ Creates a simple screen with repeat fields for menu items."
                               :intense t :repeat 17)
                         (list :from '(2 29) :len 50 :name 'description
                               :repeat 17))
-          :keys (list (list :enter "Select")
-                      (list :pf3 "Exit" :back t)))))
+          :keys (multiple-value-bind (enter-label pf3-label)
+                    (menu-key-labels *application*)
+                  (list (list :enter enter-label)
+                        (list :pf3 pf3-label :back t))))))
 
 (defun ensure-screen-loaded (screen-name)
   "Ensure SCREEN-NAME is loaded and up-to-date. Returns the screen-info.

@@ -87,11 +87,12 @@ Offsets rows by -1 to convert from display coordinates to app coordinates."
          (rows (jref screen "rows"))
          (fields (jref screen "fields"))
          (keys (jref screen "keys"))
-         (no-command (jref screen "noCommand"))
+         (has-command (jref screen "command"))
          (menu-name (jref screen "menu"))
          (aliases-raw (jref screen "aliases"))
          (aliases (when aliases-raw (coerce aliases-raw 'list)))
          (dynamic-areas (jref screen "dynamicAreas"))
+         (no-command (and (not has-command) (not menu-name)))
          (screen-string (screen-rows-to-string rows :no-command no-command))
          (field-plists (mapcar #'field-alist-to-plist fields))
          (key-plists (when keys (mapcar #'key-alist-to-plist keys)))
@@ -101,8 +102,8 @@ Offsets rows by -1 to convert from display coordinates to app coordinates."
          (*print-case* :downcase))
     (with-output-to-string (s)
       (format s "(:name ~S" name)
-      (when no-command
-        (format s "~% :no-command t"))
+      (when has-command
+        (format s "~% :command t"))
       (when (and menu-name (not (equal menu-name :null)))
         (format s "~% :menu ~A" menu-name))
       (when aliases

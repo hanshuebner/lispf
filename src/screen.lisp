@@ -96,6 +96,8 @@
            #:unknown-command-message
            #:default-command-label
            #:menu-command-label
+           #:paging-labels
+           #:menu-key-labels
            ;; Menu system
            #:find-menu-entry
            #:find-screen-alias
