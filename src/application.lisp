@@ -1256,13 +1256,36 @@ Returns the 3270 response."
                                              (or resp-command ""))
                              (dolist (k transient-fields)
                                (remhash k context)))))
+              ;; Check anonymous access before transitioning
+              (let* ((target-sym (cond ((and (consp result) (eq (car result) :jump))
+                                        (cdr result))
+                                       ((symbolp result) result)))
+                     (checked-result
+                      (if (and target-sym
+                               (not (eq target-sym :stay))
+                               (not (eq target-sym :back))
+                               (not (eq target-sym :logoff))
+                               (not (session-authenticated-p *application* *session*)))
+                          (let* ((target-name (screen-name-string target-sym))
+                                 (target-info (gethash target-name (app-screens)))
+                                 (target-info (or target-info
+                                                  (when (find-screen-file target-name)
+                                                    (load-and-register-screen target-name)))))
+                            (if (and target-info
+                                     (not (screen-info-anonymous target-info)))
+                                (progn
+                                  (setf (gethash "errormsg" context)
+                                        (anonymous-access-denied-message *application*))
+                                  :stay)
+                                result))
+                          result)))
               (multiple-value-bind (transition-result saved-row saved-col)
-                  (apply-screen-transition result screen-sym dispatch-sym)
+                  (apply-screen-transition checked-result screen-sym dispatch-sym)
                 (when saved-row
                   (setf restored-cursor-row saved-row
                         restored-cursor-col saved-col))
                 (when (eq transition-result :exit)
-                  (return)))))))))))
+                  (return))))))))))))
 
 (defun run-application (application conn devinfo)
   "Run an application's main loop for a single connection.

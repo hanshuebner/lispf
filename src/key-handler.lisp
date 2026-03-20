@@ -123,6 +123,20 @@ Example:
        (with-field-bindings (*current-field-values* ,@field-names)
          ,@body))))
 
+;;; Anonymous access control
+
+(defgeneric session-authenticated-p (application session)
+  (:documentation "Return T if SESSION represents an authenticated user.
+Override in your application to check login state.")
+  (:method ((application t) (session t))
+    t))
+
+(defgeneric anonymous-access-denied-message (application)
+  (:documentation "Return the error message shown when an anonymous user tries
+to access a restricted screen. Override to localize.")
+  (:method ((application t))
+    "Login required"))
+
 ;;; Command field processing
 
 (defgeneric process-command (application command)

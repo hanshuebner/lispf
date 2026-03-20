@@ -66,6 +66,7 @@ export interface DefScreen {
   dynamicAreas?: DynamicArea[];
   noCommand?: boolean;
   command?: boolean;
+  anonymous?: boolean;
   menu?: string;
   aliases?: string[];
 }

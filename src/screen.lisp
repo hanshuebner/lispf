@@ -91,6 +91,9 @@
            #:*attribute-intro-char*
            ;; Customization
            #:unknown-key-message
+           ;; Access control
+           #:session-authenticated-p
+           #:anonymous-access-denied-message
            ;; Command processing
            #:process-command
            #:unknown-command-message

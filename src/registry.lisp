@@ -27,6 +27,7 @@
   (no-command nil)
   (menu nil)
   (aliases nil)
+  (anonymous nil)
   (file-timestamp 0))
 
 (defstruct dynamic-area
@@ -314,6 +315,7 @@ when keys are shown or hidden at runtime."
          (no-command (and (not has-command) (not menu-name)))
          (aliases (mapcar (lambda (a) (string-downcase (string a)))
                           (getf data :aliases)))
+         (anonymous (getf data :anonymous))
          (screen-string (pad-screen-string (getf data :screen) :no-command no-command))
          (raw-fields (getf data :fields))
          (raw-keys (getf data :keys))
@@ -341,7 +343,8 @@ when keys are shown or hidden at runtime."
                             (compile-dynamic-areas raw-dynamic-areas))
            :no-command no-command
            :menu menu-name
-           :aliases aliases))))))
+           :aliases aliases
+           :anonymous anonymous))))))
 
 ;;; Registry operations
 

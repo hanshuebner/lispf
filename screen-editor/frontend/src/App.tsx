@@ -875,6 +875,14 @@ export default function App() {
                     }}
                   />
                 </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', color: '#b0b0b0' }}>
+                  <span>Anonymous Access</span>
+                  <input
+                    type="checkbox"
+                    checked={!!screen.anonymous}
+                    onChange={e => updateScreen(s => ({ ...s, anonymous: e.target.checked || undefined }))}
+                  />
+                </div>
                 <div style={{ marginBottom: '4px' }}>
                   <div style={{ color: '#b0b0b0', marginBottom: '2px' }}>Aliases</div>
                   <input
