@@ -198,21 +198,28 @@ function aidKeyDisplayName(key: AidKey): string {
   return key.toUpperCase();
 }
 
-function formatKeyLabelsRow(keys: KeyAction[]): string {
-  if (keys.length === 0) return ''.padEnd(80);
+interface KeyLabelsResult {
+  text: string;
+  dimRanges: [number, number][];
+}
+
+function formatKeyLabelsRow(keys: KeyAction[]): KeyLabelsResult {
+  if (keys.length === 0) return { text: ''.padEnd(80), dimRanges: [] };
   const line = new Array(80).fill(' ');
+  const dimRanges: [number, number][] = [];
   let col = 1;
   for (const k of keys) {
     const text = `${aidKeyDisplayName(k.aidKey)} ${k.label}`;
     const width = text.length;
-    if (!k.hidden) {
-      for (let i = 0; i < width && col + i < 80; i++) {
-        line[col + i] = text[i];
-      }
+    for (let i = 0; i < width && col + i < 80; i++) {
+      line[col + i] = text[i];
+    }
+    if (k.hidden) {
+      dimRanges.push([col, col + Math.min(width, 80 - col)]);
     }
     col += width + 2;
   }
-  return line.join('');
+  return { text: line.join(''), dimRanges };
 }
 
 function timestamp() {
@@ -575,12 +582,14 @@ export default function App() {
 
   // --- Derived state ---
 
+  const keyLabels = useMemo(() => formatKeyLabelsRow(screen?.keys || []), [screen?.keys]);
+
   const displayRows = useMemo(() => {
     if (!screen) return null;
     const rows = [...screen.rows];
-    rows[23] = formatKeyLabelsRow(screen.keys || []);
+    rows[23] = keyLabels.text;
     return rows;
-  }, [screen, screen?.keys]);
+  }, [screen, keyLabels]);
 
   const screenPath = currentScreen ? `screens/${currentScreen}.screen` : null;
   const showingHelp = showHelp || !screen;
@@ -639,6 +648,7 @@ export default function App() {
                 selectedFieldIndex={selectedFieldIndex}
                 selection={selection}
                 overlay={bannerOverlay}
+                keyDimRanges={keyLabels.dimRanges}
                 onSelectField={handleSelectField}
                 onSelectionChange={handleSelectionChange}
                 onRowsChange={handleRowsChange}

@@ -9,6 +9,7 @@ interface ScreenGridProps {
   selectedFieldIndex: number | null;
   selection: Selection | null;
   overlay: string[] | null;
+  keyDimRanges?: [number, number][];
   onSelectField: (index: number | null) => void;
   onSelectionChange: (sel: Selection | null) => void;
   onRowsChange: (rows: string[]) => void;
@@ -29,8 +30,27 @@ function clampRow(row: number) {
   return Math.max(MIN_APP_ROW, Math.min(MAX_APP_ROW, row));
 }
 
+function renderRowWithDim(row: string, dimRanges: [number, number][]): React.ReactNode {
+  if (dimRanges.length === 0) return row;
+  const segments: React.ReactNode[] = [];
+  let pos = 0;
+  for (const [start, end] of dimRanges) {
+    if (start > pos) {
+      segments.push(row.substring(pos, start));
+    }
+    segments.push(
+      <span key={start} style={{ opacity: 0.35 }}>{row.substring(start, end)}</span>
+    );
+    pos = end;
+  }
+  if (pos < row.length) {
+    segments.push(row.substring(pos));
+  }
+  return <>{segments}</>;
+}
+
 export default function ScreenGrid({
-  rows, fields, selectedFieldIndex, selection, overlay,
+  rows, fields, selectedFieldIndex, selection, overlay, keyDimRanges,
   onSelectField, onSelectionChange, onRowsChange, onOverlayClear,
 }: ScreenGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -484,7 +504,9 @@ export default function ScreenGrid({
         <pre className="screen-grid-pre">
           {displayRows.map((row, i) => (
             <span key={i} className={LOCKED_ROWS.has(i) ? 'locked-row' : undefined}>
-              {row}{i < displayRows.length - 1 ? '\n' : ''}
+              {i === 23 && keyDimRanges && keyDimRanges.length > 0
+                ? renderRowWithDim(row, keyDimRanges)
+                : row}{i < displayRows.length - 1 ? '\n' : ''}
             </span>
           ))}
         </pre>
