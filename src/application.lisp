@@ -478,35 +478,43 @@ Returns (values screen vals)."
               (when (update-context-running ctx)
                 (cl3270:show-screen-opts screen vals *connection*
                   (cl3270:make-screen-opts :no-clear t :no-response t))))))))))
+
+(defun wait-for-update-signal (ctx)
+  "Block until the update thread is signaled or 1 second elapses.
+Returns NIL if the thread should exit."
+  (bt:with-lock-held ((session-update-lock *session*))
+    (bt:condition-wait (session-update-cond *session*)
+                        (session-update-lock *session*)
+                        :timeout 1))
+  (update-context-running ctx))
+
+(defun minute-changed-p (ctx)
+  "Return T and update last-minute if the clock minute has changed."
+  (let ((current (nth-value 1 (decode-universal-time (get-universal-time)))))
+    (when (/= current (update-context-last-minute ctx))
+      (setf (update-context-last-minute ctx) current)
+      t)))
+
+(defun consume-dirty-indicators-p ()
+  "Return T and clear the dirty flag if indicators were changed."
+  (bt:with-lock-held ((session-update-lock *session*))
+    (when (session-indicators-dirty *session*)
+      (setf (session-indicators-dirty *session*) nil)
+      t)))
+
+(defun title-needs-update-p (ctx)
+  "Return T if the title overlay should be re-sent."
+  (or (minute-changed-p ctx)
+      (consume-dirty-indicators-p)))
+
 (defun update-thread-fn (ctx)
-  "Main function for the background update thread.
-Sleeps first, then checks for changes. This avoids an immediate overlay
-send on startup which would race with the main thread's response processing."
+  "Background thread: sleeps, then pushes title and dynamic area overlays.
+Sleeps before the first check to avoid racing with the main thread."
   (handler-case
-      (loop while (update-context-running ctx)
-            do ;; Wait for signal or timeout (sleep first to avoid startup race)
-               (bt:with-lock-held ((session-update-lock *session*))
-                 (bt:condition-wait (session-update-cond *session*)
-                                    (session-update-lock *session*)
-                                    :timeout 1))
-               (unless (update-context-running ctx) (return))
-               (let ((needs-title-update nil))
-                 ;; Check if minute changed
-                 (let ((current-minute
-                         (nth-value 1 (decode-universal-time (get-universal-time)))))
-                   (when (/= current-minute (update-context-last-minute ctx))
-                     (setf (update-context-last-minute ctx) current-minute
-                           needs-title-update t)))
-                 ;; Check if indicators dirty
-                 (bt:with-lock-held ((session-update-lock *session*))
-                   (when (session-indicators-dirty *session*)
-                     (setf (session-indicators-dirty *session*) nil
-                           needs-title-update t)))
-                 ;; Send title overlay if needed
-                 (when needs-title-update
-                   (send-title-overlay ctx))
-                 ;; Send dynamic area overlays
-                 (send-dynamic-area-overlays ctx)))
+      (loop while (wait-for-update-signal ctx)
+            when (title-needs-update-p ctx)
+              do (send-title-overlay ctx)
+            do (send-dynamic-area-overlays ctx))
     (error (e)
       (format *error-output* "~&;;; Update thread error: ~A~%" e))))
 
