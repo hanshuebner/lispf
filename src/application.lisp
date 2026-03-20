@@ -394,26 +394,28 @@ Call from within a define-screen-update body."
       (maphash (lambda (k v) (setf (gethash k result) v)) current))
     result))
 
+(defun check-field-rule (field fr value orig-values)
+  "Check a single field rule. Returns an error message string, or NIL if valid."
+  (cond
+    ((and (cl3270:field-rules-must-change fr)
+          (string= value (gethash field orig-values)))
+     (cl3270:field-rules-error-text fr))
+    ((and (cl3270:field-rules-validator fr)
+          (not (funcall (cl3270:field-rules-validator fr) value)))
+     (format nil "Value for ~S is not valid" field))))
+
 (defun validate-fields (rules my-vals orig-values error-field)
   "Check field validation rules. Returns T if all pass, NIL if failed.
 On failure, sets the error message in MY-VALS under ERROR-FIELD."
   (or (null rules)
-      (loop for field being the hash-key of rules using (hash-value fr)
-          for value = (nth-value 0 (gethash field my-vals))
-          for present = (nth-value 1 (gethash field my-vals))
-          when present do
-            (cond
-              ((and (cl3270:field-rules-must-change fr)
-                    (string= value (gethash field orig-values)))
-               (setf (gethash error-field my-vals)
-                     (cl3270:field-rules-error-text fr))
-               (return nil))
-              ((and (cl3270:field-rules-validator fr)
-                    (not (funcall (cl3270:field-rules-validator fr) value)))
-               (setf (gethash error-field my-vals)
-                     (format nil "Value for ~S is not valid" field))
-               (return nil)))
-          finally (return t))))
+      (maphash (lambda (field fr)
+                 (multiple-value-bind (value present) (gethash field my-vals)
+                   (when-let (err (and present
+                                       (check-field-rule field fr value orig-values)))
+                     (setf (gethash error-field my-vals) err)
+                     (return-from validate-fields nil))))
+               rules)
+      t))
 
 (defun send-title-overlay (ctx)
   "Send a title-only overlay to update the clock and indicators.
