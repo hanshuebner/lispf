@@ -60,9 +60,11 @@ Offsets fromRow by -1 to convert from display coordinates to app coordinates."
   (let ((aid-key (jref key-alist "aidKey"))
         (label (jref key-alist "label"))
         (action (jref key-alist "action"))
-        (goto-screen (jref key-alist "gotoScreen")))
+        (goto-screen (jref key-alist "gotoScreen"))
+        (hidden (jref key-alist "hidden")))
     (let ((kw (intern (string-upcase aid-key) :keyword)))
       (append (list kw label)
+              (when hidden (list :hidden t))
               (cond
                 ((string-equal action "back") (list :back t))
                 ((and (string-equal action "goto") goto-screen)

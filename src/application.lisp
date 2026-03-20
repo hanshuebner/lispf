@@ -237,23 +237,47 @@ Returns (values pf-keys-vector exit-keys-vector).
 Keys with :back t become exit-keys; all others become pf-keys."
   (let (pf-keys exit-keys)
     (dolist (spec key-specs)
-      (destructuring-bind (aid-keyword label &key back goto) spec
-        (declare (ignore label goto))
+      (destructuring-bind (aid-keyword label &rest rest) spec
+        (declare (ignore label))
         (let ((constant (symbol-value (aid-keyword-to-constant aid-keyword))))
-          (if back
+          (if (getf rest :back)
               (push constant exit-keys)
               (push constant pf-keys)))))
     (values (coerce (nreverse pf-keys) 'vector)
             (coerce (nreverse exit-keys) 'vector))))
 
-(defun format-key-labels-from-specs (key-specs)
-  "Build row 23 key label string from key specs. Keys with empty labels are omitted."
-  (let ((labels (loop for (aid-keyword label . rest) in key-specs
-                      when (and label (string/= label ""))
-                      collect (format nil "~A ~A"
-                                      (aid-keyword-display-name aid-keyword) label))))
-    (when labels
-      (format nil "~{~A~^  ~}" labels))))
+(defun format-key-labels-from-specs (key-specs key-layout)
+  "Build row 23 key label string with fixed positions from KEY-LAYOUT.
+Keys are placed at their pre-computed column positions. Hidden keys leave
+blank space. Keys not in the layout (added at runtime) are appended."
+  (let ((line (make-string 80 :initial-element #\Space))
+        (appended nil))
+    (dolist (entry key-specs)
+      (destructuring-bind (aid-keyword label . rest) entry
+        (declare (ignore rest))
+        (when (and label (string/= label ""))
+          (let ((slot (assoc aid-keyword key-layout)))
+            (if slot
+                (destructuring-bind (col width) (rest slot)
+                  (let* ((text (format nil "~A ~A"
+                                       (aid-keyword-display-name aid-keyword) label))
+                         (len (min (length text) width)))
+                    (replace line text :start1 col :end2 len)))
+                (push (format nil "~A ~A"
+                              (aid-keyword-display-name aid-keyword) label)
+                      appended))))))
+    (when appended
+      ;; Find the end of laid-out content and append extra keys
+      (let ((pos (1+ (or (position #\Space line :from-end t :test #'char/=)
+                         -1))))
+        (dolist (text (nreverse appended))
+          (let* ((start (min (+ pos 2) 79))
+                 (len (min (length text) (- 80 start))))
+            (when (> len 0)
+              (replace line text :start1 start :end2 len))
+            (setf pos (+ start len))))))
+    (unless (every (lambda (c) (char= c #\Space)) line)
+      line)))
 
 (defun find-key-spec (key-specs aid-keyword)
   "Find the key spec for AID-KEYWORD in KEY-SPECS. Returns the spec or nil."
@@ -280,9 +304,9 @@ Signals a warning for any key that would fall through to the default handler."
                                      (list (find-class t) (find-class t))))
         (list-screen-p (has-list-data-getter-p screen-sym)))
     (dolist (spec key-specs)
-      (destructuring-bind (aid-keyword label &key back goto) spec
+      (destructuring-bind (aid-keyword label &rest rest) spec
         (declare (ignore label))
-        (unless (or back goto
+        (unless (or (getf rest :back) (getf rest :goto)
                     (and list-screen-p (member aid-keyword '(:pf7 :pf8))))
           (let* ((methods (compute-applicable-methods
                            #'handle-key (list screen-sym aid-keyword)))
@@ -345,13 +369,21 @@ after binding but before the accept loop. Useful for test harnesses."
   "Current key display specs for the screen being prepared.
 Bound by run-application for each iteration. Modified by show-key/hide-key.")
 
+(defvar *current-key-layout* nil
+  "Key layout for the current screen. Set by run-screen-loop each iteration.")
+
 (defun show-key (aid-keyword label)
   "Make AID-KEYWORD visible in the key labels with LABEL.
-Call from within a define-screen-update body."
+Call from within a define-screen-update body.
+Warns if AID-KEYWORD is not declared in the screen's key specs."
   (let ((entry (assoc aid-keyword *current-screen-keys*)))
     (if entry
         (setf (second entry) label)
-        (push (list aid-keyword label) *current-screen-keys*))))
+        (progn
+          (unless (assoc aid-keyword *current-key-layout*)
+            (warn "show-key: ~A is not declared in the screen's key specs" aid-keyword))
+          (setf *current-screen-keys*
+                (append *current-screen-keys* (list (list aid-keyword label))))))))
 
 (defun hide-key (aid-keyword)
   "Hide AID-KEYWORD from the key labels (it remains accepted).
@@ -672,7 +704,8 @@ Returns (values list-data-count list-data-total has-list-data)."
         (format-title-line screen-sym (session-indicator-texts)))
   (setf (gethash "errormsg" field-values)
         (or (gethash "errormsg" field-values) ""))
-  (let ((key-labels (format-key-labels-from-specs *current-screen-keys*)))
+  (let ((key-labels (format-key-labels-from-specs *current-screen-keys*
+                                                   *current-key-layout*)))
     (when key-labels
       (setf (gethash "keys" field-values) key-labels))))
 
@@ -828,9 +861,12 @@ Returns the 3270 response."
            (field-values (cl3270:make-dict :test #'equal)))
       (ensure-key-handlers-validated dispatch-sym key-specs)
       (setf *current-field-values* context)
-      (let ((*current-screen-keys* (mapcar (lambda (spec)
-                                             (list (first spec) (second spec)))
-                                           key-specs))
+      (let ((*current-screen-keys*
+              (mapcar (lambda (spec)
+                        (destructuring-bind (aid-kw label &rest rest) spec
+                          (list aid-kw (if (getf rest :hidden) "" label))))
+                      key-specs))
+            (*current-key-layout* (get-screen-key-layout screen-sym))
             (*next-cursor-row* nil)
             (*next-cursor-col* nil))
         (prepare-screen dispatch-sym)

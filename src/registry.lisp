@@ -20,6 +20,7 @@
   screen
   rules
   keys
+  key-layout
   transient-fields
   repeat-groups
   (dynamic-areas nil)
@@ -246,7 +247,8 @@ Returns (values cleaned-field-definitions rules-hash-table-or-nil transient-fiel
 ;;; Screen compilation
 
 (defun normalize-key-specs (key-specs)
-  "Normalize key specs from a screen plist. Each entry is (aid-keyword label &key back goto).
+  "Normalize key specs from a screen plist.
+Each entry is (aid-keyword label &key back goto hidden).
 Ensures aid-keyword is a keyword, label is a string, and :goto value is a keyword."
   (mapcar (lambda (spec)
             (destructuring-bind (aid-kw label &rest rest) spec
@@ -259,6 +261,27 @@ Ensures aid-keyword is a keyword, label is a string, and :goto value is a keywor
                        (string label)
                        normalized-rest))))
           key-specs))
+
+(defun compute-key-layout (key-specs)
+  "Compute fixed column positions for key labels from KEY-SPECS.
+Returns an alist of (aid-keyword column width) entries. Keys with non-empty
+labels (including :hidden keys) get a reserved slot. The layout defines
+where each key's label appears on row 23, ensuring positions don't shift
+when keys are shown or hidden at runtime."
+  (let ((layout nil)
+        (col 1))                        ; start at column 1 (leading space)
+    (dolist (spec key-specs)
+      (destructuring-bind (aid-kw label &rest rest) spec
+        (when (or (string/= label "") (getf rest :hidden))
+          (let* ((display-label (if (string= label "") ; hidden key with no label
+                                    (or (getf rest :default-label)
+                                        (symbol-name aid-kw))
+                                    label))
+                 (prefix (format nil "~A " (symbol-name aid-kw)))
+                 (width (+ (length prefix) (length display-label))))
+            (push (list aid-kw col width) layout)
+            (incf col (+ width 2))))))  ; 2 spaces between keys
+    (nreverse layout)))
 
 (defun compile-dynamic-areas (specs)
   "Compile dynamic area specifications from screen data into dynamic-area structs."
@@ -285,11 +308,13 @@ Ensures aid-keyword is a keyword, label is a string, and :goto value is a keywor
                (field-forms (parse-screen screen-string mapped-fields))
                (app-fields (mapcar #'eval field-forms))
                (all-fields (append app-fields (make-framework-fields)))
-               (keys (when raw-keys (normalize-key-specs raw-keys))))
+               (keys (when raw-keys (normalize-key-specs raw-keys)))
+               (key-layout (when keys (compute-key-layout keys))))
           (make-screen-info
            :screen (apply #'cl3270:make-screen name all-fields)
            :rules rules
            :keys keys
+           :key-layout key-layout
            :transient-fields transient-fields
            :repeat-groups repeat-groups
            :dynamic-areas (when raw-dynamic-areas
@@ -339,6 +364,10 @@ Ensures aid-keyword is a keyword, label is a string, and :goto value is a keywor
 (defun get-screen-keys (screen-name)
   "Get the declared key specs for a screen. Returns a list of key specs or nil."
   (screen-info-keys (ensure-screen-loaded screen-name)))
+
+(defun get-screen-key-layout (screen-name)
+  "Get the key layout for a screen. Returns an alist of (aid-keyword column width)."
+  (screen-info-key-layout (ensure-screen-loaded screen-name)))
 
 (defun get-screen-transient-fields (screen-name)
   "Get the list of transient field name strings for a screen."

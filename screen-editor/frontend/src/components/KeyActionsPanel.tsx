@@ -169,6 +169,15 @@ export default function KeyActionsPanel({ keys, onChange }: KeyActionsPanelProps
                   onChange={e => updateKey(i, { gotoScreen: e.target.value })}
                 />
               )}
+              <label style={{ display: 'flex', alignItems: 'center', gap: '2px', fontSize: '11px', color: '#aaa', flexShrink: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={!!k.hidden}
+                  onChange={e => updateKey(i, { hidden: e.target.checked || undefined })}
+                  style={{ margin: 0 }}
+                />
+                Hidden
+              </label>
               <button
                 style={{
                   padding: '1px 5px', backgroundColor: '#ff5555', border: 'none',

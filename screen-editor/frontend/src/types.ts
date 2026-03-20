@@ -39,6 +39,7 @@ export interface KeyAction {
   label: string;
   action: KeyActionType;
   gotoScreen?: string;
+  hidden?: boolean;
 }
 
 export const AID_KEYS: AidKey[] = [

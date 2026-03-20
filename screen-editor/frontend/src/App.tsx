@@ -200,8 +200,19 @@ function aidKeyDisplayName(key: AidKey): string {
 
 function formatKeyLabelsRow(keys: KeyAction[]): string {
   if (keys.length === 0) return ''.padEnd(80);
-  const labels = keys.map(k => `${aidKeyDisplayName(k.aidKey)} ${k.label}`);
-  return (' ' + labels.join('  ')).padEnd(80).substring(0, 80);
+  const line = new Array(80).fill(' ');
+  let col = 1;
+  for (const k of keys) {
+    const text = `${aidKeyDisplayName(k.aidKey)} ${k.label}`;
+    const width = text.length;
+    if (!k.hidden) {
+      for (let i = 0; i < width && col + i < 80; i++) {
+        line[col + i] = text[i];
+      }
+    }
+    col += width + 2;
+  }
+  return line.join('');
 }
 
 function timestamp() {

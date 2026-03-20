@@ -88,10 +88,13 @@ Offsets fromRow by +1 to account for the framework title row."
 
 (defun parse-key-spec (spec)
   "Parse a key spec from .screen format into a JSON-friendly alist.
-Input: (:enter \"Login\") or (:pf3 \"Exit\" :back t) or (:pf5 \"Register\" :goto register)"
+Input: (:enter \"Login\") or (:pf3 \"Exit\" :back t) or (:pf5 \"Register\" :goto register)
+       (:pf7 \"Prev\" :hidden t)"
   (destructuring-bind (aid-kw label &rest rest) spec
     (let ((result (list (cons "aidKey" (string-downcase (string aid-kw)))
                         (cons "label" (string label)))))
+      (when (getf rest :hidden)
+        (setf result (append result (list (cons "hidden" t)))))
       (cond
         ((getf rest :back)
          (append result (list (cons "action" "back"))))
