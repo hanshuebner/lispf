@@ -1029,6 +1029,13 @@ Uses set-cursor override if set, otherwise falls back to the first writable fiel
     (when (< next total)
       (setf (list-offset *session* dispatch-sym) next))))
 
+(defun has-custom-key-handler-p (screen-sym aid-kw)
+  "Return T if SCREEN-SYM has a non-default handle-key method for AID-KW."
+  (let ((default-method (find-method #'handle-key '()
+                                     (list (find-class t) (find-class t)))))
+    (find-if (lambda (m) (not (eq m default-method)))
+             (compute-applicable-methods #'handle-key (list screen-sym aid-kw)))))
+
 (defun dispatch-key (context dispatch-sym aid-kw key-spec
                      has-list-data repeat-groups list-data-total app-package
                      command)
@@ -1049,12 +1056,17 @@ COMMAND is the trimmed value from the command field (extracted from response)."
                        (format nil "Internal error. Incident: ~A" id))
                  (invoke-restart 'redisplay)))))
         (cond
+          ;; :back and :goto are defaults that custom handlers can override
           ((and key-spec (getf (cddr key-spec) :back))
-           :back)
+           (if (has-custom-key-handler-p dispatch-sym aid-kw)
+               (handle-key dispatch-sym aid-kw)
+               :back))
           ((and key-spec (getf (cddr key-spec) :goto))
-           (intern-screen-name
-            (string (getf (cddr key-spec) :goto))
-            app-package))
+           (if (has-custom-key-handler-p dispatch-sym aid-kw)
+               (handle-key dispatch-sym aid-kw)
+               (intern-screen-name
+                (string (getf (cddr key-spec) :goto))
+                app-package)))
           ((and has-list-data (eq aid-kw :pf7))
            (page-backward dispatch-sym repeat-groups)
            :stay)
