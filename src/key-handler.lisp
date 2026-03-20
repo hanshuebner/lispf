@@ -145,6 +145,12 @@ Override to localize, e.g. return \"Kommando ==>\" for German.")
   (:method ((application t))
     "Command ==>"))
 
+(defgeneric menu-command-label (application)
+  (:documentation "Return the command line label for menu screens.
+Override to localize, e.g. return \"Auswahl ==>\" for German.")
+  (:method ((application t))
+    "Option  ==>"))
+
 ;;; Field attribute overrides
 
 (defun set-field-attribute (field-name &rest attrs)

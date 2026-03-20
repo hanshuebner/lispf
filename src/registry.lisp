@@ -367,13 +367,47 @@ when keys are shown or hidden at runtime."
       (let ((disk-time (file-write-date path)))
         (and disk-time (> disk-time (screen-info-file-timestamp info)))))))
 
+(defun generate-menu-screen-data (name-string menu-data)
+  "Generate a screen data plist for a menu with no .screen file.
+Creates a simple screen with repeat fields for menu items."
+  (let* ((items (getf menu-data :items))
+         (max-items (min (length items) 17)))
+    (declare (ignore max-items))
+    (list :name name-string
+          :menu name-string
+          :screen (format nil "~%~%~%")
+          :fields (list (list :from '(2 3) :len 3 :name 'key
+                              :color 'green :intense t :repeat 17)
+                        (list :from '(2 8) :len 20 :name 'label
+                              :intense t :repeat 17)
+                        (list :from '(2 29) :len 50 :name 'description
+                              :repeat 17))
+          :keys (list (list :enter "Select")
+                      (list :pf3 "Exit" :back t)))))
+
 (defun ensure-screen-loaded (screen-name)
-  "Ensure SCREEN-NAME is loaded and up-to-date. Returns the screen-info."
+  "Ensure SCREEN-NAME is loaded and up-to-date. Returns the screen-info.
+For menu screens without a .screen file, generates one automatically."
   (let ((name-string (screen-name-string screen-name)))
     (when (screen-file-changed-p name-string)
       (load-and-register-screen name-string))
     (or (gethash name-string (app-screens))
-        (load-and-register-screen name-string))))
+        ;; Try loading from .screen file
+        (let ((path (find-screen-file name-string)))
+          (if path
+              (load-and-register-screen name-string)
+              ;; No .screen file: check if it's a menu and auto-generate
+              (let ((menu-data (gethash name-string
+                                        (application-menus *application*))))
+                (if menu-data
+                    (let ((info (compile-screen-data
+                                 name-string
+                                 (generate-menu-screen-data name-string menu-data))))
+                      (setf (gethash name-string (app-screens)) info)
+                      info)
+                    (error "Screen file ~A.screen not found in directories: ~S"
+                           name-string
+                           (application-screen-directories *application*)))))))))
 
 (defun get-screen (screen-name)
   "Get a screen by name, loading from .screen file if not cached or changed on disk."

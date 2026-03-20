@@ -95,6 +95,7 @@
            #:process-command
            #:unknown-command-message
            #:default-command-label
+           #:menu-command-label
            ;; Menu system
            #:find-menu-entry
            #:find-screen-alias

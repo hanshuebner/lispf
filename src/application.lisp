@@ -967,7 +967,7 @@ Returns (values list-data-count list-data-total has-list-data)."
        field-values))
     (values list-data-count list-data-total has-list-data)))
 
-(defun set-framework-fields (screen-sym field-values &key no-command)
+(defun set-framework-fields (screen-sym field-values &key no-command is-menu)
   "Set title, command line, errormsg, and key label fields in FIELD-VALUES."
   (setf (gethash "title" field-values)
         (format-title-line screen-sym (session-indicator-texts)))
@@ -975,7 +975,9 @@ Returns (values list-data-count list-data-total has-list-data)."
   (unless no-command
     (unless (gethash "cmdlabel" field-values)
       (setf (gethash "cmdlabel" field-values)
-            (default-command-label *application*)))
+            (if is-menu
+                (menu-command-label *application*)
+                (default-command-label *application*))))
     (setf (gethash "command" field-values) ""))
   (setf (gethash "errormsg" field-values)
         (or (gethash "errormsg" field-values) ""))
@@ -988,22 +990,14 @@ Returns (values list-data-count list-data-total has-list-data)."
                                 repeat-groups has-list-data list-data-count)
   "Determine cursor row and column for the screen display.
 Returns (values cursor-row cursor-col).
-Falls back to the first writable field, or row 23 (key labels) if none exist."
-  (let* ((saved-cursor
-           (when (and has-list-data (not *next-cursor-row*))
-             (let ((raw (getf (list-state *session* dispatch-sym) :cursor-row)))
-               (when raw
-                 (let* ((first-row (list-data-row screen repeat-groups))
-                        (max-row (+ first-row (1- list-data-count))))
-                   (min raw max-row))))))
-         (first-write (unless (or *next-cursor-row* saved-cursor)
+Uses set-cursor override if set, otherwise falls back to the first writable field."
+  (declare (ignore screen repeat-groups has-list-data list-data-count dispatch-sym))
+  (let* ((first-write (unless *next-cursor-row*
                         (find-if (lambda (f) (cl3270::field-write f))
                                  (cl3270:screen-fields display-screen))))
-         (cursor-row (or *next-cursor-row* saved-cursor
+         (cursor-row (or *next-cursor-row*
                          (if first-write (cl3270:field-row first-write) 23)))
          (cursor-col (or *next-cursor-col*
-                         (when saved-cursor
-                           (getf (list-state *session* dispatch-sym) :cursor-col))
                          (if first-write (1+ (cl3270:field-col first-write)) 0))))
     (values cursor-row cursor-col)))
 
@@ -1167,6 +1161,7 @@ Returns the 3270 response."
            (transient-fields (screen-info-transient-fields screen-info))
            (repeat-groups (screen-info-repeat-groups screen-info))
            (no-command (screen-info-no-command screen-info))
+           (is-menu (screen-info-menu screen-info))
            (context (session-context *session*))
            (dispatch-sym (intern-screen-name name-string app-package))
            (field-values (cl3270:make-dict :test #'equal)))
@@ -1184,10 +1179,15 @@ Returns the 3270 response."
             (*next-cursor-col* nil)
             (*field-attribute-overrides* nil))
         (prepare-screen dispatch-sym)
+        ;; Menu screens: auto-set cursor to command field
+        (when (and is-menu (not *next-cursor-row*))
+          (setf *next-cursor-row* 21
+                *next-cursor-col* 14))
         (multiple-value-bind (list-data-count list-data-total has-list-data)
             (populate-field-values context field-values screen
                                    dispatch-sym repeat-groups)
-          (set-framework-fields screen-sym field-values :no-command no-command)
+          (set-framework-fields screen-sym field-values
+                                :no-command no-command :is-menu is-menu)
           (let* ((display-screen (apply-field-attribute-overrides
                                  (if has-list-data
                                      (filter-screen-fields screen repeat-groups
