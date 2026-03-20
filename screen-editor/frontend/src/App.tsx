@@ -891,7 +891,7 @@ export default function App() {
                       border: '1px solid #444', borderRadius: '2px', color: '#e0e0e0',
                       fontFamily: 'monospace', fontSize: '12px', boxSizing: 'border-box',
                     }}
-                    placeholder="gb, gaestebuch"
+                    placeholder=""
                     value={(screen.aliases || []).join(', ')}
                     onChange={e => {
                       const raw = e.target.value;
