@@ -76,6 +76,7 @@ with :name, :message, and :date.")
             total)))
 
 (lspf:define-screen-update entry-list ()
+  (lspf:set-indicator "entries" (entry-count-text))
   (lspf:clear-indicator "new-data"))
 
 (lspf:define-key-handler entry-list :enter ()
