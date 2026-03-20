@@ -27,6 +27,12 @@
              :documentation "List of active sessions (one per connection).")
    (sessions-lock :initform (bt:make-lock "sessions") :reader application-sessions-lock)))
 
+(defgeneric unknown-key-message (application key-name)
+  (:documentation "Return the error message to display when an unknown key is pressed.
+KEY-NAME is the string name of the key (e.g. \"PF5\").")
+  (:method ((app application) key-name)
+    (format nil "~A: unknown key" key-name)))
+
 (defmethod initialize-instance :after ((app application) &key)
   (let ((dir (application-screen-directory app)))
     (when dir
@@ -738,8 +744,8 @@ cl3270 symbols, adding background update thread support via post-send-callback."
                          (cl3270:is-key (cl3270:response-aid resp) cl3270:+aid-pa3+))
                (setf my-vals (merge-field-values my-vals (cl3270:response-vals resp))))
              (setf (gethash error-field my-vals)
-                   (format nil "~A: unknown key"
-                           (cl3270:aid-to-string (cl3270:response-aid resp)))))
+                   (unknown-key-message *application*
+                                        (cl3270:aid-to-string (cl3270:response-aid resp)))))
             ;; Clear/PA in expected set - return immediately
             ((or (cl3270:is-clear-key (cl3270:response-aid resp))
                  (cl3270:is-key (cl3270:response-aid resp) cl3270:+aid-pa1+)

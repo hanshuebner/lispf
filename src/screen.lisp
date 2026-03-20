@@ -89,6 +89,8 @@
            #:update-dynamic-area
            #:define-dynamic-area-updater
            #:*attribute-intro-char*
+           ;; Customization
+           #:unknown-key-message
            ;; Title utilities
            #:now-time-hhmm))
 
