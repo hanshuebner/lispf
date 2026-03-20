@@ -101,6 +101,18 @@ Input: (:enter \"Login\") or (:pf3 \"Exit\" :back t) or (:pf5 \"Register\" :goto
         (t
          (append result (list (cons "action" "handler"))))))))
 
+(defun parse-dynamic-area (area-plist)
+  "Parse a dynamic area plist into a JSON-friendly alist.
+Offsets rows by +1 to account for the framework title row."
+  (let ((name (getf area-plist :name))
+        (from (getf area-plist :from))
+        (to (getf area-plist :to)))
+    (list (cons "name" (string-downcase (string name)))
+          (cons "fromRow" (1+ (first from)))
+          (cons "fromCol" (second from))
+          (cons "toRow" (1+ (first to)))
+          (cons "toCol" (second to)))))
+
 (defun parse-screen-data (data)
   "Parse a screen data plist into a JSON-friendly alist.
 Expands 21 app rows to 24 display rows with framework rows."
@@ -108,13 +120,17 @@ Expands 21 app rows to 24 display rows with framework rows."
          (screen-string (getf data :screen))
          (fields-raw (getf data :fields))
          (keys-raw (getf data :keys))
+         (dynamic-areas-raw (getf data :dynamic-areas))
          (rows (split-screen-string screen-string name))
          (fields (mapcar #'parse-sexp-field fields-raw))
-         (keys (when keys-raw (mapcar #'parse-key-spec keys-raw))))
+         (keys (when keys-raw (mapcar #'parse-key-spec keys-raw)))
+         (dynamic-areas (when dynamic-areas-raw
+                          (mapcar #'parse-dynamic-area dynamic-areas-raw))))
     (append (list (cons "name" name)
                   (cons "rows" rows)
                   (cons "fields" fields))
-            (when keys (list (cons "keys" keys))))))
+            (when keys (list (cons "keys" keys)))
+            (when dynamic-areas (list (cons "dynamicAreas" dynamic-areas))))))
 
 (defun parse-screen-file (path)
   "Parse a .sexp screen data file into a JSON-friendly alist."

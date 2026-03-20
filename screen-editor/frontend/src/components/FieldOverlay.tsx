@@ -38,22 +38,50 @@ export default function FieldOverlay({ field, index, cellWidth, cellHeight, sele
     : 'transparent';
 
   return (
-    <div
-      onClick={(e) => { e.stopPropagation(); onClick(index); }}
-      title={`${field.name || `field ${index}`} (${field.fromRow},${field.fromCol}) len=${field.len}${(field.repeat || 1) > 1 ? ` repeat=${field.repeat}` : ''}`}
-      style={{
-        position: 'absolute',
-        left: field.fromCol * cellWidth,
-        top: field.fromRow * cellHeight,
-        width: field.len * cellWidth,
-        height: (field.repeat || 1) * cellHeight,
-        backgroundColor: bgColor,
-        border: `1px ${field.write ? 'dashed' : 'solid'} ${borderColor}`,
-        boxSizing: 'border-box',
-        cursor: 'pointer',
-        pointerEvents: 'auto',
-        zIndex: selected ? 10 : 1,
-      }}
-    />
+    <>
+      {/* Attribute byte marker */}
+      <div
+        onClick={(e) => { e.stopPropagation(); onClick(index); }}
+        title={`Attribute byte at (${field.fromRow},${field.fromCol})`}
+        style={{
+          position: 'absolute',
+          left: field.fromCol * cellWidth,
+          top: field.fromRow * cellHeight,
+          width: cellWidth,
+          height: cellHeight,
+          backgroundColor: 'rgba(255, 255, 255, 0.08)',
+          borderRight: '1px dotted rgba(255, 255, 255, 0.3)',
+          boxSizing: 'border-box',
+          cursor: 'pointer',
+          pointerEvents: 'auto',
+          zIndex: selected ? 10 : 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '7px',
+          color: 'rgba(255, 255, 255, 0.3)',
+        }}
+      >
+        A
+      </div>
+      {/* Field content area */}
+      <div
+        onClick={(e) => { e.stopPropagation(); onClick(index); }}
+        title={`${field.name || `field ${index}`} (${field.fromRow},${field.fromCol}) len=${field.len}${(field.repeat || 1) > 1 ? ` repeat=${field.repeat}` : ''}`}
+        style={{
+          position: 'absolute',
+          left: (field.fromCol + 1) * cellWidth,
+          top: field.fromRow * cellHeight,
+          width: field.len * cellWidth,
+          height: (field.repeat || 1) * cellHeight,
+          backgroundColor: bgColor,
+          border: `1px ${field.write ? 'dashed' : 'solid'} ${borderColor}`,
+          boxSizing: 'border-box',
+          cursor: 'pointer',
+          pointerEvents: 'auto',
+          zIndex: selected ? 10 : 1,
+        }}
+      />
+    </>
   );
 }

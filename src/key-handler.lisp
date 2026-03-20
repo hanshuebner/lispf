@@ -122,3 +122,23 @@ Example:
     `(defmethod prepare-screen ((screen-name (eql ',screen-sym)))
        (with-field-bindings (*current-field-values* ,@field-names)
          ,@body))))
+
+;;; Dynamic area updaters
+
+(defgeneric update-dynamic-area (screen-name area-name)
+  (:documentation "Return content for AREA-NAME on SCREEN-NAME as a list of padded strings.
+Called periodically by the background update thread. Return NIL to skip the update.")
+  (:method (screen-name area-name)
+    (declare (ignore screen-name area-name))
+    nil))
+
+(defmacro define-dynamic-area-updater (screen-name area-name (&rest bindings) &body body)
+  "Define an updater for a dynamic area, called periodically by the update thread.
+AREA-NAME matches the :name in the screen's :dynamic-areas definition.
+Return a list of padded strings (one per row), or NIL to skip the update."
+  (let ((screen-sym (intern (string-upcase (string screen-name)) *package*))
+        (area-sym (intern (string-upcase (string area-name)) *package*)))
+    `(defmethod update-dynamic-area ((screen-name (eql ',screen-sym))
+                                     (area-name (eql ',area-sym)))
+       (with-field-bindings (*current-field-values* ,@bindings)
+         ,@body))))

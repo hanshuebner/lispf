@@ -65,15 +65,30 @@ Offsets fromRow by -1 to convert from display coordinates to app coordinates."
                  (list :goto (intern (string-upcase goto-screen) :lispf)))
                 (t nil))))))
 
+(defun dynamic-area-alist-to-plist (area)
+  "Convert a JSON-style dynamic area alist to a .screen plist for writing.
+Offsets rows by -1 to convert from display coordinates to app coordinates."
+  (let ((name (cdr (assoc "name" area :test #'string=)))
+        (from-row (1- (cdr (assoc "fromRow" area :test #'string=))))
+        (from-col (cdr (assoc "fromCol" area :test #'string=)))
+        (to-row (1- (cdr (assoc "toRow" area :test #'string=))))
+        (to-col (cdr (assoc "toCol" area :test #'string=))))
+    (list :name (intern (string-upcase name) :lispf)
+          :from (list from-row from-col)
+          :to (list to-row to-col))))
+
 (defun emit-screen-data (screen)
   "Convert a JSON-style screen alist to a sexp plist string."
   (let* ((name (cdr (assoc "name" screen :test #'string=)))
          (rows (cdr (assoc "rows" screen :test #'string=)))
          (fields (cdr (assoc "fields" screen :test #'string=)))
          (keys (cdr (assoc "keys" screen :test #'string=)))
+         (dynamic-areas (cdr (assoc "dynamicAreas" screen :test #'string=)))
          (screen-string (screen-rows-to-string rows))
          (field-plists (mapcar #'field-alist-to-plist fields))
          (key-plists (when keys (mapcar #'key-alist-to-plist keys)))
+         (dynamic-area-plists (when dynamic-areas
+                                (mapcar #'dynamic-area-alist-to-plist dynamic-areas)))
          (*package* (find-package :lispf))
          (*print-case* :downcase))
     (with-output-to-string (s)
@@ -87,6 +102,12 @@ Offsets fromRow by -1 to convert from display coordinates to app coordinates."
         (loop for (key-plist . rest) on key-plists
               do (prin1 key-plist s)
               when rest do (format s "~%        "))
+        (format s ")"))
+      (when dynamic-area-plists
+        (format s "~% :dynamic-areas (")
+        (loop for (area . rest) on dynamic-area-plists
+              do (prin1 area s)
+              when rest do (format s "~%                "))
         (format s ")"))
       (format s ")~%"))))
 

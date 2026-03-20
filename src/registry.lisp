@@ -22,7 +22,16 @@
   keys
   transient-fields
   repeat-groups
+  (dynamic-areas nil)
   (file-timestamp 0))
+
+(defstruct dynamic-area
+  "A host-updateable screen region."
+  (name "" :type string)
+  (from-row 0 :type fixnum)
+  (from-col 0 :type fixnum)
+  (to-row 0 :type fixnum)
+  (to-col 0 :type fixnum))
 
 ;;; Name resolution
 
@@ -168,16 +177,36 @@ distributes to \"name.0\" ... \"name.N-1\", removes base key."
    (cl3270:make-field :row 21 :col 79 :name "errormsg" :color cl3270:+red+)
    (cl3270:make-field :row 22 :col 79 :name "keys")))
 
-(defun format-title-line (screen-name)
-  "Format the title line: SCREEN-NAME   *APPLICATION-NAME*   date time"
+(defun now-time-hhmm ()
+  "Return current time as HH:MM string."
+  (multiple-value-bind (s m h) (decode-universal-time (get-universal-time))
+    (declare (ignore s))
+    (format nil "~2,'0D:~2,'0D" h m)))
+
+(defun format-title-line (screen-name &optional indicators)
+  "Format the title line: SCREENNAME  appname  (IND1) (IND2)  date HH:MM
+Padded to exactly 78 characters. INDICATORS is an optional list of text strings
+to display in parentheses between the app name and the date."
   (let* ((left (string-upcase (screen-name-string screen-name)))
-         (right (concatenate 'string (cl3270:today-date) " " (cl3270:now-time)))
+         (right (concatenate 'string (cl3270:today-date) " " (now-time-hhmm)))
          (center (application-name *application*))
-         (used (+ (length left) (length center) (length right)))
+         (middle (if indicators
+                     (format nil "~A  ~{(~A)~^ ~}" center indicators)
+                     center))
+         (used (+ (length left) (length middle) (length right)))
          (total-gap (max 2 (- 78 used)))
          (left-gap (floor total-gap 2))
-         (right-gap (- total-gap left-gap)))
-    (format nil "~A~V@T~A~V@T~A" left left-gap center right-gap right)))
+         (right-gap (- total-gap left-gap))
+         (line (concatenate 'string
+                            left
+                            (make-string left-gap :initial-element #\Space)
+                            middle
+                            (make-string right-gap :initial-element #\Space)
+                            right)))
+    (if (< (length line) 78)
+        (concatenate 'string line
+                     (make-string (- 78 (length line)) :initial-element #\Space))
+        (subseq line 0 78))))
 
 ;;; Rule extraction from .screen field definitions
 
@@ -231,11 +260,22 @@ Ensures aid-keyword is a keyword, label is a string, and :goto value is a keywor
                        normalized-rest))))
           key-specs))
 
+(defun compile-dynamic-areas (specs)
+  "Compile dynamic area specifications from screen data into dynamic-area structs."
+  (mapcar (lambda (spec)
+            (make-dynamic-area :name (string-downcase (string (getf spec :name)))
+                               :from-row (first (getf spec :from))
+                               :from-col (second (getf spec :from))
+                               :to-row (first (getf spec :to))
+                               :to-col (second (getf spec :to))))
+          specs))
+
 (defun compile-screen-data (name data)
   "Compile a screen data plist into a screen-info struct."
   (let* ((screen-string (pad-screen-string (getf data :screen)))
          (raw-fields (getf data :fields))
-         (raw-keys (getf data :keys)))
+         (raw-keys (getf data :keys))
+         (raw-dynamic-areas (getf data :dynamic-areas)))
     (multiple-value-bind (expanded-fields repeat-groups)
         (expand-repeat-fields raw-fields)
       (multiple-value-bind (clean-fields rules transient-fields)
@@ -251,7 +291,9 @@ Ensures aid-keyword is a keyword, label is a string, and :goto value is a keywor
            :rules rules
            :keys keys
            :transient-fields transient-fields
-           :repeat-groups repeat-groups))))))
+           :repeat-groups repeat-groups
+           :dynamic-areas (when raw-dynamic-areas
+                            (compile-dynamic-areas raw-dynamic-areas))))))))
 
 ;;; Registry operations
 
@@ -305,6 +347,10 @@ Ensures aid-keyword is a keyword, label is a string, and :goto value is a keywor
 (defun get-screen-repeat-fields (screen-name)
   "Get the repeat groups alist for a screen."
   (screen-info-repeat-groups (ensure-screen-loaded screen-name)))
+
+(defun get-screen-dynamic-areas (screen-name)
+  "Get the dynamic area list for a screen."
+  (screen-info-dynamic-areas (ensure-screen-loaded screen-name)))
 
 (defun reload-screen (screen-name)
   "Force reload a screen from disk."

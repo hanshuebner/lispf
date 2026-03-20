@@ -54,6 +54,14 @@ with :name, :message, and :date.")
                      (asdf:system-source-directory :lispf))
   :session-class 'guestbook-session)
 
+;;; Indicator: show entry count in title bar
+
+(defun entry-count-text ()
+  (format nil "~D entr~:@P" (length *guestbook-entries*)))
+
+(lspf:define-screen-update welcome ()
+  (lspf:set-indicator "entries" (entry-count-text)))
+
 ;;; Entry list screen
 
 (lspf:define-list-data-getter entry-list (start end)
@@ -66,6 +74,9 @@ with :name, :message, and :date.")
                                 :preview (substitute #\Space #\Newline
                                                      (getf e :message))))
             total)))
+
+(lspf:define-screen-update entry-list ()
+  (lspf:clear-indicator "new-data"))
 
 (lspf:define-key-handler entry-list :enter ()
   (let ((index (lspf:selected-list-index)))
@@ -106,6 +117,9 @@ with :name, :message, and :date.")
                 :date (concatenate 'string (cl3270:today-date) " " (cl3270:now-time)))
           *guestbook-entries*))
   (incf (session-entries-written lspf:*session*))
+  (lspf:broadcast (lambda ()
+                    (lspf:set-indicator "entries" (entry-count-text))
+                    (lspf:set-indicator "new-data" "NEW")))
   (setf (browse-index lspf:*session*) 0)
   (setf name "" message "")
   :back)

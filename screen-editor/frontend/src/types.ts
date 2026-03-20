@@ -48,11 +48,20 @@ export const AID_KEYS: AidKey[] = [
   'pf18', 'pf19', 'pf20', 'pf21', 'pf22', 'pf23', 'pf24',
 ];
 
+export interface DynamicArea {
+  name: string;
+  fromRow: number;
+  fromCol: number;
+  toRow: number;
+  toCol: number;
+}
+
 export interface DefScreen {
   name: string;
   rows: string[];
   fields: Field[];
   keys?: KeyAction[];
+  dynamicAreas?: DynamicArea[];
 }
 
 export function makeDefaultField(fromRow: number, fromCol: number, len: number): Field {

@@ -136,6 +136,12 @@ export default function AttributePanel({
       <div style={{ marginBottom: '12px', fontWeight: 'bold', color: '#50fa7b' }}>
         Field Attributes
       </div>
+      <div style={{ color: '#888', fontSize: '11px', marginBottom: '8px' }}>
+        Attribute byte at column {field.fromCol}. Content visible from column {field.fromCol + 1}.
+        {field.fromCol === 0 && (
+          <span style={{ color: '#f1fa8c' }}> Content starts at column 1 on the terminal.</span>
+        )}
+      </div>
 
       <div style={rowStyle}>
         <span style={labelStyle}>Row</span>

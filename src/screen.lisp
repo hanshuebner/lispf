@@ -70,7 +70,26 @@
            #:define-application
            #:run-application
            #:start-application
-           #:handle-connection))
+           #:handle-connection
+           ;; Real-time updates
+           #:session-write-lock
+           #:session-indicators
+           #:set-indicator
+           #:clear-indicator
+           #:broadcast
+           #:broadcast-indicator
+           ;; Dynamic areas
+           #:dynamic-area
+           #:dynamic-area-name
+           #:dynamic-area-from-row
+           #:dynamic-area-from-col
+           #:dynamic-area-to-row
+           #:dynamic-area-to-col
+           #:get-screen-dynamic-areas
+           #:update-dynamic-area
+           #:define-dynamic-area-updater
+           ;; Title utilities
+           #:now-time-hhmm))
 
 (in-package #:lispf)
 
