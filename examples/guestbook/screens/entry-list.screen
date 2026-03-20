@@ -3,13 +3,14 @@
 
  S   Author          Date       Message
 "
- :fields ((:from (2 1) :len 1 :name sel :write t :repeat 17 :highlighting underscore)
-          (:from (2 5) :len 15 :name author :repeat 17 :color green :intense t)
-          (:from (2 21) :len 10 :name date :repeat 17 :color turquoise)
+ :fields ((:from (2 1) :len 1 :name sel :write t :highlighting underscore
+           :repeat 17)
+          (:from (2 5) :len 15 :name author :intense t :color green :repeat 17)
+          (:from (2 21) :len 10 :name date :color turquoise :repeat 17)
           (:from (2 32) :len 47 :name preview :repeat 17)
           (:from (20 1) :len 30 :name page-info :color turquoise))
- :keys ((:pf7 "Prev" :hidden t)
-        (:pf8 "Next" :hidden t)
-        (:pf5 "Add" :goto new-entry)
+ :keys ((:pf5 "Add" :goto new-entry)
         (:enter "View")
-        (:pf3 "Exit" :goto bye)))
+        (:pf3 "Exit" :goto bye)
+        (:pf7 "Prev" :hidden t)
+        (:pf8 "Next" :hidden t)))
