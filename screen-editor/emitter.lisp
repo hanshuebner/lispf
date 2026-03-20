@@ -89,6 +89,7 @@ Offsets rows by -1 to convert from display coordinates to app coordinates."
          (keys (jref screen "keys"))
          (has-command (jref screen "command"))
          (anonymous (jref screen "anonymous"))
+         (navigable (jref screen "navigable"))
          (menu-name (jref screen "menu"))
          (aliases-raw (jref screen "aliases"))
          (aliases (when aliases-raw (coerce aliases-raw 'list)))
@@ -107,6 +108,8 @@ Offsets rows by -1 to convert from display coordinates to app coordinates."
         (format s "~% :anonymous t"))
       (when has-command
         (format s "~% :command t"))
+      (when navigable
+        (format s "~% :navigable t"))
       (when (and menu-name (not (equal menu-name :null)))
         (format s "~% :menu ~A" menu-name))
       (when aliases

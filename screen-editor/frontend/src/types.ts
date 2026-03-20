@@ -67,6 +67,7 @@ export interface DefScreen {
   noCommand?: boolean;
   command?: boolean;
   anonymous?: boolean;
+  navigable?: boolean;
   menu?: string;
   aliases?: string[];
 }

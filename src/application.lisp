@@ -155,11 +155,17 @@ Each session's update thread is woken to push the change immediately."
              (application-screens app))
     aliases))
 
-(defun find-screen-alias (app alias)
-  "Look up ALIAS in all loaded screens. Returns a screen symbol or NIL.
-Lazily loads screens to find aliases."
+(defun screen-matches-command-p (name-string info command)
+  "Return T if a navigable screen matches COMMAND by name or alias."
+  (and (screen-info-navigable info)
+       (or (string-equal command name-string)
+           (member command (screen-info-aliases info) :test #'string-equal))))
+
+(defun find-screen-alias (app command)
+  "Look up COMMAND against navigable screen names and aliases.
+Returns a screen symbol or NIL. Lazily loads screens from disk."
   (maphash (lambda (name-string info)
-             (when (member alias (screen-info-aliases info) :test #'string-equal)
+             (when (screen-matches-command-p name-string info command)
                (return-from find-screen-alias
                  (intern (string-upcase name-string) (application-package app)))))
            (application-screens app))
@@ -169,7 +175,7 @@ Lazily loads screens to find aliases."
       (let ((name (pathname-name path)))
         (unless (gethash name (application-screens app))
           (let ((info (load-and-register-screen name)))
-            (when (member alias (screen-info-aliases info) :test #'string-equal)
+            (when (screen-matches-command-p name info command)
               (return-from find-screen-alias
                 (intern (string-upcase name) (application-package app)))))))))
   nil)

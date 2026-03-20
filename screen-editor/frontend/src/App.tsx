@@ -883,7 +883,15 @@ export default function App() {
                     onChange={e => updateScreen(s => ({ ...s, anonymous: e.target.checked || undefined }))}
                   />
                 </div>
-                {screen.command && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', color: '#b0b0b0' }}>
+                  <span>Navigable</span>
+                  <input
+                    type="checkbox"
+                    checked={!!screen.navigable}
+                    onChange={e => updateScreen(s => ({ ...s, navigable: e.target.checked || undefined }))}
+                  />
+                </div>
+                {screen.navigable && (
                 <div style={{ marginBottom: '4px' }}>
                   <div style={{ color: '#b0b0b0', marginBottom: '2px' }}>Aliases</div>
                   <input
