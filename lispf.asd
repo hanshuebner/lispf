@@ -5,6 +5,7 @@
   :serial t
   :pathname "src/"
   :components ((:file "screen")
+               (:file "variables")
                (:file "registry")
                (:file "field-binding")
                (:file "conditions")
