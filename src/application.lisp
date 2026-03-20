@@ -1075,8 +1075,18 @@ COMMAND is the trimmed value from the command field (extracted from response)."
                    (setf (gethash "errormsg" context)
                          (unknown-command-message *application* command))
                    :stay))))
-          ;; Menu screen: cursor-based item selection on Enter
-          ((and (eq aid-kw :enter) (menu-screen-select dispatch-sym)))
+          ;; Enter with empty command
+          ((eq aid-kw :enter)
+           (let* ((name-string (screen-name-string dispatch-sym))
+                  (info (gethash name-string (app-screens)))
+                  (is-menu (and info (screen-info-menu info))))
+             (cond
+               ;; Menu screen: cursor-based item selection or stay
+               (is-menu (or (menu-screen-select dispatch-sym) :stay))
+               ;; Has an Enter key spec: dispatch normally
+               (key-spec (handle-key dispatch-sym aid-kw))
+               ;; No Enter handler: just stay
+               (t :stay))))
           (t (handle-key dispatch-sym aid-kw))))
     (redisplay () :stay)))
 
@@ -1109,7 +1119,8 @@ Returns :exit when the application loop should terminate."
 
 (defun show-screen-and-read (screen display-screen screen-rules key-specs
                              field-values dispatch-sym repeat-groups
-                             has-list-data list-data-count)
+                             has-list-data list-data-count
+                             &key no-command)
   "Prepare the display screen, compute cursor, and read user input.
 Returns the 3270 response."
   (multiple-value-bind (cursor-row cursor-col)
@@ -1117,6 +1128,12 @@ Returns the 3270 response."
                                repeat-groups has-list-data list-data-count)
     (multiple-value-bind (pf-keys exit-keys)
         (build-key-vectors key-specs)
+      ;; Command screens always accept Enter (for the command field)
+      (unless (or no-command
+                  (find cl3270:+aid-enter+ pf-keys)
+                  (find cl3270:+aid-enter+ exit-keys))
+        (setf pf-keys (concatenate 'vector pf-keys
+                                    (vector cl3270:+aid-enter+))))
       (multiple-value-bind (response err)
           (display-and-read display-screen screen-rules field-values
                             pf-keys exit-keys "errormsg"
@@ -1180,7 +1197,8 @@ Returns the 3270 response."
                                                  screen-rules key-specs
                                                  field-values dispatch-sym
                                                  repeat-groups has-list-data
-                                                 list-data-count)))
+                                                 list-data-count
+                                                 :no-command no-command)))
             (process-response response context dispatch-sym transient-fields
                               repeat-groups has-list-data)
             ;; Temporarily inject transient field values so key handlers can
