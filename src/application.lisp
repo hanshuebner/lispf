@@ -629,214 +629,252 @@ cl3270 symbols, adding background update thread support via post-send-callback."
              (when (validate-fields rules my-vals orig-values error-field)
                (return (values resp nil))))))))))
 
+;;; Main application loop — helper functions
+
+(defun ensure-key-handlers-validated (dispatch-sym key-specs)
+  "Validate key handlers for DISPATCH-SYM once per application lifetime."
+  (unless (gethash dispatch-sym (application-validated-screens *application*))
+    (setf (gethash dispatch-sym (application-validated-screens *application*)) t)
+    (check-screen-key-handlers dispatch-sym key-specs)))
+
+(defun populate-field-values (context field-values screen dispatch-sym
+                              repeat-groups)
+  "Copy context into FIELD-VALUES and distribute list/repeat data.
+Returns (values list-data-count list-data-total has-list-data)."
+  (maphash (lambda (k v) (setf (gethash k field-values) v)) context)
+  (let ((list-data-count nil)
+        (list-data-total nil)
+        (has-list-data nil))
+    (when repeat-groups
+      (multiple-value-bind (count total)
+          (distribute-list-data dispatch-sym repeat-groups context field-values)
+        (when count
+          (setf list-data-count count
+                list-data-total total
+                has-list-data t)
+          (let* ((page-size (reduce #'max repeat-groups
+                                    :key #'second :initial-value 0))
+                 (offset (list-offset *session* dispatch-sym)))
+            (when (> offset 0)
+              (show-key :pf7 "Prev"))
+            (when (< (+ offset page-size) (or total 0))
+              (show-key :pf8 "Next"))))))
+    (when (and repeat-groups (not has-list-data))
+      (split-repeat-field-value
+       repeat-groups
+       (lambda (base-name) (repeat-field-length screen base-name))
+       field-values))
+    (values list-data-count list-data-total has-list-data)))
+
+(defun set-framework-fields (screen-sym field-values)
+  "Set title, errormsg, and key label fields in FIELD-VALUES."
+  (setf (gethash "title" field-values)
+        (format-title-line screen-sym (session-indicator-texts)))
+  (setf (gethash "errormsg" field-values)
+        (or (gethash "errormsg" field-values) ""))
+  (let ((key-labels (format-key-labels-from-specs *current-screen-keys*)))
+    (when key-labels
+      (setf (gethash "keys" field-values) key-labels))))
+
+(defun compute-cursor-position (screen display-screen dispatch-sym
+                                repeat-groups has-list-data list-data-count)
+  "Determine cursor row and column for the screen display.
+Returns (values cursor-row cursor-col).
+Falls back to the first writable field, or row 23 (key labels) if none exist."
+  (let* ((saved-cursor
+           (when (and has-list-data (not *next-cursor-row*))
+             (let ((raw (getf (list-state *session* dispatch-sym) :cursor-row)))
+               (when raw
+                 (let* ((first-row (list-data-row screen repeat-groups))
+                        (max-row (+ first-row (1- list-data-count))))
+                   (min raw max-row))))))
+         (first-write (unless (or *next-cursor-row* saved-cursor)
+                        (find-if (lambda (f) (cl3270::field-write f))
+                                 (cl3270:screen-fields display-screen))))
+         (cursor-row (or *next-cursor-row* saved-cursor
+                         (if first-write (cl3270:field-row first-write) 23)))
+         (cursor-col (or *next-cursor-col*
+                         (when saved-cursor
+                           (getf (list-state *session* dispatch-sym) :cursor-col))
+                         (if first-write (1+ (cl3270:field-col first-write)) 0))))
+    (values cursor-row cursor-col)))
+
+(defun merge-response-into-context (response context transient-fields)
+  "Merge response field values into CONTEXT, skipping framework and transient fields."
+  (let ((resp-vals (cl3270:response-vals response)))
+    (when resp-vals
+      (maphash (lambda (k v)
+                 (unless (or (member k *framework-fields* :test #'string=)
+                             (member k transient-fields :test #'string=))
+                   (setf (gethash k context) v)))
+               resp-vals))))
+
+(defun page-backward (dispatch-sym repeat-groups)
+  "Move list offset one page backward for DISPATCH-SYM."
+  (let* ((page-size (reduce #'max repeat-groups
+                            :key #'second :initial-value 0))
+         (offset (list-offset *session* dispatch-sym)))
+    (setf (list-offset *session* dispatch-sym)
+          (max 0 (* page-size (1- (floor offset page-size)))))))
+
+(defun page-forward (dispatch-sym repeat-groups list-data-total)
+  "Move list offset one page forward for DISPATCH-SYM if more data exists."
+  (let* ((page-size (reduce #'max repeat-groups
+                            :key #'second :initial-value 0))
+         (total (or list-data-total 0))
+         (next (* page-size (1+ (floor (list-offset *session* dispatch-sym)
+                                       page-size)))))
+    (when (< next total)
+      (setf (list-offset *session* dispatch-sym) next))))
+
+(defun dispatch-key (context dispatch-sym aid-kw key-spec
+                     has-list-data repeat-groups list-data-total app-package)
+  "Dispatch AID-KW with error handling. Returns a navigation result."
+  (restart-case
+      (handler-bind
+          ((application-error
+             (lambda (c)
+               (setf (gethash "errormsg" context)
+                     (application-error-message c))
+               (invoke-restart 'redisplay)))
+           (error
+             (lambda (c)
+               (let ((id (generate-incident-id)))
+                 (log-incident id c)
+                 (setf (gethash "errormsg" context)
+                       (format nil "Internal error. Incident: ~A" id))
+                 (invoke-restart 'redisplay)))))
+        (cond
+          ((and key-spec (getf (cddr key-spec) :back))
+           :back)
+          ((and key-spec (getf (cddr key-spec) :goto))
+           (intern-screen-name
+            (string (getf (cddr key-spec) :goto))
+            app-package))
+          ((and has-list-data (eq aid-kw :pf7))
+           (page-backward dispatch-sym repeat-groups)
+           :stay)
+          ((and has-list-data (eq aid-kw :pf8))
+           (page-forward dispatch-sym repeat-groups list-data-total)
+           :stay)
+          (t (handle-key dispatch-sym aid-kw))))
+    (redisplay () :stay)))
+
+(defun apply-screen-transition (result screen-sym dispatch-sym)
+  "Interpret a key dispatch RESULT and update session state.
+Returns :exit when the application loop should terminate."
+  (cond
+    ((eq result :logoff)
+     :exit)
+    ((or (eq result :stay) (null result))
+     nil)
+    ((eq result :back)
+     (let ((prev (pop (session-screen-stack *session*))))
+       (if prev
+           (setf (session-current-screen *session*) prev)
+           :exit)))
+    ((symbolp result)
+     (push screen-sym (session-screen-stack *session*))
+     (setf (session-current-screen *session*) result))
+    (t
+     (warn "Unexpected handle-key return value ~S on screen ~S, treating as :stay"
+           result dispatch-sym))))
+
 ;;; Main application loop
+
+(defun show-screen-and-read (screen display-screen screen-rules key-specs
+                             field-values dispatch-sym repeat-groups
+                             has-list-data list-data-count)
+  "Prepare the display screen, compute cursor, and read user input.
+Returns the 3270 response."
+  (multiple-value-bind (cursor-row cursor-col)
+      (compute-cursor-position screen display-screen dispatch-sym
+                               repeat-groups has-list-data list-data-count)
+    (multiple-value-bind (pf-keys exit-keys)
+        (build-key-vectors key-specs)
+      (multiple-value-bind (response err)
+          (display-and-read display-screen screen-rules field-values
+                            pf-keys exit-keys "errormsg"
+                            cursor-row cursor-col *connection*
+                            :screen-sym dispatch-sym)
+        (when err (error err))
+        response))))
+
+(defun process-response (response context dispatch-sym transient-fields
+                         repeat-groups has-list-data)
+  "Merge response into context, rejoin repeat fields, and update cursor state."
+  (merge-response-into-context response context transient-fields)
+  (when (and repeat-groups (not has-list-data))
+    (join-repeat-field-values repeat-groups context))
+  (remhash "errormsg" context)
+  (setf *cursor-row* (cl3270:response-row response)
+        *cursor-col* (cl3270:response-col response))
+  (when has-list-data
+    (setf (list-state-value *session* dispatch-sym :cursor-row) *cursor-row*)
+    (setf (list-state-value *session* dispatch-sym :cursor-col) *cursor-col*)))
+
+(defun run-screen-loop (app-package)
+  "Execute the main screen loop. Returns when the session ends."
+  (loop
+    (let* ((screen-sym (session-current-screen *session*))
+           (name-string (screen-name-string screen-sym))
+           (screen (get-screen screen-sym))
+           (screen-rules (get-screen-rules screen-sym))
+           (key-specs (get-screen-keys screen-sym))
+           (transient-fields (get-screen-transient-fields screen-sym))
+           (repeat-groups (get-screen-repeat-fields screen-sym))
+           (context (session-context *session*))
+           (dispatch-sym (intern-screen-name name-string app-package))
+           (field-values (cl3270:make-dict :test #'equal)))
+      (ensure-key-handlers-validated dispatch-sym key-specs)
+      (setf *current-field-values* context)
+      (let ((*current-screen-keys* (mapcar (lambda (spec)
+                                             (list (first spec) (second spec)))
+                                           key-specs))
+            (*next-cursor-row* nil)
+            (*next-cursor-col* nil))
+        (prepare-screen dispatch-sym)
+        (multiple-value-bind (list-data-count list-data-total has-list-data)
+            (populate-field-values context field-values screen
+                                   dispatch-sym repeat-groups)
+          (set-framework-fields screen-sym field-values)
+          (let* ((display-screen (if has-list-data
+                                     (filter-screen-fields screen repeat-groups
+                                                           list-data-count)
+                                     screen))
+                 (response (show-screen-and-read screen display-screen
+                                                 screen-rules key-specs
+                                                 field-values dispatch-sym
+                                                 repeat-groups has-list-data
+                                                 list-data-count)))
+            (process-response response context dispatch-sym transient-fields
+                              repeat-groups has-list-data)
+            (let* ((aid-kw (aid-to-keyword (cl3270:response-aid response)))
+                   (key-spec (find-key-spec key-specs aid-kw))
+                   (result (dispatch-key context dispatch-sym aid-kw
+                                         key-spec has-list-data
+                                         repeat-groups list-data-total
+                                         app-package)))
+              (when (eq (apply-screen-transition result screen-sym dispatch-sym)
+                        :exit)
+                (return)))))))))
 
 (defun run-application (application conn devinfo)
   "Run an application's main loop for a single connection.
-Binds dynamic variables, creates a session, and loops through screens.
-Field values are automatically persisted in the session context across
-screen transitions. Fields marked :transient in .screen files are excluded."
+Binds dynamic variables, creates a session, and loops through screens."
   (let* ((*application* application)
          (*connection* conn)
          (*device-info* devinfo)
          (*session* (make-instance (application-session-class application)
                                    :application application))
          (app-package (application-package application)))
-    ;; Register session
     (bt:with-lock-held ((application-sessions-lock application))
       (push *session* (application-sessions application)))
     (unwind-protect
-     (progn
-    ;; Set initial screen
-    (setf (session-current-screen *session*)
-          (application-entry-screen application))
-    ;; Main loop
-    (loop
-      (let* ((screen-sym (session-current-screen *session*))
-             (name-string (screen-name-string screen-sym))
-             (screen (get-screen screen-sym))
-             (screen-rules (get-screen-rules screen-sym))
-             (key-specs (get-screen-keys screen-sym))
-             (transient-fields (get-screen-transient-fields screen-sym))
-             (repeat-groups (get-screen-repeat-fields screen-sym))
-             (context (session-context *session*))
-             (dispatch-sym (intern-screen-name name-string app-package))
-             (field-values (cl3270:make-dict :test #'equal)))
-        ;; Validate key handlers (once per screen)
-        (unless (gethash dispatch-sym (application-validated-screens *application*))
-          (setf (gethash dispatch-sym (application-validated-screens *application*)) t)
-          (check-screen-key-handlers dispatch-sym key-specs))
-        ;; Bind context for prepare-screen
-        (setf *current-field-values* context)
-        ;; Call prepare-screen with dynamic key management
-        (let ((*current-screen-keys* (mapcar (lambda (spec)
-                                               (list (first spec) (second spec)))
-                                             key-specs))
-              (*next-cursor-row* nil)
-              (*next-cursor-col* nil))
-          (prepare-screen dispatch-sym)
-          ;; Copy context into field values for display
-          (maphash (lambda (k v) (setf (gethash k field-values) v)) context)
-          ;; Distribute list data or expand repeat field values
-          (let ((list-data-count nil)
-                (list-data-total nil)
-                (has-list-data nil))
-            (when repeat-groups
-              (multiple-value-bind (count total)
-                  (distribute-list-data dispatch-sym repeat-groups
-                                        context field-values)
-                (when count
-                  (setf list-data-count count
-                        list-data-total total
-                        has-list-data t)
-                  ;; Auto-manage PF7/PF8 visibility
-                  (let* ((page-size (reduce #'max repeat-groups
-                                            :key #'second :initial-value 0))
-                         (offset (list-offset *session* dispatch-sym)))
-                    (when (> offset 0)
-                      (show-key :pf7 "Prev"))
-                    (when (< (+ offset page-size) (or total 0))
-                      (show-key :pf8 "Next"))))))
-            (when (and repeat-groups (not has-list-data))
-              (split-repeat-field-value
-               repeat-groups
-               (lambda (base-name) (repeat-field-length screen base-name))
-               field-values))
-            ;; Set framework fields
-            (setf (gethash "title" field-values)
-                  (format-title-line screen-sym (session-indicator-texts)))
-            (setf (gethash "errormsg" field-values)
-                  (or (gethash "errormsg" field-values) ""))
-            ;; Render key labels from *current-screen-keys*
-            (let ((key-labels (format-key-labels-from-specs *current-screen-keys*)))
-              (when key-labels
-                (setf (gethash "keys" field-values) key-labels)))
-            ;; Filter screen to hide empty repeat rows
-            (let* ((display-screen (if has-list-data
-                                       (filter-screen-fields screen repeat-groups
-                                                             list-data-count)
-                                       screen))
-                   ;; Cursor: override > saved list cursor (clamped) > first writable field
-                   (saved-cursor
-                     (when (and has-list-data (not *next-cursor-row*))
-                       (let ((raw (getf (list-state *session* dispatch-sym)
-                                        :cursor-row)))
-                         (when raw
-                           (let* ((first-row (list-data-row screen repeat-groups))
-                                  (max-row (+ first-row (1- list-data-count))))
-                             (min raw max-row))))))
-                   (first-write (unless (or *next-cursor-row* saved-cursor)
-                                  (find-if (lambda (f) (cl3270::field-write f))
-                                           (cl3270:screen-fields display-screen))))
-                   (cursor-row (or *next-cursor-row* saved-cursor
-                                   (if first-write (cl3270:field-row first-write) 0)))
-                   (cursor-col (or *next-cursor-col*
-                                   (when saved-cursor
-                                     (getf (list-state *session* dispatch-sym)
-                                           :cursor-col))
-                                   (if first-write (1+ (cl3270:field-col first-write)) 0))))
-              ;; Build key vectors from specs
-              (multiple-value-bind (pf-keys exit-keys)
-                  (build-key-vectors key-specs)
-                ;; Display screen and get response
-                (multiple-value-bind (response err)
-                    (display-and-read display-screen
-                                      screen-rules
-                                      field-values
-                                      pf-keys
-                                      exit-keys
-                                      "errormsg"
-                                      cursor-row cursor-col
-                                      conn
-                                      :screen-sym dispatch-sym)
-                  (when err (error err))
-                  ;; Merge response values into context (skip transient + framework)
-                  (let ((resp-vals (cl3270:response-vals response)))
-                    (when resp-vals
-                      (maphash (lambda (k v)
-                                 (unless (or (member k *framework-fields* :test #'string=)
-                                             (member k transient-fields :test #'string=))
-                                   (setf (gethash k context) v)))
-                               resp-vals)))
-                  ;; Join repeat field values back into single context values
-                  ;; (skip for list-data screens -- framework manages those fields)
-                  (when (and repeat-groups (not has-list-data))
-                    (join-repeat-field-values repeat-groups context))
-                  ;; Clear error message for next iteration
-                  (remhash "errormsg" context)
-                  ;; Expose cursor position to key handlers
-                  (setf *cursor-row* (cl3270:response-row response)
-                        *cursor-col* (cl3270:response-col response))
-                  ;; Auto-save cursor position for list screens
-                  (when has-list-data
-                    (setf (list-state-value *session* dispatch-sym :cursor-row)
-                          *cursor-row*)
-                    (setf (list-state-value *session* dispatch-sym :cursor-col)
-                          *cursor-col*))
-                  ;; Determine AID keyword and dispatch
-                  (let* ((aid-kw (aid-to-keyword (cl3270:response-aid response)))
-                         (key-spec (find-key-spec key-specs aid-kw))
-                         (result
-                           (restart-case
-                               (handler-bind
-                                   ((application-error
-                                      (lambda (c)
-                                        (setf (gethash "errormsg" context)
-                                              (application-error-message c))
-                                        (invoke-restart 'redisplay)))
-                                    (error
-                                      (lambda (c)
-                                        (let ((id (generate-incident-id)))
-                                          (log-incident id c)
-                                          (setf (gethash "errormsg" context)
-                                                (format nil "Internal error. Incident: ~A" id))
-                                          (invoke-restart 'redisplay)))))
-                                 (cond
-                                   ((and key-spec (getf (cddr key-spec) :back))
-                                    :back)
-                                   ((and key-spec (getf (cddr key-spec) :goto))
-                                    (intern-screen-name
-                                     (string (getf (cddr key-spec) :goto))
-                                     app-package))
-                                   ;; Auto-handle PF7/PF8 for list-data screens
-                                   ((and has-list-data (eq aid-kw :pf7))
-                                    (let* ((page-size (reduce #'max repeat-groups
-                                                              :key #'second
-                                                              :initial-value 0))
-                                           (offset (list-offset *session* dispatch-sym)))
-                                      (setf (list-offset *session* dispatch-sym)
-                                            (max 0 (* page-size (1- (floor offset page-size))))))
-                                    :stay)
-                                   ((and has-list-data (eq aid-kw :pf8))
-                                    (let* ((page-size (reduce #'max repeat-groups
-                                                              :key #'second
-                                                              :initial-value 0))
-                                           (total (or list-data-total 0))
-                                           (next (* page-size (1+ (floor (list-offset *session* dispatch-sym)
-                                                                         page-size)))))
-                                      (when (< next total)
-                                        (setf (list-offset *session* dispatch-sym) next)))
-                                    :stay)
-                                   (t (handle-key dispatch-sym aid-kw))))
-                             (redisplay () :stay))))
-                    ;; Interpret result
-                    (cond
-                      ((eq result :logoff)
-                       (return))
-                      ((or (eq result :stay) (null result))
-                       nil)
-                      ((eq result :back)
-                       (let ((prev (pop (session-screen-stack *session*))))
-                         (if prev
-                             (setf (session-current-screen *session*) prev)
-                             (return))))
-                      ((symbolp result)
-                       (push screen-sym (session-screen-stack *session*))
-                       (setf (session-current-screen *session*) result))
-                      (t
-                       (warn "Unexpected handle-key return value ~S on screen ~S, treating as :stay"
-                             result dispatch-sym)))))))))))))) ;; end progn
-      ;; Unregister session
+         (progn
+           (setf (session-current-screen *session*)
+                 (application-entry-screen application))
+           (run-screen-loop app-package))
       (bt:with-lock-held ((application-sessions-lock application))
         (setf (application-sessions application)
-              (remove *session* (application-sessions application)))))
+              (remove *session* (application-sessions application)))))))

@@ -422,10 +422,9 @@ APP-RULES takes precedence over SCREEN-RULES. Returns nil if both are nil."
 
 (defun set-page-info (field-values context offset page-size total)
   "Auto-populate the page-info field in FIELD-VALUES and CONTEXT."
-  (let ((str (format nil "Page ~D of ~D  (~D entr~:@P)"
+  (let ((str (format nil "Page ~D of ~D"
                      (1+ (floor offset page-size))
-                     (max 1 (ceiling total page-size))
-                     total)))
+                     (max 1 (ceiling total page-size)))))
     (setf (gethash "page-info" field-values) str
           (gethash "page-info" context) str)))
 
