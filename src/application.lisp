@@ -436,6 +436,32 @@ unlocking the 3270 keyboard after the main thread received a response."
         (cl3270:show-screen-opts screen vals *connection*
           (cl3270:make-screen-opts :no-clear t :no-response t))))))
 
+(defun pad-or-truncate (string width)
+  "Pad STRING with spaces or truncate it to exactly WIDTH characters."
+  (let ((len (length string)))
+    (cond ((= len width) string)
+          ((> len width) (subseq string 0 width))
+          (t (concatenate 'string string
+                          (make-string (- width len) :initial-element #\Space))))))
+
+(defun build-dynamic-area-overlay (area content)
+  "Build a screen and vals for overlaying CONTENT onto a dynamic AREA.
+Returns (values screen vals)."
+  (let* ((from-row (1+ (dynamic-area-from-row area)))
+         (from-col (dynamic-area-from-col area))
+         (to-row (1+ (dynamic-area-to-row area)))
+         (content-width (- (dynamic-area-to-col area) from-col))
+         (fields '())
+         (vals (cl3270:make-dict :test #'equal)))
+    (loop for row from from-row to to-row
+          for i from 0
+          for name = (format nil "dyn-~A-~D" (dynamic-area-name area) i)
+          for line = (if (< i (length content)) (nth i content) "")
+          do (push (cl3270:make-field :row row :col from-col :name name) fields)
+             (setf (gethash name vals) (pad-or-truncate line content-width)))
+    (values (apply #'cl3270:make-screen "dynamic-overlay" (nreverse fields))
+            vals)))
+
 (defun send-dynamic-area-overlays (ctx)
   "Call dynamic area updaters for the current screen and send overlays."
   (unless (update-context-running ctx)
@@ -445,35 +471,13 @@ unlocking the 3270 keyboard after the main thread received a response."
          (app-package (application-package *application*)))
     (dolist (area areas)
       (unless (update-context-running ctx) (return))
-      (let* ((area-sym (intern (string-upcase (dynamic-area-name area)) app-package))
-             (content (update-dynamic-area screen-sym area-sym)))
-        (when content
-          (let* ((from-row (1+ (dynamic-area-from-row area)))
-                 (from-col (dynamic-area-from-col area))
-                 (to-row (1+ (dynamic-area-to-row area)))
-                 (content-width (- (dynamic-area-to-col area) from-col))
-                 (fields '())
-                 (vals (cl3270:make-dict :test #'equal)))
-            (loop for row from from-row to to-row
-                  for i from 0
-                  for name = (format nil "dyn-~A-~D" (dynamic-area-name area) i)
-                  do (push (cl3270:make-field :row row :col from-col :name name)
-                           fields)
-                     (let* ((line (if (< i (length content)) (nth i content) ""))
-                            (padded (if (> (length line) content-width)
-                                        (subseq line 0 content-width)
-                                        (concatenate 'string line
-                                                     (make-string
-                                                      (max 0 (- content-width (length line)))
-                                                      :initial-element #\Space)))))
-                       (setf (gethash name vals) padded)))
-            (let ((screen (apply #'cl3270:make-screen "dynamic-overlay"
-                                 (nreverse fields))))
-              (bt:with-lock-held ((session-write-lock *session*))
-                (when (update-context-running ctx)
-                  (cl3270:show-screen-opts screen vals *connection*
-                    (cl3270:make-screen-opts :no-clear t :no-response t)))))))))))
-
+      (let ((area-sym (intern (string-upcase (dynamic-area-name area)) app-package)))
+        (when-let (content (update-dynamic-area screen-sym area-sym))
+          (multiple-value-bind (screen vals) (build-dynamic-area-overlay area content)
+            (bt:with-lock-held ((session-write-lock *session*))
+              (when (update-context-running ctx)
+                (cl3270:show-screen-opts screen vals *connection*
+                  (cl3270:make-screen-opts :no-clear t :no-response t))))))))))
 (defun update-thread-fn (ctx)
   "Main function for the background update thread.
 Sleeps first, then checks for changes. This avoids an immediate overlay
