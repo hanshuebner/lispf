@@ -104,14 +104,13 @@ Input: (:enter \"Login\") or (:pf3 \"Exit\" :back t) or (:pf5 \"Register\" :goto
 (defun parse-dynamic-area (area-plist)
   "Parse a dynamic area plist into a JSON-friendly alist.
 Offsets rows by +1 to account for the framework title row."
-  (let ((name (getf area-plist :name))
-        (from (getf area-plist :from))
-        (to (getf area-plist :to)))
-    (list (cons "name" (string-downcase (string name)))
-          (cons "fromRow" (1+ (first from)))
-          (cons "fromCol" (second from))
-          (cons "toRow" (1+ (first to)))
-          (cons "toCol" (second to)))))
+  (destructuring-bind (from-row from-col) (getf area-plist :from)
+    (destructuring-bind (to-row to-col) (getf area-plist :to)
+      (list (cons "name" (string-downcase (string (getf area-plist :name))))
+            (cons "fromRow" (1+ from-row))
+            (cons "fromCol" from-col)
+            (cons "toRow" (1+ to-row))
+            (cons "toCol" to-col)))))
 
 (defun parse-screen-data (data)
   "Parse a screen data plist into a JSON-friendly alist.
