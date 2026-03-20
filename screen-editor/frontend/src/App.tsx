@@ -255,18 +255,17 @@ function screensEqual(a: DefScreen, b: DefScreen): boolean {
 
 export default function App() {
   const [screens, setScreens] = useState<string[]>([]);
-  const [menus, setMenus] = useState<string[]>([]);
+  const [menuExists, setMenuExists] = useState(false);
   const [currentScreen, setCurrentScreen] = useState<string | null>(null);
-  const [currentMenu, setCurrentMenu] = useState<string | null>(null);
   const [screen, setScreen] = useState<DefScreen | null>(null);
   const [menu, setMenu] = useState<DefMenu | null>(null);
+  const [editingMenu, setEditingMenu] = useState(false);
   const [selectedFieldIndex, setSelectedFieldIndex] = useState<number | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [dirty, setDirty] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showNewDialog, setShowNewDialog] = useState(false);
-  const [showNewMenuDialog, setShowNewMenuDialog] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showBannerDialog, setShowBannerDialog] = useState(false);
   const [bannerOverlay, setBannerOverlay] = useState<string[] | null>(null);
@@ -400,11 +399,11 @@ export default function App() {
   const refreshMenuList = useCallback(async () => {
     try {
       const names = await listMenus();
-      setMenus(names);
-    } catch (e) {
-      addLog(`Error listing menus: ${e instanceof Error ? e.message : String(e)}`);
+      setMenuExists(names.length > 0);
+    } catch {
+      // Menu API may not exist yet
     }
-  }, [addLog]);
+  }, []);
 
   useEffect(() => { refreshScreenList(); refreshMenuList(); }, [refreshScreenList, refreshMenuList]);
 
@@ -415,7 +414,7 @@ export default function App() {
       addLog(`Loading ${name}...`);
       const data = await loadScreen(name);
       setCurrentScreen(name);
-      setCurrentMenu(null);
+      setEditingMenu(false);
       setMenu(null);
       setScreen(data);
       cleanState.current = data;
@@ -468,27 +467,41 @@ export default function App() {
 
   // --- Menu handling ---
 
-  const doLoadMenu = useCallback(async (name: string) => {
+  const doLoadMenu = useCallback(async () => {
     try {
-      addLog(`Loading menu ${name}...`);
-      const data = await loadMenu(name);
-      setCurrentMenu(name);
-      setCurrentScreen(null);
-      setScreen(null);
-      setMenu(data);
-      menuCleanState.current = data;
-      setDirty(false);
-      setShowHelp(false);
-      addLog(`Loaded menu ${name} (${data.items.length} items)`);
+      const names = await listMenus();
+      if (names.length > 0) {
+        addLog(`Loading menu ${names[0]}...`);
+        const data = await loadMenu(names[0]);
+        setEditingMenu(true);
+        setCurrentScreen(null);
+        setScreen(null);
+        setMenu(data);
+        menuCleanState.current = data;
+        setDirty(false);
+        setShowHelp(false);
+        addLog(`Loaded menu ${data.name} (${data.items.length} items)`);
+      } else {
+        // No menu file yet - start with empty menu
+        const newMenu: DefMenu = { name: 'main', title: '', items: [] };
+        setEditingMenu(true);
+        setCurrentScreen(null);
+        setScreen(null);
+        setMenu(newMenu);
+        menuCleanState.current = null;
+        setDirty(true);
+        setShowHelp(false);
+        addLog('New menu: main');
+      }
     } catch (e) {
-      addLog(`Error loading menu ${name}: ${e instanceof Error ? e.message : String(e)}`);
+      addLog(`Error loading menu: ${e instanceof Error ? e.message : String(e)}`);
     }
   }, [addLog]);
 
   const handleConfirmSwitch = useCallback(() => {
     if (pendingSwitch) {
-      if (pendingSwitch.startsWith('menu:')) {
-        doLoadMenu(pendingSwitch.slice(5));
+      if (pendingSwitch === 'menu') {
+        doLoadMenu();
       } else {
         doLoadScreen(pendingSwitch);
       }
@@ -496,27 +509,14 @@ export default function App() {
     }
   }, [pendingSwitch, doLoadScreen, doLoadMenu]);
 
-  const handleSelectMenu = useCallback((name: string) => {
-    if (name === currentMenu) return;
+  const handleSelectMenu = useCallback(() => {
+    if (editingMenu) return;
     if (dirty) {
-      setPendingSwitch(`menu:${name}`);
+      setPendingSwitch('menu');
     } else {
-      doLoadMenu(name);
+      doLoadMenu();
     }
-  }, [currentMenu, dirty, doLoadMenu]);
-
-  const handleNewMenuConfirm = useCallback((sanitized: string) => {
-    setShowNewMenuDialog(false);
-    const newMenu: DefMenu = { name: sanitized, title: '', items: [] };
-    setCurrentMenu(sanitized);
-    setCurrentScreen(null);
-    setScreen(null);
-    setMenu(newMenu);
-    menuCleanState.current = null;
-    setDirty(true);
-    setShowHelp(false);
-    addLog(`New menu: ${sanitized}`);
-  }, [addLog]);
+  }, [editingMenu, dirty, doLoadMenu]);
 
   const handleMenuChange = useCallback((m: DefMenu) => {
     setMenu(m);
@@ -533,6 +533,7 @@ export default function App() {
         menuCleanState.current = menu;
         setDirty(false);
         addLog(`Saved menu ${menu.name}`);
+        setMenuExists(true);
         refreshMenuList();
       } catch (e) {
         addLog(`Error saving: ${e instanceof Error ? e.message : String(e)}`);
@@ -711,9 +712,8 @@ export default function App() {
     return rows;
   }, [screen, keyLabels]);
 
-  const screenPath = currentMenu ? `screens/${currentMenu}.menu`
+  const screenPath = editingMenu ? (menu ? `screens/${menu.name}.menu` : null)
     : currentScreen ? `screens/${currentScreen}.screen` : null;
-  const editingMenu = !!menu;
   const showingHelp = showHelp || (!screen && !menu);
   const helpHighlight = showingHelp;
 
@@ -737,13 +737,6 @@ export default function App() {
           onCancel={() => setShowNewDialog(false)}
         />
       )}
-      {showNewMenuDialog && (
-        <NewScreenDialog
-          title="New Menu"
-          onConfirm={handleNewMenuConfirm}
-          onCancel={() => setShowNewMenuDialog(false)}
-        />
-      )}
       {showBannerDialog && (
         <BannerDialog
           onConfirm={handleBannerConfirm}
@@ -757,17 +750,16 @@ export default function App() {
           onCancel={() => setPendingSwitch(null)}
         />
       )}
-      <TitleBar screenName={currentMenu || currentScreen} screenPath={screenPath} />
+      <TitleBar screenName={editingMenu ? (menu?.name || 'menu') : currentScreen} screenPath={screenPath} />
       <div style={{ display: 'flex' }}>
         <ScreenList
           screens={screens}
-          menus={menus}
+          hasMenu={menuExists}
           currentScreen={currentScreen}
-          currentMenu={currentMenu}
+          editingMenu={editingMenu}
           onSelect={handleSelectScreen}
           onSelectMenu={handleSelectMenu}
           onNew={() => setShowNewDialog(true)}
-          onNewMenu={() => setShowNewMenuDialog(true)}
         />
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '12px' }}>

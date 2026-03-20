@@ -94,6 +94,7 @@
            ;; Command processing
            #:process-command
            #:unknown-command-message
+           #:default-command-label
            ;; Menu system
            #:find-menu-entry
            #:load-application-menus

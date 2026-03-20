@@ -1,12 +1,11 @@
 interface ScreenListProps {
   screens: string[];
-  menus: string[];
+  hasMenu: boolean;
   currentScreen: string | null;
-  currentMenu: string | null;
+  editingMenu: boolean;
   onSelect: (name: string) => void;
-  onSelectMenu: (name: string) => void;
+  onSelectMenu: () => void;
   onNew: () => void;
-  onNewMenu: () => void;
 }
 
 const sidebarStyle: React.CSSProperties = {
@@ -28,6 +27,7 @@ const headerStyle: React.CSSProperties = {
 };
 
 const listStyle: React.CSSProperties = {
+  flex: 1,
   overflowY: 'auto',
   padding: '0 4px',
 };
@@ -48,7 +48,7 @@ const activeItemStyle: React.CSSProperties = {
 };
 
 const newButtonStyle: React.CSSProperties = {
-  margin: '4px 8px 8px',
+  margin: '8px',
   padding: '5px 0',
   backgroundColor: '#0f3460',
   border: '1px solid #444',
@@ -60,8 +60,8 @@ const newButtonStyle: React.CSSProperties = {
 };
 
 export default function ScreenList({
-  screens, menus, currentScreen, currentMenu,
-  onSelect, onSelectMenu, onNew, onNewMenu,
+  screens, hasMenu, currentScreen, editingMenu,
+  onSelect, onSelectMenu, onNew,
 }: ScreenListProps) {
   return (
     <div style={sidebarStyle}>
@@ -78,19 +78,14 @@ export default function ScreenList({
         ))}
       </div>
       <button style={newButtonStyle} onClick={onNew}>New Screen</button>
-      <div style={headerStyle}>Menus</div>
-      <div style={listStyle}>
-        {menus.map(name => (
-          <div
-            key={name}
-            style={name === currentMenu ? activeItemStyle : itemStyle}
-            onClick={() => onSelectMenu(name)}
-          >
-            {name}
-          </div>
-        ))}
+      <div style={{ borderTop: '1px solid #333', padding: '4px' }}>
+        <div
+          style={editingMenu ? activeItemStyle : itemStyle}
+          onClick={onSelectMenu}
+        >
+          {hasMenu ? 'Menu' : 'Menu (new)'}
+        </div>
       </div>
-      <button style={newButtonStyle} onClick={onNewMenu}>New Menu</button>
     </div>
   );
 }

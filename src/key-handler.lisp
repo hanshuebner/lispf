@@ -137,6 +137,14 @@ or NIL to let normal Enter handling proceed.")
   (:method ((application t) (command t))
     (format nil "~A: unknown command" command)))
 
+;;; Command label customization
+
+(defgeneric default-command-label (application)
+  (:documentation "Return the default command line label for screens.
+Override to localize, e.g. return \"Kommando ==>\" for German.")
+  (:method ((application t))
+    "Command ==>"))
+
 ;;; Field attribute overrides
 
 (defun set-field-attribute (field-name &rest attrs)

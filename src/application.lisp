@@ -879,7 +879,8 @@ Returns (values list-data-count list-data-total has-list-data)."
   ;; Command line (only on screens with command field)
   (unless no-command
     (unless (gethash "cmdlabel" field-values)
-      (setf (gethash "cmdlabel" field-values) "Command ==>"))
+      (setf (gethash "cmdlabel" field-values)
+            (default-command-label *application*)))
     (setf (gethash "command" field-values) ""))
   (setf (gethash "errormsg" field-values)
         (or (gethash "errormsg" field-values) ""))
