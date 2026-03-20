@@ -128,9 +128,9 @@ Example:
 (defgeneric process-command (application command)
   (:documentation "Called when Enter is pressed and the 'command' field is non-empty.
 Return a navigation result (screen symbol, :stay, :back, :logoff, (:jump . sym)),
-or NIL to let normal Enter handling proceed.")
-  (:method ((application t) (command t))
-    nil))
+or NIL if the command is not recognized.
+Default implementation checks menu entries and screen aliases.
+The '=' prefix triggers a jump (resets screen stack)."))
 
 (defgeneric unknown-command-message (application command)
   (:documentation "Return the error message for an unrecognized command.")

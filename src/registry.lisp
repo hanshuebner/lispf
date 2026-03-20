@@ -25,6 +25,8 @@
   repeat-groups
   (dynamic-areas nil)
   (no-command nil)
+  (menu nil)
+  (aliases nil)
   (file-timestamp 0))
 
 (defstruct dynamic-area
@@ -307,6 +309,10 @@ when keys are shown or hidden at runtime."
 (defun compile-screen-data (name data)
   "Compile a screen data plist into a screen-info struct."
   (let* ((no-command (getf data :no-command))
+         (menu-name (let ((m (getf data :menu)))
+                      (when m (string-downcase (string m)))))
+         (aliases (mapcar (lambda (a) (string-downcase (string a)))
+                          (getf data :aliases)))
          (screen-string (pad-screen-string (getf data :screen) :no-command no-command))
          (raw-fields (getf data :fields))
          (raw-keys (getf data :keys))
@@ -332,7 +338,9 @@ when keys are shown or hidden at runtime."
            :repeat-groups repeat-groups
            :dynamic-areas (when raw-dynamic-areas
                             (compile-dynamic-areas raw-dynamic-areas))
-           :no-command no-command))))))
+           :no-command no-command
+           :menu menu-name
+           :aliases aliases))))))
 
 ;;; Registry operations
 

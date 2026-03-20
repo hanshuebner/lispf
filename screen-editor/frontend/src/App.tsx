@@ -865,15 +865,39 @@ export default function App() {
             <>
               <div style={{
                 padding: '8px 12px', borderTop: '1px solid #333',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                fontSize: '14px', color: '#b0b0b0',
+                fontSize: '13px',
               }}>
-                <span>No Command Line</span>
-                <input
-                  type="checkbox"
-                  checked={!!screen.noCommand}
-                  onChange={e => handleNoCommandChange(e.target.checked)}
-                />
+                <div style={{ marginBottom: '6px', fontWeight: 'bold', color: '#50fa7b', fontSize: '14px' }}>
+                  Screen Properties
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', color: '#b0b0b0' }}>
+                  <span>Command Screen</span>
+                  <input
+                    type="checkbox"
+                    checked={!screen.noCommand}
+                    onChange={e => handleNoCommandChange(!e.target.checked)}
+                  />
+                </div>
+                <div style={{ marginBottom: '4px' }}>
+                  <div style={{ color: '#b0b0b0', marginBottom: '2px' }}>Aliases</div>
+                  <input
+                    style={{
+                      width: '100%', padding: '3px 6px', backgroundColor: '#0f3460',
+                      border: '1px solid #444', borderRadius: '2px', color: '#e0e0e0',
+                      fontFamily: 'monospace', fontSize: '12px', boxSizing: 'border-box',
+                    }}
+                    placeholder="gb, gaestebuch"
+                    value={(screen.aliases || []).join(', ')}
+                    onChange={e => {
+                      const raw = e.target.value;
+                      const aliases = raw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+                      updateScreen(s => ({ ...s, aliases: aliases.length ? aliases : undefined }));
+                    }}
+                  />
+                  <div style={{ color: '#666', fontSize: '11px', marginTop: '2px' }}>
+                    Comma-separated command aliases for this screen
+                  </div>
+                </div>
               </div>
               <div style={{ flex: '0 0 auto', overflowY: 'auto', maxHeight: '40%' }}>
                 <KeyActionsPanel

@@ -97,6 +97,7 @@
            #:default-command-label
            ;; Menu system
            #:find-menu-entry
+           #:find-screen-alias
            #:load-application-menus
            #:application-menus
            #:application-menu-entries

@@ -142,6 +142,38 @@ Each session's update thread is woken to push the change immediately."
   "Intern a screen name string as a symbol in PACKAGE."
   (intern (string-upcase name-string) package))
 
+;;; Screen alias management
+
+(defun collect-screen-aliases (app)
+  "Scan all loaded screens and build an alist of (alias . screen-symbol) pairs."
+  (let ((aliases nil)
+        (pkg (application-package app)))
+    (maphash (lambda (name-string info)
+               (let ((screen-sym (intern (string-upcase name-string) pkg)))
+                 (dolist (alias (screen-info-aliases info))
+                   (push (cons alias screen-sym) aliases))))
+             (application-screens app))
+    aliases))
+
+(defun find-screen-alias (app alias)
+  "Look up ALIAS in all loaded screens. Returns a screen symbol or NIL.
+Lazily loads screens to find aliases."
+  (maphash (lambda (name-string info)
+             (when (member alias (screen-info-aliases info) :test #'string-equal)
+               (return-from find-screen-alias
+                 (intern (string-upcase name-string) (application-package app)))))
+           (application-screens app))
+  ;; Try loading screens from disk that aren't cached yet
+  (dolist (dir (application-screen-directories app))
+    (dolist (path (directory (merge-pathnames "*.screen" dir)))
+      (let ((name (pathname-name path)))
+        (unless (gethash name (application-screens app))
+          (let ((info (load-and-register-screen name)))
+            (when (member alias (screen-info-aliases info) :test #'string-equal)
+              (return-from find-screen-alias
+                (intern (string-upcase name) (application-package app)))))))))
+  nil)
+
 ;;; Menu loading
 
 (defun load-menu-file (path)
@@ -359,6 +391,69 @@ Signals a warning for any key that would fall through to the default handler."
     (error (e)
       (format *error-output* "~&;;; ~A: connection error: ~A~%"
               (application-name application) e))))
+
+;;; Default command processing (menu entries + screen aliases)
+
+(defmethod process-command ((application application) (command string))
+  "Default: look up command in menu entries and screen aliases.
+'=' prefix triggers a jump (resets screen stack to entry screen)."
+  (let* ((trimmed (string-trim '(#\Space) command))
+         (jump-p (and (plusp (length trimmed))
+                      (char= (char trimmed 0) #\=)))
+         (key (if jump-p (subseq trimmed 1) trimmed))
+         (target (or (find-menu-entry application key)
+                     (find-screen-alias application key))))
+    (when target
+      (if jump-p
+          (cons :jump target)
+          target))))
+
+;;; Menu screen support via list data
+
+(defun menu-items-flat (items)
+  "Flatten nested menu items into a single list for display."
+  (let ((result nil))
+    (dolist (item items)
+      (push item result)
+      ;; Don't recurse into sub-items for the current menu display
+      )
+    (nreverse result)))
+
+(defmethod get-list-data :around ((screen-name symbol) start end)
+  "Auto-populate repeat fields for menu screens from menu definitions."
+  (let* ((name-string (screen-name-string screen-name))
+         (info (gethash name-string (app-screens))))
+    (if (and info (screen-info-menu info))
+        (let* ((menu-name (screen-info-menu info))
+               (menu (gethash menu-name (application-menus *application*)))
+               (items (when menu (menu-items-flat (getf menu :items))))
+               (total (length items))
+               (page (subseq items start (min end total))))
+          (values
+           (mapcar (lambda (item)
+                     (list :key (getf item :key)
+                           :label (getf item :label)
+                           :description (or (getf item :description) "")))
+                   page)
+           total))
+        (call-next-method))))
+
+;;; Menu item selection via Enter key
+
+(defun menu-screen-select (screen-name)
+  "Handle Enter key on a menu screen. Returns screen symbol or NIL."
+  (let* ((name-string (screen-name-string screen-name))
+         (info (gethash name-string (app-screens)))
+         (menu-name (when info (screen-info-menu info))))
+    (when menu-name
+      (let* ((menu (gethash menu-name (application-menus *application*)))
+             (items (when menu (menu-items-flat (getf menu :items))))
+             (index (selected-list-index)))
+        (when (and index (< index (length items)))
+          (let ((item (nth index items))
+                (pkg (application-package *application*)))
+            (when (getf item :screen)
+              (intern (string-upcase (string (getf item :screen))) pkg))))))))
 
 (defun start-application (application &key (port 3270) (host "127.0.0.1")
                                           listener-callback)
@@ -980,6 +1075,8 @@ COMMAND is the trimmed value from the command field (extracted from response)."
                    (setf (gethash "errormsg" context)
                          (unknown-command-message *application* command))
                    :stay))))
+          ;; Menu screen: cursor-based item selection on Enter
+          ((and (eq aid-kw :enter) (menu-screen-select dispatch-sym)))
           (t (handle-key dispatch-sym aid-kw))))
     (redisplay () :stay)))
 

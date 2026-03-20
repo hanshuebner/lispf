@@ -65,6 +65,8 @@ export interface DefScreen {
   keys?: KeyAction[];
   dynamicAreas?: DynamicArea[];
   noCommand?: boolean;
+  menu?: string;
+  aliases?: string[];
 }
 
 export interface MenuItem {

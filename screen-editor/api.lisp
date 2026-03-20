@@ -101,6 +101,12 @@
     (let ((no-command (gethash "noCommand" ht)))
       (when (and no-command (not (eq no-command :null)) (not (eq no-command :false)))
         (setf result (append result (list (cons "noCommand" t))))))
+    (let ((menu-name (gethash "menu" ht)))
+      (when (and menu-name (not (eq menu-name :null)) (not (equal menu-name "")))
+        (setf result (append result (list (cons "menu" menu-name))))))
+    (let ((aliases (gethash "aliases" ht)))
+      (when (and aliases (not (eq aliases :null)) (plusp (length aliases)))
+        (setf result (append result (list (cons "aliases" (coerce aliases 'list)))))))
     (let ((keys (gethash "keys" ht)))
       (when (and keys (not (eq keys :null)))
         (setf result (append result
