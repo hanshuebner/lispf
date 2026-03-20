@@ -397,26 +397,23 @@ Call from within a define-screen-update body."
 (defun validate-fields (rules my-vals orig-values error-field)
   "Check field validation rules. Returns T if all pass, NIL if failed.
 On failure, sets the error message in MY-VALS under ERROR-FIELD."
-  (if (null rules)
-      t
-      (block validate
-        (maphash
-         (lambda (field fr)
-           (when (nth-value 1 (gethash field my-vals))
-             (when (and (cl3270:field-rules-must-change fr)
-                        (string= (gethash field my-vals)
-                                 (gethash field orig-values)))
+  (or (null rules)
+      (loop for field being the hash-key of rules using (hash-value fr)
+          for value = (nth-value 0 (gethash field my-vals))
+          for present = (nth-value 1 (gethash field my-vals))
+          when present do
+            (cond
+              ((and (cl3270:field-rules-must-change fr)
+                    (string= value (gethash field orig-values)))
                (setf (gethash error-field my-vals)
                      (cl3270:field-rules-error-text fr))
-               (return-from validate nil))
-             (when (and (cl3270:field-rules-validator fr)
-                        (not (funcall (cl3270:field-rules-validator fr)
-                                      (gethash field my-vals))))
+               (return nil))
+              ((and (cl3270:field-rules-validator fr)
+                    (not (funcall (cl3270:field-rules-validator fr) value)))
                (setf (gethash error-field my-vals)
                      (format nil "Value for ~S is not valid" field))
-               (return-from validate nil))))
-         rules)
-        t)))
+               (return nil)))
+          finally (return t))))
 
 (defun send-title-overlay (ctx)
   "Send a title-only overlay to update the clock and indicators.
