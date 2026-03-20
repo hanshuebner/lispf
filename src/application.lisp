@@ -1064,11 +1064,15 @@ COMMAND is the trimmed value from the command field (extracted from response)."
           ;; Command field processing: check before normal key dispatch
           ((and (eq aid-kw :enter) (plusp (length command)))
            (let ((result (process-command *application* command)))
-             (or result
-                 (progn
-                   (setf (gethash "errormsg" context)
-                         (unknown-command-message *application* command))
-                   :stay))))
+             (cond
+               (result
+                ;; Command triggered navigation: save cursor at command field start
+                (setf *cursor-row* 21 *cursor-col* 14)
+                result)
+               (t
+                (setf (gethash "errormsg" context)
+                      (unknown-command-message *application* command))
+                :stay))))
           ;; Enter with empty command
           ((eq aid-kw :enter)
            (let* ((name-string (screen-name-string dispatch-sym))
@@ -1076,7 +1080,10 @@ COMMAND is the trimmed value from the command field (extracted from response)."
                   (is-menu (and info (screen-info-menu info))))
              (cond
                ;; Menu screen: cursor-based item selection or stay
-               (is-menu (or (menu-screen-select dispatch-sym) :stay))
+               (is-menu (let ((target (menu-screen-select dispatch-sym)))
+                          (when target
+                            (setf *cursor-row* 21 *cursor-col* 14))
+                          (or target :stay)))
                ;; Has an Enter key spec: dispatch normally
                (key-spec (handle-key dispatch-sym aid-kw))
                ;; No Enter handler: just stay
@@ -1086,7 +1093,9 @@ COMMAND is the trimmed value from the command field (extracted from response)."
 
 (defun apply-screen-transition (result screen-sym dispatch-sym)
   "Interpret a key dispatch RESULT and update session state.
-Returns :exit when the application loop should terminate."
+Returns :exit when the application loop should terminate.
+Screen stack entries are (symbol cursor-row . cursor-col) to restore cursor on :back."
+  (declare (ignore dispatch-sym))
   (cond
     ((eq result :logoff)
      :exit)
@@ -1095,19 +1104,25 @@ Returns :exit when the application loop should terminate."
     ((eq result :back)
      (let ((prev (pop (session-screen-stack *session*))))
        (if prev
-           (setf (session-current-screen *session*) prev)
+           (progn
+             (setf (session-current-screen *session*) (car prev))
+             ;; Return saved cursor position as secondary values
+             (values nil (cadr prev) (cddr prev)))
            :exit)))
     ((and (consp result) (eq (car result) :jump))
      ;; Jump navigation: reset stack to just the entry screen, navigate to target
      (let ((root (application-entry-screen *application*)))
-       (setf (session-screen-stack *session*) (list root))
+       (setf (session-screen-stack *session*)
+             (list (cons root (cons 0 0))))
        (setf (session-current-screen *session*) (cdr result))))
     ((symbolp result)
-     (push screen-sym (session-screen-stack *session*))
+     ;; Save current screen with cursor position
+     (push (cons screen-sym (cons *cursor-row* *cursor-col*))
+           (session-screen-stack *session*))
      (setf (session-current-screen *session*) result))
     (t
      (warn "Unexpected handle-key return value ~S on screen ~S, treating as :stay"
-           result dispatch-sym))))
+           result screen-sym))))
 
 ;;; Main application loop
 
@@ -1151,6 +1166,8 @@ Returns the 3270 response."
 
 (defun run-screen-loop (app-package)
   "Execute the main screen loop. Returns when the session ends."
+  (let ((restored-cursor-row nil)
+        (restored-cursor-col nil))
   (loop
     (let* ((screen-sym (session-current-screen *session*))
            (name-string (screen-name-string screen-sym))
@@ -1175,8 +1192,10 @@ Returns the 3270 response."
                           (list aid-kw (if (getf rest :hidden) "" label))))
                       key-specs))
             (*current-key-layout* (get-screen-key-layout screen-sym))
-            (*next-cursor-row* nil)
-            (*next-cursor-col* nil)
+            (*next-cursor-row* (prog1 restored-cursor-row
+                                  (setf restored-cursor-row nil)))
+            (*next-cursor-col* (prog1 restored-cursor-col
+                                  (setf restored-cursor-col nil)))
             (*field-attribute-overrides* nil))
         (prepare-screen dispatch-sym)
         ;; Menu screens: auto-set cursor to command field
@@ -1223,9 +1242,13 @@ Returns the 3270 response."
                                              (or resp-command ""))
                              (dolist (k transient-fields)
                                (remhash k context)))))
-              (when (eq (apply-screen-transition result screen-sym dispatch-sym)
-                        :exit)
-                (return)))))))))
+              (multiple-value-bind (transition-result saved-row saved-col)
+                  (apply-screen-transition result screen-sym dispatch-sym)
+                (when saved-row
+                  (setf restored-cursor-row saved-row
+                        restored-cursor-col saved-col))
+                (when (eq transition-result :exit)
+                  (return)))))))))))
 
 (defun run-application (application conn devinfo)
   "Run an application's main loop for a single connection.
