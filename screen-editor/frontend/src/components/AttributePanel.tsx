@@ -4,6 +4,7 @@ interface AttributePanelProps {
   field: Field | null;
   selection: Selection | null;
   canCreateField: boolean;
+  isOverText: boolean;
   validationError: string | null;
   maxRepeat: number;
   onChange: (field: Field) => void;
@@ -80,13 +81,14 @@ const COLORS: Color[] = ['default', 'blue', 'red', 'pink', 'green', 'turquoise',
 const HIGHLIGHTS: Highlighting[] = ['default', 'blink', 'reverse-video', 'underscore'];
 
 export default function AttributePanel({
-  field, selection, canCreateField, validationError, maxRepeat, onChange, onDelete, onCreateField,
+  field, selection, canCreateField, isOverText, validationError, maxRepeat, onChange, onDelete, onCreateField,
 }: AttributePanelProps) {
   // Selection state — show "New Field" button
   if (!field && selection) {
     const isSingleRow = selection.fromRow === selection.toRow;
     const width = selection.toCol - selection.fromCol + 1;
     const height = selection.toRow - selection.fromRow + 1;
+    const fieldLen = width - 1;
     return (
       <div style={panelStyle}>
         <div style={{ marginBottom: '12px', fontWeight: 'bold', color: '#50fa7b' }}>
@@ -105,12 +107,21 @@ export default function AttributePanel({
           <span>{width} x {height}</span>
         </div>
         {canCreateField ? (
-          <button style={{ ...createButtonStyle, marginTop: '16px' }} onClick={onCreateField}>
-            New Field
-          </button>
+          <>
+            {fieldLen >= 1 && (
+              <div style={{ color: '#888', fontSize: '11px', marginTop: '8px' }}>
+                Attribute byte at col {selection.fromCol}, field length {fieldLen}
+                {isOverText && ' (anonymous)'}
+              </div>
+            )}
+            <button style={{ ...createButtonStyle, marginTop: '8px' }} onClick={onCreateField}>
+              {isOverText ? 'Mark as Field' : 'New Field'}
+            </button>
+          </>
         ) : !isSingleRow ? null : (
           <div style={{ color: '#ff5555', marginTop: '16px', textAlign: 'center' }}>
-            Selection overlaps a field or contains text.
+            {width < 2 ? 'Selection too narrow (need at least 2 columns).'
+              : 'Selection overlaps a field or starts on text.'}
           </div>
         )}
       </div>
@@ -197,6 +208,7 @@ export default function AttributePanel({
             ...(validationError ? { borderColor: '#ff5555' } : {}),
           }}
           type="text"
+          placeholder={field.anonymous ? '(anonymous)' : ''}
           value={field.name || ''}
           onChange={e => update({ name: e.target.value || null })}
           autoFocus={!!validationError}

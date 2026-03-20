@@ -6,6 +6,7 @@ export interface Field {
   fromCol: number;
   len: number;
   name: string | null;
+  anonymous: boolean;
   write: boolean;
   autoskip: boolean;
   intense: boolean;
@@ -71,6 +72,7 @@ export function makeDefaultField(fromRow: number, fromCol: number, len: number):
     fromCol,
     len,
     name: null,
+    anonymous: false,
     write: false,
     autoskip: false,
     intense: false,

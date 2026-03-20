@@ -73,6 +73,7 @@ Offsets fromRow by +1 to account for the framework title row."
           (cons "fromCol" (second from))
           (cons "len" (or len 1))
           (cons "name" (when name-val (string-downcase (string name-val))))
+          (cons "anonymous" (if name-val nil t))
           (cons "write" (if write-val t nil))
           (cons "intense" (if intense-val t nil))
           (cons "hidden" (if hidden-val t nil))

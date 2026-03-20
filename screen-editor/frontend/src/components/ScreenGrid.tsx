@@ -140,7 +140,7 @@ export default function ScreenGrid({
       const fieldIndex = fields.findIndex(f => {
         const repeat = f.repeat || 1;
         return pos.row >= f.fromRow && pos.row < f.fromRow + repeat
-          && pos.col >= f.fromCol && pos.col < f.fromCol + f.len;
+          && pos.col >= f.fromCol && pos.col <= f.fromCol + f.len;
       });
       onSelectField(fieldIndex >= 0 ? fieldIndex : null);
     }

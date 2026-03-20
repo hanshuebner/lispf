@@ -19,9 +19,9 @@ const TITLE_ROWS = new Set([0, 7, 15]);
 const WELCOME_ROWS = [
   cols('Getting Started', 'Fields'),
   cols('', ''),
-  cols('Pick a screen on the left or', 'Drag blank cells on one row, then'),
-  cols('click "New Screen" to create one.', 'click "New Field" in right panel.'),
-  cols('Click grid to place cursor & type.', 'Every field needs a unique name.'),
+  cols('Pick a screen on the left or', 'Drag cells on one row, then click'),
+  cols('click "New Screen" to create one.', '"New Field" in the right panel.'),
+  cols('Click grid to place cursor & type.', 'Drag over text to mark as field.'),
   cols('Backspace deletes to the left.', 'Edit attributes in right panel.'),
   cols('', ''),
   cols('Moving Content', 'Shortcuts'),
@@ -152,20 +152,32 @@ function NewScreenDialog({ onConfirm, onCancel }: {
 
 function selectionCanCreateField(sel: Selection | null, fields: Field[], rows: string[]): boolean {
   if (!sel) return false;
+  // Need at least 2 columns: 1 for attribute byte + 1 for content
+  if (sel.toCol - sel.fromCol < 1) return false;
   const overlaps = fields.some(f => {
     const fRepeat = f.repeat || 1;
     const fEndRow = f.fromRow + fRepeat - 1;
     return fEndRow >= sel.fromRow && f.fromRow <= sel.toRow
-      && f.fromCol < sel.toCol + 1
-      && f.fromCol + f.len > sel.fromCol;
+      && f.fromCol <= sel.toCol
+      && f.fromCol + f.len >= sel.fromCol;
   });
   if (overlaps) return false;
+  // First column of each row must be a space (for the attribute byte)
   for (let r = sel.fromRow; r <= sel.toRow; r++) {
     const rowStr = (rows[r] || '').padEnd(80, ' ');
-    const content = rowStr.substring(sel.fromCol, sel.toCol + 1);
-    if (content.trim().length !== 0) return false;
+    if (rowStr[sel.fromCol] !== ' ') return false;
   }
   return true;
+}
+
+function selectionIsOverText(sel: Selection | null, rows: string[]): boolean {
+  if (!sel) return false;
+  for (let r = sel.fromRow; r <= sel.toRow; r++) {
+    const rowStr = (rows[r] || '').padEnd(80, ' ');
+    const content = rowStr.substring(sel.fromCol + 1, sel.toCol + 1);
+    if (content.trim().length !== 0) return true;
+  }
+  return false;
 }
 
 function maxRepeatForField(field: Field, fieldIndex: number, fields: Field[], rows: string[]): number {
@@ -177,11 +189,11 @@ function maxRepeatForField(field: Field, fieldIndex: number, fields: Field[], ro
       if (i === fieldIndex) return false;
       const fEndRow = f.fromRow + (f.repeat || 1) - 1;
       if (r < f.fromRow || r > fEndRow) return false;
-      return f.fromCol < field.fromCol + field.len && f.fromCol + f.len > field.fromCol;
+      return f.fromCol <= field.fromCol + field.len && f.fromCol + f.len >= field.fromCol;
     });
 
     const rowStr = (rows[r] || '').padEnd(80, ' ');
-    const content = rowStr.substring(field.fromCol, field.fromCol + field.len);
+    const content = rowStr.substring(field.fromCol, field.fromCol + field.len + 1);
     const hasTextConflict = content.trim().length > 0;
 
     if (hasFieldConflict || hasTextConflict) {
@@ -298,6 +310,10 @@ export default function App() {
     if (selectedFieldIndex === null || !screen) return true;
     const field = screen.fields[selectedFieldIndex];
     if (!field) return true;
+    if (field.anonymous) {
+      setValidationError(null);
+      return true;
+    }
     if (!field.name || field.name.trim() === '') {
       setValidationError('Field must have a name.');
       return false;
@@ -318,6 +334,7 @@ export default function App() {
     if (!screen) return true;
     for (let i = 0; i < screen.fields.length; i++) {
       const f = screen.fields[i];
+      if (f.anonymous) continue;
       if (!f.name || f.name.trim() === '') {
         setSelectedFieldIndex(i);
         setValidationError('Field must have a name.');
@@ -517,15 +534,21 @@ export default function App() {
     setSelectedFieldIndex(null);
   }, [updateScreen]);
 
+  const isOverText = useMemo(
+    () => selectionIsOverText(selection, screen?.rows ?? []),
+    [selection, screen?.rows]
+  );
+
   const handleCreateField = useCallback(() => {
     if (!screen || !selection || !canCreateField) return;
-    const len = selection.toCol - selection.fromCol + 1;
+    const len = selection.toCol - selection.fromCol;
     const repeat = selection.toRow - selection.fromRow + 1;
-    const newField = { ...makeDefaultField(selection.fromRow, selection.fromCol, len), repeat };
+    const anonymous = selectionIsOverText(selection, screen.rows);
+    const newField = { ...makeDefaultField(selection.fromRow, selection.fromCol, len), repeat, anonymous };
     updateScreen(s => ({ ...s, fields: [...s.fields, newField] }));
     setSelectedFieldIndex(screen.fields.length);
     setSelection(null);
-    addLog(`Created field at row ${selection.fromRow}, col ${selection.fromCol}, len ${len}${repeat > 1 ? `, repeat ${repeat}` : ''}`);
+    addLog(`Created ${anonymous ? 'anonymous ' : ''}field at row ${selection.fromRow}, col ${selection.fromCol}, len ${len}${repeat > 1 ? `, repeat ${repeat}` : ''}`);
   }, [screen, selection, canCreateField, updateScreen, addLog]);
 
   const handleKeysChange = useCallback((keys: KeyAction[]) => {
@@ -722,6 +745,7 @@ export default function App() {
                 ? screen.fields[selectedFieldIndex] : null}
               selection={selection}
               canCreateField={canCreateField}
+              isOverText={isOverText}
               validationError={validationError}
               maxRepeat={fieldMaxRepeat}
               onChange={(f) => { if (selectedFieldIndex !== null) handleFieldUpdate(selectedFieldIndex, f); }}
