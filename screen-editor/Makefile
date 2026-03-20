@@ -7,6 +7,7 @@ FRONTEND_DIST = $(FRONTEND_DIR)/dist
 
 QUICKLISP_SETUP = $(HOME)/quicklisp/setup.lisp
 ASDF_DIR = $(shell cd .. && pwd)
+SCREENS_DIR ?= $(ASDF_DIR)/examples/guestbook/screens/
 
 .PHONY: all clean frontend frontend-dev backend-dev
 
@@ -33,7 +34,7 @@ backend-dev:
 	$(SBCL) --load $(QUICKLISP_SETUP) \
 		--eval '(dolist (d (list "" "CL3270/" "screen-editor/")) (push (merge-pathnames d "$(ASDF_DIR)/") asdf:*central-registry*))' \
 		--eval '(ql:quickload :lispf-editor)' \
-		--eval '(screen-editor:start-server "$(ASDF_DIR)/examples/guestbook/screens/" :port 8388)' \
+		--eval '(screen-editor:start-server "$(SCREENS_DIR)" :port 8388)' \
 		--eval '(format t "~%Backend running on port 8388. Use (screen-editor:stop-server) to stop.~%")'
 
 clean:
