@@ -26,3 +26,7 @@ Available in key handler bodies.")
   "The session context hash table. Used by with-field-bindings in key handlers.
 Field values from user input are automatically merged here (except transient fields).
 Handlers can read and modify values; changes persist across screen transitions.")
+
+(defvar *attribute-intro-char* #\^
+  "The character that introduces inline attribute codes in dynamic area strings.
+Default is #\\^. Applications may rebind this to a different character.")

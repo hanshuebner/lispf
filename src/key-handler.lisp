@@ -126,7 +126,8 @@ Example:
 ;;; Dynamic area updaters
 
 (defgeneric update-dynamic-area (screen-name area-name)
-  (:documentation "Return content for AREA-NAME on SCREEN-NAME as a list of padded strings.
+  (:documentation "Return content for AREA-NAME on SCREEN-NAME as a list of entries (one per row).
+Each entry may be a string or a plist (:content STRING :color C :highlighting H :intense T).
 Called periodically by the background update thread. Return NIL to skip the update.")
   (:method (screen-name area-name)
     (declare (ignore screen-name area-name))
@@ -135,7 +136,9 @@ Called periodically by the background update thread. Return NIL to skip the upda
 (defmacro define-dynamic-area-updater (screen-name area-name (&rest bindings) &body body)
   "Define an updater for a dynamic area, called periodically by the update thread.
 AREA-NAME matches the :name in the screen's :dynamic-areas definition.
-Return a list of padded strings (one per row), or NIL to skip the update."
+Return a list of entries (one per row), or NIL to skip the update.
+Each entry may be a string or a plist with :content and field attributes:
+  (:content \"text\" :color cl3270:+red+ :highlighting cl3270:+underscore+)"
   (let ((screen-sym (intern (string-upcase (string screen-name)) *package*))
         (area-sym (intern (string-upcase (string area-name)) *package*)))
     `(defmethod update-dynamic-area ((screen-name (eql ',screen-sym))

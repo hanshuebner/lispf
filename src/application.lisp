@@ -450,21 +450,139 @@ unlocking the 3270 keyboard after the main thread received a response."
           (t (concatenate 'string string
                           (make-string (- width len) :initial-element #\Space))))))
 
+;;; Inline attribute parsing for dynamic area strings
+;;;
+;;; Attribute codes (after *attribute-intro-char*, default ^):
+;;;   Colors:       r red, b blue, g green, p pink, t turquoise, y yellow, w white, 0 default
+;;;   Highlighting: _ underscore, ! blink, ~ reverse-video, . default
+;;;   Intensity:    * intense, - normal
+;;;   Literal:      ^^ produces a single ^
+
+(defparameter *attribute-code-map*
+  `((#\r :color ,cl3270:+red+)
+    (#\b :color ,cl3270:+blue+)
+    (#\g :color ,cl3270:+green+)
+    (#\p :color ,cl3270:+pink+)
+    (#\t :color ,cl3270:+turquoise+)
+    (#\y :color ,cl3270:+yellow+)
+    (#\w :color ,cl3270:+white+)
+    (#\0 :color 0)
+    (#\_ :highlighting ,cl3270:+underscore+)
+    (#\! :highlighting ,cl3270:+blink+)
+    (#\~ :highlighting ,cl3270:+reverse-video+)
+    (#\. :highlighting 0)
+    (#\* :intense t)
+    (#\- :intense nil)))
+
+(defun lookup-attribute-code (char)
+  "Return (key value) for an attribute code character, or NIL."
+  (let ((entry (assoc char *attribute-code-map*)))
+    (when entry (rest entry))))
+
+(defun parse-attributed-string (string)
+  "Parse STRING with inline attribute codes into a list of segments.
+Each segment is (text . plist) where plist contains :color, :highlighting, :intense
+as accumulated from attribute codes. Returns a single segment with no attributes
+if STRING contains no attribute intro characters."
+  (let ((intro *attribute-intro-char*)
+        (segments '())
+        (buf (make-string-output-stream))
+        (color 0)
+        (highlighting 0)
+        (intense nil)
+        (i 0)
+        (len (length string)))
+    (unless (position intro string)
+      (return-from parse-attributed-string (list (cons string nil))))
+    (labels ((flush-segment ()
+               (let ((text (get-output-stream-string buf)))
+                 (when (plusp (length text))
+                   (let ((attrs (append
+                                 (unless (= color 0)
+                                   (list :color color))
+                                 (unless (= highlighting 0)
+                                   (list :highlighting highlighting))
+                                 (when intense
+                                   (list :intense t)))))
+                     (push (cons text attrs) segments))))))
+      (loop while (< i len)
+            for ch = (char string i)
+            do (cond
+                 ((and (char= ch intro) (< (1+ i) len))
+                  (let* ((code-char (char string (1+ i)))
+                         (attr (lookup-attribute-code code-char)))
+                    (cond
+                      ((char= code-char intro)
+                       ;; Doubled intro = literal
+                       (write-char intro buf)
+                       (incf i 2))
+                      (attr
+                       (flush-segment)
+                       (ecase (first attr)
+                         (:color (setf color (second attr)))
+                         (:highlighting (setf highlighting (second attr)))
+                         (:intense (setf intense (second attr))))
+                       (incf i 2))
+                      (t
+                       ;; Unknown code, pass through literally
+                       (write-char ch buf)
+                       (incf i)))))
+                 (t
+                  (write-char ch buf)
+                  (incf i))))
+      (flush-segment))
+    (or (nreverse segments) (list (cons "" nil)))))
+
 (defun build-dynamic-area-overlay (area content)
   "Build a screen and vals for overlaying CONTENT onto a dynamic AREA.
+Each element of CONTENT may be:
+  - A string, optionally containing inline attribute codes (^r, ^b, ^_, etc.)
+  - A plist (:content STRING :color C :highlighting H :intense T)
+  - NIL for a blank row.
 Returns (values screen vals)."
   (let* ((from-row (1+ (dynamic-area-from-row area)))
          (from-col (dynamic-area-from-col area))
          (to-row (1+ (dynamic-area-to-row area)))
          (content-width (- (dynamic-area-to-col area) from-col))
          (fields '())
-         (vals (cl3270:make-dict :test #'equal)))
-    (loop for row from from-row to to-row
-          for i from 0
-          for name = (format nil "dyn-~A-~D" (dynamic-area-name area) i)
-          for line = (if (< i (length content)) (nth i content) "")
-          do (push (cl3270:make-field :row row :col from-col :name name) fields)
-             (setf (gethash name vals) (pad-or-truncate line content-width)))
+         (vals (cl3270:make-dict :test #'equal))
+         (field-idx 0))
+    (flet ((add-field (row col name attrs text width)
+             (push (apply #'cl3270:make-field :row row :col col :name name attrs) fields)
+             (setf (gethash name vals) (pad-or-truncate text width))))
+      (loop for row from from-row to to-row
+            for i from 0
+            for entry = (if (< i (length content)) (nth i content) nil)
+            do (cond
+                 ;; Plist entry: single field with explicit attributes
+                 ((consp entry)
+                  (let ((name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx)))
+                        (line (or (getf entry :content) ""))
+                        (attrs (remove-from-plist entry :content)))
+                    (add-field row from-col name attrs line content-width)))
+                 ;; String entry: parse for inline attribute codes
+                 ((stringp entry)
+                  (let ((segments (parse-attributed-string entry))
+                        (col from-col)
+                        (remaining content-width))
+                    (dolist (seg segments)
+                      (when (plusp remaining)
+                        (let* ((text (car seg))
+                               (attrs (cdr seg))
+                               (name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx)))
+                               (seg-width (min (length text) remaining)))
+                          (add-field row col name attrs
+                                     (subseq text 0 seg-width) seg-width)
+                          (incf col seg-width)
+                          (decf remaining seg-width))))
+                    ;; Pad remainder of the row if segments didn't fill it
+                    (when (plusp remaining)
+                      (let ((name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx))))
+                        (add-field row col name nil "" remaining)))))
+                 ;; NIL: blank row
+                 (t
+                  (let ((name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx))))
+                    (add-field row from-col name nil "" content-width))))))
     (values (apply #'cl3270:make-screen "dynamic-overlay" (nreverse fields))
             vals)))
 
@@ -859,12 +977,23 @@ Returns the 3270 response."
                                                  list-data-count)))
             (process-response response context dispatch-sym transient-fields
                               repeat-groups has-list-data)
+            ;; Temporarily inject transient field values so key handlers can
+            ;; access them, then remove after dispatch so they don't persist.
+            (let ((resp-vals (cl3270:response-vals response)))
+              (when resp-vals
+                (dolist (k transient-fields)
+                  (multiple-value-bind (v present-p) (gethash k resp-vals)
+                    (when present-p
+                      (setf (gethash k context) v))))))
             (let* ((aid-kw (aid-to-keyword (cl3270:response-aid response)))
                    (key-spec (find-key-spec key-specs aid-kw))
-                   (result (dispatch-key context dispatch-sym aid-kw
-                                         key-spec has-list-data
-                                         repeat-groups list-data-total
-                                         app-package)))
+                   (result (prog1
+                               (dispatch-key context dispatch-sym aid-kw
+                                             key-spec has-list-data
+                                             repeat-groups list-data-total
+                                             app-package)
+                             (dolist (k transient-fields)
+                               (remhash k context)))))
               (when (eq (apply-screen-transition result screen-sym dispatch-sym)
                         :exit)
                 (return)))))))))

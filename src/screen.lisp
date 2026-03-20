@@ -88,6 +88,7 @@
            #:get-screen-dynamic-areas
            #:update-dynamic-area
            #:define-dynamic-area-updater
+           #:*attribute-intro-char*
            ;; Title utilities
            #:now-time-hhmm))
 
