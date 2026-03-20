@@ -4,6 +4,10 @@
 
 ;;; Sexp screen data file writing
 
+(defun jref (alist key)
+  "Look up KEY (a string) in a JSON-style alist."
+  (cdr (assoc key alist :test #'string=)))
+
 (defun screen-rows-to-string (rows)
   "Convert 24 display rows to a .screen file string (21 app rows).
 Strips framework rows (0, 22, 23), keeps only app rows 1-21.
@@ -17,22 +21,22 @@ Strips trailing spaces from each row."
 (defun field-alist-to-plist (field)
   "Convert a JSON-style field alist to a .screen plist for writing.
 Offsets fromRow by -1 to convert from display coordinates to app coordinates."
-  (let ((from-row (1- (cdr (assoc "fromRow" field :test #'string=))))  ; offset for framework title row
-        (from-col (cdr (assoc "fromCol" field :test #'string=)))
-        (len (cdr (assoc "len" field :test #'string=)))
-        (name (cdr (assoc "name" field :test #'string=)))
-        (intense-p (cdr (assoc "intense" field :test #'string=)))
-        (write-p (cdr (assoc "write" field :test #'string=)))
-        (hidden-p (cdr (assoc "hidden" field :test #'string=)))
-        (numeric-only-p (cdr (assoc "numericOnly" field :test #'string=)))
-        (autoskip-p (cdr (assoc "autoskip" field :test #'string=)))
-        (color (cdr (assoc "color" field :test #'string=)))
-        (highlighting (cdr (assoc "highlighting" field :test #'string=)))
-        (keepspaces-p (cdr (assoc "keepspaces" field :test #'string=)))
-        (position-only-p (cdr (assoc "positionOnly" field :test #'string=)))
-        (default-p (cdr (assoc "default" field :test #'string=)))
-        (transient-p (cdr (assoc "transient" field :test #'string=)))
-        (repeat-val (cdr (assoc "repeat" field :test #'string=))))
+  (let ((from-row (1- (jref field "fromRow")))
+        (from-col (jref field "fromCol"))
+        (len (jref field "len"))
+        (name (jref field "name"))
+        (intense-p (jref field "intense"))
+        (write-p (jref field "write"))
+        (hidden-p (jref field "hidden"))
+        (numeric-only-p (jref field "numericOnly"))
+        (autoskip-p (jref field "autoskip"))
+        (color (jref field "color"))
+        (highlighting (jref field "highlighting"))
+        (keepspaces-p (jref field "keepspaces"))
+        (position-only-p (jref field "positionOnly"))
+        (default-p (jref field "default"))
+        (transient-p (jref field "transient"))
+        (repeat-val (jref field "repeat")))
     (append
      (list :from (list from-row from-col) :len len)
      (when name (list :name (intern (string-upcase name) :lispf)))
@@ -53,10 +57,10 @@ Offsets fromRow by -1 to convert from display coordinates to app coordinates."
 
 (defun key-alist-to-plist (key-alist)
   "Convert a JSON-style key alist to a .screen plist for writing."
-  (let ((aid-key (cdr (assoc "aidKey" key-alist :test #'string=)))
-        (label (cdr (assoc "label" key-alist :test #'string=)))
-        (action (cdr (assoc "action" key-alist :test #'string=)))
-        (goto-screen (cdr (assoc "gotoScreen" key-alist :test #'string=))))
+  (let ((aid-key (jref key-alist "aidKey"))
+        (label (jref key-alist "label"))
+        (action (jref key-alist "action"))
+        (goto-screen (jref key-alist "gotoScreen")))
     (let ((kw (intern (string-upcase aid-key) :keyword)))
       (append (list kw label)
               (cond
@@ -68,22 +72,17 @@ Offsets fromRow by -1 to convert from display coordinates to app coordinates."
 (defun dynamic-area-alist-to-plist (area)
   "Convert a JSON-style dynamic area alist to a .screen plist for writing.
 Offsets rows by -1 to convert from display coordinates to app coordinates."
-  (let ((name (cdr (assoc "name" area :test #'string=)))
-        (from-row (1- (cdr (assoc "fromRow" area :test #'string=))))
-        (from-col (cdr (assoc "fromCol" area :test #'string=)))
-        (to-row (1- (cdr (assoc "toRow" area :test #'string=))))
-        (to-col (cdr (assoc "toCol" area :test #'string=))))
-    (list :name (intern (string-upcase name) :lispf)
-          :from (list from-row from-col)
-          :to (list to-row to-col))))
+  (list :name (intern (string-upcase (jref area "name")) :lispf)
+        :from (list (1- (jref area "fromRow")) (jref area "fromCol"))
+        :to (list (1- (jref area "toRow")) (jref area "toCol"))))
 
 (defun emit-screen-data (screen)
   "Convert a JSON-style screen alist to a sexp plist string."
-  (let* ((name (cdr (assoc "name" screen :test #'string=)))
-         (rows (cdr (assoc "rows" screen :test #'string=)))
-         (fields (cdr (assoc "fields" screen :test #'string=)))
-         (keys (cdr (assoc "keys" screen :test #'string=)))
-         (dynamic-areas (cdr (assoc "dynamicAreas" screen :test #'string=)))
+  (let* ((name (jref screen "name"))
+         (rows (jref screen "rows"))
+         (fields (jref screen "fields"))
+         (keys (jref screen "keys"))
+         (dynamic-areas (jref screen "dynamicAreas"))
          (screen-string (screen-rows-to-string rows))
          (field-plists (mapcar #'field-alist-to-plist fields))
          (key-plists (when keys (mapcar #'key-alist-to-plist keys)))
