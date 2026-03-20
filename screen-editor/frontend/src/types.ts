@@ -64,6 +64,21 @@ export interface DefScreen {
   fields: Field[];
   keys?: KeyAction[];
   dynamicAreas?: DynamicArea[];
+  noCommand?: boolean;
+}
+
+export interface MenuItem {
+  key: string;
+  label: string;
+  description: string;
+  screen?: string;
+  items?: MenuItem[];
+}
+
+export interface DefMenu {
+  name: string;
+  title: string;
+  items: MenuItem[];
 }
 
 export function makeDefaultField(fromRow: number, fromCol: number, len: number): Field {

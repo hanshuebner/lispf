@@ -1,12 +1,13 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { DefScreen, Field, Selection, KeyAction, AidKey, makeDefaultField } from './types';
-import { listScreens, loadScreen, saveScreen } from './api';
+import { DefScreen, DefMenu, Field, Selection, KeyAction, AidKey, makeDefaultField } from './types';
+import { listScreens, loadScreen, saveScreen, listMenus, loadMenu, saveMenu } from './api';
 import TitleBar from './components/Toolbar';
 import ScreenList from './components/ScreenList';
 import ScreenGrid from './components/ScreenGrid';
 import AttributePanel from './components/AttributePanel';
 import KeyActionsPanel from './components/KeyActionsPanel';
 import BannerDialog from './components/BannerDialog';
+import MenuEditor from './components/MenuEditor';
 
 const EMPTY_ROWS = Array.from({ length: 24 }, () => '');
 
@@ -34,9 +35,10 @@ const WELCOME_ROWS = [
   cols('', ''),
   cols('Framework Lines', ''),
   cols('', ''),
-  cols('Lines 1, 23, 24 are reserved by the', ''),
-  cols('framework and cannot be edited.', ''),
+  cols('Lines 1, 22, 23, 24 are reserved by', ''),
+  cols('the framework and cannot be edited.', ''),
   cols('1: Screen name, app name, time', ''),
+  cols('22: Command input (unless no-command)', ''),
   cols('23: Error messages', ''),
   cols('24: Key labels (PF3, Enter, ...)', ''),
   '',
@@ -95,7 +97,8 @@ function ConfirmDialog({ message, onConfirm, onCancel }: {
 
 // --- New screen dialog ---
 
-function NewScreenDialog({ onConfirm, onCancel }: {
+function NewScreenDialog({ title, onConfirm, onCancel }: {
+  title?: string;
   onConfirm: (name: string) => void;
   onCancel: () => void;
 }) {
@@ -117,7 +120,7 @@ function NewScreenDialog({ onConfirm, onCancel }: {
         backgroundColor: '#16213e', border: '1px solid #444', borderRadius: '6px',
         padding: '20px', minWidth: '300px',
       }} onClick={e => e.stopPropagation()}>
-        <div style={{ marginBottom: '12px', fontWeight: 'bold', color: '#50fa7b' }}>New Screen</div>
+        <div style={{ marginBottom: '12px', fontWeight: 'bold', color: '#50fa7b' }}>{title || 'New Screen'}</div>
         <input
           ref={inputRef}
           style={{
@@ -180,8 +183,8 @@ function selectionIsOverText(sel: Selection | null, rows: string[]): boolean {
   return false;
 }
 
-function maxRepeatForField(field: Field, fieldIndex: number, fields: Field[], rows: string[]): number {
-  const MAX_APP_ROW = 21;
+function maxRepeatForField(field: Field, fieldIndex: number, fields: Field[], rows: string[], noCommand?: boolean): number {
+  const MAX_APP_ROW = noCommand ? 21 : 20;
   let maxRepeat = MAX_APP_ROW - field.fromRow + 1;
 
   for (let r = field.fromRow + 1; r <= MAX_APP_ROW; r++) {
@@ -252,14 +255,18 @@ function screensEqual(a: DefScreen, b: DefScreen): boolean {
 
 export default function App() {
   const [screens, setScreens] = useState<string[]>([]);
+  const [menus, setMenus] = useState<string[]>([]);
   const [currentScreen, setCurrentScreen] = useState<string | null>(null);
+  const [currentMenu, setCurrentMenu] = useState<string | null>(null);
   const [screen, setScreen] = useState<DefScreen | null>(null);
+  const [menu, setMenu] = useState<DefMenu | null>(null);
   const [selectedFieldIndex, setSelectedFieldIndex] = useState<number | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [dirty, setDirty] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showNewDialog, setShowNewDialog] = useState(false);
+  const [showNewMenuDialog, setShowNewMenuDialog] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showBannerDialog, setShowBannerDialog] = useState(false);
   const [bannerOverlay, setBannerOverlay] = useState<string[] | null>(null);
@@ -267,6 +274,7 @@ export default function App() {
   const undoStack = useRef<DefScreen[]>([]);
   const redoStack = useRef<DefScreen[]>([]);
   const cleanState = useRef<DefScreen | null>(null);
+  const menuCleanState = useRef<DefMenu | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<HTMLDivElement>(null);
   const MAX_UNDO = 100;
@@ -375,7 +383,7 @@ export default function App() {
 
   const fieldMaxRepeat = useMemo(() => {
     if (!screen || selectedFieldIndex === null || selectedFieldIndex >= screen.fields.length) return 21;
-    return maxRepeatForField(screen.fields[selectedFieldIndex], selectedFieldIndex, screen.fields, screen.rows);
+    return maxRepeatForField(screen.fields[selectedFieldIndex], selectedFieldIndex, screen.fields, screen.rows, screen.noCommand);
   }, [screen, selectedFieldIndex]);
 
   // --- Screen list ---
@@ -389,7 +397,16 @@ export default function App() {
     }
   }, [addLog]);
 
-  useEffect(() => { refreshScreenList(); }, [refreshScreenList]);
+  const refreshMenuList = useCallback(async () => {
+    try {
+      const names = await listMenus();
+      setMenus(names);
+    } catch (e) {
+      addLog(`Error listing menus: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [addLog]);
+
+  useEffect(() => { refreshScreenList(); refreshMenuList(); }, [refreshScreenList, refreshMenuList]);
 
   // --- Load screen (internal, no dirty check) ---
 
@@ -398,6 +415,8 @@ export default function App() {
       addLog(`Loading ${name}...`);
       const data = await loadScreen(name);
       setCurrentScreen(name);
+      setCurrentMenu(null);
+      setMenu(null);
       setScreen(data);
       cleanState.current = data;
       setSelectedFieldIndex(null);
@@ -423,13 +442,6 @@ export default function App() {
     }
   }, [currentScreen, dirty, doLoadScreen]);
 
-  const handleConfirmSwitch = useCallback(() => {
-    if (pendingSwitch) {
-      doLoadScreen(pendingSwitch);
-      setPendingSwitch(null);
-    }
-  }, [pendingSwitch, doLoadScreen]);
-
   // --- Auto-load from URL hash on startup ---
   useEffect(() => {
     if (currentScreen && !screen && screens.includes(currentScreen)) {
@@ -454,9 +466,79 @@ export default function App() {
     redoStack.current = [];
   }, [addLog]);
 
+  // --- Menu handling ---
+
+  const doLoadMenu = useCallback(async (name: string) => {
+    try {
+      addLog(`Loading menu ${name}...`);
+      const data = await loadMenu(name);
+      setCurrentMenu(name);
+      setCurrentScreen(null);
+      setScreen(null);
+      setMenu(data);
+      menuCleanState.current = data;
+      setDirty(false);
+      setShowHelp(false);
+      addLog(`Loaded menu ${name} (${data.items.length} items)`);
+    } catch (e) {
+      addLog(`Error loading menu ${name}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [addLog]);
+
+  const handleConfirmSwitch = useCallback(() => {
+    if (pendingSwitch) {
+      if (pendingSwitch.startsWith('menu:')) {
+        doLoadMenu(pendingSwitch.slice(5));
+      } else {
+        doLoadScreen(pendingSwitch);
+      }
+      setPendingSwitch(null);
+    }
+  }, [pendingSwitch, doLoadScreen, doLoadMenu]);
+
+  const handleSelectMenu = useCallback((name: string) => {
+    if (name === currentMenu) return;
+    if (dirty) {
+      setPendingSwitch(`menu:${name}`);
+    } else {
+      doLoadMenu(name);
+    }
+  }, [currentMenu, dirty, doLoadMenu]);
+
+  const handleNewMenuConfirm = useCallback((sanitized: string) => {
+    setShowNewMenuDialog(false);
+    const newMenu: DefMenu = { name: sanitized, title: '', items: [] };
+    setCurrentMenu(sanitized);
+    setCurrentScreen(null);
+    setScreen(null);
+    setMenu(newMenu);
+    menuCleanState.current = null;
+    setDirty(true);
+    setShowHelp(false);
+    addLog(`New menu: ${sanitized}`);
+  }, [addLog]);
+
+  const handleMenuChange = useCallback((m: DefMenu) => {
+    setMenu(m);
+    setDirty(!menuCleanState.current || JSON.stringify(m) !== JSON.stringify(menuCleanState.current));
+  }, []);
+
   // --- Save ---
 
   const handleSave = useCallback(async () => {
+    if (menu) {
+      try {
+        addLog(`Saving menu ${menu.name}...`);
+        await saveMenu(menu);
+        menuCleanState.current = menu;
+        setDirty(false);
+        addLog(`Saved menu ${menu.name}`);
+        refreshMenuList();
+      } catch (e) {
+        addLog(`Error saving: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      return;
+    }
     if (!screen) return;
     if (!validateAllFields()) return;
     try {
@@ -469,7 +551,7 @@ export default function App() {
     } catch (e) {
       addLog(`Error saving: ${e instanceof Error ? e.message : String(e)}`);
     }
-  }, [screen, refreshScreenList, validateAllFields, addLog]);
+  }, [screen, menu, refreshScreenList, refreshMenuList, validateAllFields, addLog]);
 
   // --- Undo/Redo with dirty tracking ---
 
@@ -520,7 +602,7 @@ export default function App() {
   const handleFieldUpdate = useCallback((index: number, field: Field) => {
     updateScreen(s => {
       const fields = [...s.fields];
-      const max = maxRepeatForField(field, index, s.fields, s.rows);
+      const max = maxRepeatForField(field, index, s.fields, s.rows, s.noCommand);
       fields[index] = { ...field, repeat: Math.min(field.repeat, max) };
       return { ...s, fields };
     });
@@ -553,6 +635,21 @@ export default function App() {
 
   const handleKeysChange = useCallback((keys: KeyAction[]) => {
     updateScreen(s => ({ ...s, keys }));
+  }, [updateScreen]);
+
+  const handleNoCommandChange = useCallback((noCommand: boolean) => {
+    updateScreen(s => {
+      // When toggling noCommand, adjust row 21 (command line)
+      const rows = [...s.rows];
+      if (noCommand) {
+        // Gaining row 21 as app content - clear the command line
+        rows[21] = ''.padEnd(80);
+      } else {
+        // Losing row 21 to framework - show command label
+        rows[21] = ' Command ==>'.padEnd(80);
+      }
+      return { ...s, rows, noCommand: noCommand || undefined };
+    });
   }, [updateScreen]);
 
   const handleBannerConfirm = useCallback((lines: string[]) => {
@@ -614,12 +711,14 @@ export default function App() {
     return rows;
   }, [screen, keyLabels]);
 
-  const screenPath = currentScreen ? `screens/${currentScreen}.screen` : null;
-  const showingHelp = showHelp || !screen;
+  const screenPath = currentMenu ? `screens/${currentMenu}.menu`
+    : currentScreen ? `screens/${currentScreen}.screen` : null;
+  const editingMenu = !!menu;
+  const showingHelp = showHelp || (!screen && !menu);
   const helpHighlight = showingHelp;
 
-  const helpStatus = !screen
-    ? 'Select a screen from the left or create a new one.'
+  const helpStatus = (!screen && !menu)
+    ? 'Select a screen or menu from the left, or create a new one.'
     : 'F1 or Escape to close help';
 
   return (
@@ -638,6 +737,13 @@ export default function App() {
           onCancel={() => setShowNewDialog(false)}
         />
       )}
+      {showNewMenuDialog && (
+        <NewScreenDialog
+          title="New Menu"
+          onConfirm={handleNewMenuConfirm}
+          onCancel={() => setShowNewMenuDialog(false)}
+        />
+      )}
       {showBannerDialog && (
         <BannerDialog
           onConfirm={handleBannerConfirm}
@@ -651,18 +757,28 @@ export default function App() {
           onCancel={() => setPendingSwitch(null)}
         />
       )}
-      <TitleBar screenName={currentScreen} screenPath={screenPath} />
+      <TitleBar screenName={currentMenu || currentScreen} screenPath={screenPath} />
       <div style={{ display: 'flex' }}>
         <ScreenList
           screens={screens}
+          menus={menus}
           currentScreen={currentScreen}
+          currentMenu={currentMenu}
           onSelect={handleSelectScreen}
+          onSelectMenu={handleSelectMenu}
           onNew={() => setShowNewDialog(true)}
+          onNewMenu={() => setShowNewMenuDialog(true)}
         />
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '12px' }}>
             {showingHelp ? (
               <HelpScreen statusText={helpStatus} />
+            ) : editingMenu ? (
+              <MenuEditor
+                menu={menu!}
+                screens={screens}
+                onChange={handleMenuChange}
+              />
             ) : (
               <ScreenGrid
                 key={currentScreen}
@@ -754,12 +870,26 @@ export default function App() {
             />
           </div>
           {screen && (
-            <div style={{ flex: '0 0 auto', overflowY: 'auto', maxHeight: '40%' }}>
-              <KeyActionsPanel
-                keys={screen.keys || []}
-                onChange={handleKeysChange}
-              />
-            </div>
+            <>
+              <div style={{
+                padding: '8px 12px', borderTop: '1px solid #333',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                fontSize: '14px', color: '#b0b0b0',
+              }}>
+                <span>No Command Line</span>
+                <input
+                  type="checkbox"
+                  checked={!!screen.noCommand}
+                  onChange={e => handleNoCommandChange(e.target.checked)}
+                />
+              </div>
+              <div style={{ flex: '0 0 auto', overflowY: 'auto', maxHeight: '40%' }}>
+                <KeyActionsPanel
+                  keys={screen.keys || []}
+                  onChange={handleKeysChange}
+                />
+              </div>
+            </>
           )}
         </div>
       </div>

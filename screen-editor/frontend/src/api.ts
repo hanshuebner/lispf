@@ -1,4 +1,4 @@
-import { DefScreen } from './types';
+import { DefScreen, DefMenu } from './types';
 
 export async function listScreens(): Promise<string[]> {
   const resp = await fetch('/api/screens');
@@ -28,5 +28,36 @@ export async function saveScreen(screen: DefScreen): Promise<void> {
   if (!resp.ok) {
     const err = await resp.json();
     throw new Error(err.error || 'Failed to save screen');
+  }
+}
+
+export async function listMenus(): Promise<string[]> {
+  const resp = await fetch('/api/menus');
+  if (!resp.ok) {
+    const err = await resp.json();
+    throw new Error(err.error || 'Failed to list menus');
+  }
+  const data = await resp.json();
+  return data.menus;
+}
+
+export async function loadMenu(name: string): Promise<DefMenu> {
+  const resp = await fetch(`/api/menu?name=${encodeURIComponent(name)}`);
+  if (!resp.ok) {
+    const err = await resp.json();
+    throw new Error(err.error || 'Failed to load menu');
+  }
+  return resp.json();
+}
+
+export async function saveMenu(menu: DefMenu): Promise<void> {
+  const resp = await fetch('/api/menu', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(menu),
+  });
+  if (!resp.ok) {
+    const err = await resp.json();
+    throw new Error(err.error || 'Failed to save menu');
   }
 }

@@ -28,7 +28,7 @@ const screenInfoStyle: React.CSSProperties = {
 export default function TitleBar({ screenName, screenPath }: TitleBarProps) {
   return (
     <div style={titleBarStyle}>
-      <span style={appTitleStyle}>3270 Screen Editor</span>
+      <span style={appTitleStyle}>LISPF Application Editor</span>
       {screenName && (
         <span style={screenInfoStyle}>
           {screenName}{screenPath ? ` \u2014 ${screenPath}` : ''}

@@ -3,15 +3,15 @@
 ;;;; registry.lisp
 ;;;;
 ;;;; Screen registry: lazy-loading screens from .screen files by name.
-;;;; Framework manages rows 0 (title), 22 (error), and 23 (key labels).
-;;;; Screen files contain 21 application rows (rows 1-21 of the display).
+;;;; Framework manages rows 0 (title), 21 (command), 22 (error), and 23 (key labels).
+;;;; Screen files contain 20 application rows (rows 1-20 of the display).
 
 (in-package #:lispf)
 
 ;;; Constants
 
-(defconstant +app-rows+ 21
-  "Number of application rows in a screen (24 total minus 3 framework rows).")
+(defconstant +app-rows+ 20
+  "Number of application rows in a screen (24 total minus 4 framework rows).")
 
 ;;; Per-screen compiled data
 
@@ -24,6 +24,7 @@
   transient-fields
   repeat-groups
   (dynamic-areas nil)
+  (no-command nil)
   (file-timestamp 0))
 
 (defstruct dynamic-area
@@ -58,24 +59,29 @@
 
 ;;; Framework row management
 
-(defun pad-screen-string (screen-string)
-  "Wrap application screen content (up to 21 rows) with framework rows.
-Adds blank rows for title (row 0), error message (row 22), and key labels (row 23)."
-  (let* ((parts (split-sequence:split-sequence #\Newline screen-string))
+(defun pad-screen-string (screen-string &key no-command)
+  "Wrap application screen content with framework rows.
+Without NO-COMMAND: up to 20 app rows + command line (row 21).
+With NO-COMMAND: up to 21 app rows, no command line.
+Always adds title (row 0), error (row 22), and keys (row 23)."
+  (let* ((max-rows (if no-command 21 +app-rows+))
+         (parts (split-sequence:split-sequence #\Newline screen-string))
          (app-rows (rest parts))
          (app-rows (if (and app-rows (string= "" (car (last app-rows))))
                        (butlast app-rows)
                        app-rows))
          (n (length app-rows)))
-    (when (> n +app-rows+)
-      (error "Screen has ~D application rows, maximum is ~D" n +app-rows+))
+    (when (> n max-rows)
+      (error "Screen has ~D application rows, maximum is ~D" n max-rows))
     (with-output-to-string (s)
       (terpri s)                                ; leading \n
       (terpri s)                                ; row 0: blank (title)
       (dolist (row app-rows)
         (write-string row s) (terpri s))        ; app rows
-      (dotimes (i (- +app-rows+ n))
-        (terpri s))                             ; padding to 21 app rows
+      (dotimes (i (- max-rows n))
+        (terpri s))                             ; padding to max app rows
+      (unless no-command
+        (terpri s))                             ; row 21: blank (command)
       (terpri s))))                             ; row 22: blank (errormsg)
                                                 ; row 23 = trailing "" (keys)
 
@@ -171,12 +177,17 @@ distributes to \"name.0\" ... \"name.N-1\", removes base key."
   ;; Fallback
   80)
 
-(defun make-framework-fields ()
-  "Create the three framework-managed fields: title, errormsg, keys."
-  (list
-   (cl3270:make-field :row 0 :col 0 :name "title")
-   (cl3270:make-field :row 21 :col 79 :name "errormsg" :color cl3270:+red+)
-   (cl3270:make-field :row 22 :col 79 :name "keys")))
+(defun make-framework-fields (&key no-command)
+  "Create framework-managed fields: title, command line (unless NO-COMMAND), errormsg, keys."
+  (append
+   (list (cl3270:make-field :row 0 :col 0 :name "title"))
+   (unless no-command
+     (list (cl3270:make-field :row 21 :col 0 :name "cmdlabel"
+                              :content "Command ==>" :color cl3270:+turquoise+)
+           (cl3270:make-field :row 21 :col 13 :name "command"
+                              :write t :highlighting cl3270:+underscore+)))
+   (list (cl3270:make-field :row 21 :col 79 :name "errormsg" :color cl3270:+red+)
+         (cl3270:make-field :row 22 :col 79 :name "keys"))))
 
 (defun now-time-hhmm ()
   "Return current time as HH:MM string."
@@ -295,7 +306,8 @@ when keys are shown or hidden at runtime."
 
 (defun compile-screen-data (name data)
   "Compile a screen data plist into a screen-info struct."
-  (let* ((screen-string (pad-screen-string (getf data :screen)))
+  (let* ((no-command (getf data :no-command))
+         (screen-string (pad-screen-string (getf data :screen) :no-command no-command))
          (raw-fields (getf data :fields))
          (raw-keys (getf data :keys))
          (raw-dynamic-areas (getf data :dynamic-areas)))
@@ -307,7 +319,8 @@ when keys are shown or hidden at runtime."
                (mapped-fields (mapcar #'map-field-attributes offset-fields))
                (field-forms (parse-screen screen-string mapped-fields))
                (app-fields (mapcar #'eval field-forms))
-               (all-fields (append app-fields (make-framework-fields)))
+               (all-fields (append app-fields
+                                   (make-framework-fields :no-command no-command)))
                (keys (when raw-keys (normalize-key-specs raw-keys)))
                (key-layout (when keys (compute-key-layout keys))))
           (make-screen-info
@@ -318,7 +331,8 @@ when keys are shown or hidden at runtime."
            :transient-fields transient-fields
            :repeat-groups repeat-groups
            :dynamic-areas (when raw-dynamic-areas
-                            (compile-dynamic-areas raw-dynamic-areas))))))))
+                            (compile-dynamic-areas raw-dynamic-areas))
+           :no-command no-command))))))
 
 ;;; Registry operations
 

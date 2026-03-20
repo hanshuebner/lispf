@@ -30,3 +30,7 @@ Handlers can read and modify values; changes persist across screen transitions."
 (defvar *attribute-intro-char* #\^
   "The character that introduces inline attribute codes in dynamic area strings.
 Default is #\\^. Applications may rebind this to a different character.")
+
+(defvar *field-attribute-overrides* nil
+  "Alist of (field-name . plist) for runtime field attribute overrides.
+Bound to NIL per render cycle. Populated by set-field-attribute.")

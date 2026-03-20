@@ -159,11 +159,11 @@ export default function AttributePanel({
         <input
           style={inputStyle}
           type="number"
-          min={1} max={21}
+          min={1} max={20}
           value={field.fromRow}
           onChange={e => {
             const v = parseInt(e.target.value) || 1;
-            update({ fromRow: Math.max(1, Math.min(21, v)) });
+            update({ fromRow: Math.max(1, Math.min(20, v)) });
           }}
         />
       </div>

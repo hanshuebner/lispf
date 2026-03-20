@@ -23,6 +23,10 @@
    (validated-screens :initform (make-hash-table :test 'eq)
                       :accessor application-validated-screens
                       :documentation "Screens whose key handlers have been validated.")
+   (menus :initform (make-hash-table :test 'equal) :accessor application-menus
+          :documentation "Menu data: name-string -> menu plist from .menu files.")
+   (menu-entries :initform nil :accessor application-menu-entries
+                 :documentation "Alist of (key-string . screen-symbol) from all loaded menus.")
    (sessions :initform '() :accessor application-sessions
              :documentation "List of active sessions (one per connection).")
    (sessions-lock :initform (bt:make-lock "sessions") :reader application-sessions-lock)))
@@ -137,6 +141,46 @@ Each session's update thread is woken to push the change immediately."
 (defun intern-screen-name (name-string package)
   "Intern a screen name string as a symbol in PACKAGE."
   (intern (string-upcase name-string) package))
+
+;;; Menu loading
+
+(defun load-menu-file (path)
+  "Load a .menu file and return the data plist."
+  (with-open-file (s path)
+    (let ((*package* (find-package :lispf)))
+      (read s))))
+
+(defun collect-menu-entries (items pkg &optional prefix)
+  "Recursively collect (key . screen-symbol) pairs from menu ITEMS.
+PREFIX is prepended with a dot for nested items (e.g. \"5.1\")."
+  (let ((entries nil))
+    (dolist (item items)
+      (let* ((key (getf item :key))
+             (full-key (if prefix (format nil "~A.~A" prefix key) key))
+             (screen (getf item :screen))
+             (sub-items (getf item :items)))
+        (when (and key screen)
+          (push (cons full-key (intern (string-upcase (string screen)) pkg))
+                entries))
+        (when sub-items
+          (setf entries (nconc (nreverse (collect-menu-entries sub-items pkg full-key))
+                               entries)))))
+    (nreverse entries)))
+
+(defun load-application-menus (app)
+  "Load the .menu file from the application's screen directories."
+  (let ((pkg (application-package app)))
+    (dolist (dir (application-screen-directories app))
+      (dolist (path (directory (merge-pathnames "*.menu" dir)))
+        (let* ((data (load-menu-file path))
+               (name (getf data :name)))
+          (setf (gethash name (application-menus app)) data)
+          (setf (application-menu-entries app)
+                (collect-menu-entries (getf data :items) pkg)))))))
+
+(defun find-menu-entry (app key)
+  "Look up KEY in the application's menu entries. Returns a screen symbol or NIL."
+  (cdr (assoc key (application-menu-entries app) :test #'string-equal)))
 
 ;;; define-application macro
 
@@ -265,7 +309,7 @@ blank space. Keys not in the layout (added at runtime) are appended."
 
 ;;; Framework field names (excluded from context merge)
 
-(defparameter *framework-fields* '("title" "errormsg" "keys")
+(defparameter *framework-fields* '("title" "cmdlabel" "command" "errormsg" "keys")
   "Field names managed by the framework, excluded from context.")
 
 ;;; Screen key handler validation
@@ -322,6 +366,7 @@ Signals a warning for any key that would fall through to the default handler."
 Serves multiple users concurrently using threads.
 When LISTENER-CALLBACK is provided, it is called with the listener socket
 after binding but before the accept loop. Useful for test harnesses."
+  (load-application-menus application)
   (format t "~&;;; ~A: listening on ~A:~D~%" (application-name application) host port)
   (usocket:with-socket-listener (listener host port
                                           :element-type '(unsigned-byte 8)
@@ -759,6 +804,37 @@ cl3270 symbols, adding background update thread support via post-send-callback."
              (when (validate-fields rules my-vals orig-values error-field)
                (return (values resp nil))))))))))
 
+;;; Field attribute overrides
+
+(defun copy-field-with-overrides (field attrs)
+  "Return a copy of FIELD with attributes from ATTRS plist applied."
+  (let ((new (copy-structure field)))
+    (loop for (key val) on attrs by #'cddr
+          do (case key
+               (:write (setf (cl3270::field-write new) val))
+               (:intense (setf (cl3270:field-intense new) val))
+               (:hidden (setf (cl3270:field-hidden new) val))
+               (:color (setf (cl3270:field-color new) (map-symbolic-value val)))
+               (:highlighting (setf (cl3270:field-highlighting new)
+                                    (map-symbolic-value val)))))
+    new))
+
+(defun apply-field-attribute-overrides (screen)
+  "If *field-attribute-overrides* is non-nil, return a new screen with overrides applied.
+Otherwise return SCREEN unchanged."
+  (if (null *field-attribute-overrides*)
+      screen
+      (apply #'cl3270:make-screen
+             (cl3270:screen-name screen)
+             (mapcar (lambda (f)
+                       (let ((override (assoc (cl3270:field-name f)
+                                              *field-attribute-overrides*
+                                              :test #'string-equal)))
+                         (if override
+                             (copy-field-with-overrides f (cdr override))
+                             f)))
+                     (cl3270:screen-fields screen)))))
+
 ;;; Main application loop — helper functions
 
 (defun ensure-key-handlers-validated (dispatch-sym key-specs)
@@ -796,10 +872,15 @@ Returns (values list-data-count list-data-total has-list-data)."
        field-values))
     (values list-data-count list-data-total has-list-data)))
 
-(defun set-framework-fields (screen-sym field-values)
-  "Set title, errormsg, and key label fields in FIELD-VALUES."
+(defun set-framework-fields (screen-sym field-values &key no-command)
+  "Set title, command line, errormsg, and key label fields in FIELD-VALUES."
   (setf (gethash "title" field-values)
         (format-title-line screen-sym (session-indicator-texts)))
+  ;; Command line (only on screens with command field)
+  (unless no-command
+    (unless (gethash "cmdlabel" field-values)
+      (setf (gethash "cmdlabel" field-values) "Command ==>"))
+    (setf (gethash "command" field-values) ""))
   (setf (gethash "errormsg" field-values)
         (or (gethash "errormsg" field-values) ""))
   (let ((key-labels (format-key-labels-from-specs *current-screen-keys*
@@ -859,8 +940,10 @@ Falls back to the first writable field, or row 23 (key labels) if none exist."
       (setf (list-offset *session* dispatch-sym) next))))
 
 (defun dispatch-key (context dispatch-sym aid-kw key-spec
-                     has-list-data repeat-groups list-data-total app-package)
-  "Dispatch AID-KW with error handling. Returns a navigation result."
+                     has-list-data repeat-groups list-data-total app-package
+                     command)
+  "Dispatch AID-KW with error handling. Returns a navigation result.
+COMMAND is the trimmed value from the command field (extracted from response)."
   (restart-case
       (handler-bind
           ((application-error
@@ -888,6 +971,14 @@ Falls back to the first writable field, or row 23 (key labels) if none exist."
           ((and has-list-data (eq aid-kw :pf8))
            (page-forward dispatch-sym repeat-groups list-data-total)
            :stay)
+          ;; Command field processing: check before normal key dispatch
+          ((and (eq aid-kw :enter) (plusp (length command)))
+           (let ((result (process-command *application* command)))
+             (or result
+                 (progn
+                   (setf (gethash "errormsg" context)
+                         (unknown-command-message *application* command))
+                   :stay))))
           (t (handle-key dispatch-sym aid-kw))))
     (redisplay () :stay)))
 
@@ -904,6 +995,11 @@ Returns :exit when the application loop should terminate."
        (if prev
            (setf (session-current-screen *session*) prev)
            :exit)))
+    ((and (consp result) (eq (car result) :jump))
+     ;; Jump navigation: reset stack to just the entry screen, navigate to target
+     (let ((root (application-entry-screen *application*)))
+       (setf (session-screen-stack *session*) (list root))
+       (setf (session-current-screen *session*) (cdr result))))
     ((symbolp result)
      (push screen-sym (session-screen-stack *session*))
      (setf (session-current-screen *session*) result))
@@ -949,16 +1045,20 @@ Returns the 3270 response."
   (loop
     (let* ((screen-sym (session-current-screen *session*))
            (name-string (screen-name-string screen-sym))
-           (screen (get-screen screen-sym))
-           (screen-rules (get-screen-rules screen-sym))
-           (key-specs (get-screen-keys screen-sym))
-           (transient-fields (get-screen-transient-fields screen-sym))
-           (repeat-groups (get-screen-repeat-fields screen-sym))
+           (screen-info (ensure-screen-loaded screen-sym))
+           (screen (screen-info-screen screen-info))
+           (screen-rules (screen-info-rules screen-info))
+           (key-specs (screen-info-keys screen-info))
+           (transient-fields (screen-info-transient-fields screen-info))
+           (repeat-groups (screen-info-repeat-groups screen-info))
+           (no-command (screen-info-no-command screen-info))
            (context (session-context *session*))
            (dispatch-sym (intern-screen-name name-string app-package))
            (field-values (cl3270:make-dict :test #'equal)))
       (ensure-key-handlers-validated dispatch-sym key-specs)
       (setf *current-field-values* context)
+      ;; Clear cmdlabel from context so stale overrides don't persist
+      (remhash "cmdlabel" context)
       (let ((*current-screen-keys*
               (mapcar (lambda (spec)
                         (destructuring-bind (aid-kw label &rest rest) spec
@@ -966,16 +1066,18 @@ Returns the 3270 response."
                       key-specs))
             (*current-key-layout* (get-screen-key-layout screen-sym))
             (*next-cursor-row* nil)
-            (*next-cursor-col* nil))
+            (*next-cursor-col* nil)
+            (*field-attribute-overrides* nil))
         (prepare-screen dispatch-sym)
         (multiple-value-bind (list-data-count list-data-total has-list-data)
             (populate-field-values context field-values screen
                                    dispatch-sym repeat-groups)
-          (set-framework-fields screen-sym field-values)
-          (let* ((display-screen (if has-list-data
+          (set-framework-fields screen-sym field-values :no-command no-command)
+          (let* ((display-screen (apply-field-attribute-overrides
+                                 (if has-list-data
                                      (filter-screen-fields screen repeat-groups
                                                            list-data-count)
-                                     screen))
+                                     screen)))
                  (response (show-screen-and-read screen display-screen
                                                  screen-rules key-specs
                                                  field-values dispatch-sym
@@ -993,11 +1095,16 @@ Returns the 3270 response."
                       (setf (gethash k context) v))))))
             (let* ((aid-kw (aid-to-keyword (cl3270:response-aid response)))
                    (key-spec (find-key-spec key-specs aid-kw))
+                   (resp-command
+                     (let ((rv (cl3270:response-vals response)))
+                       (when rv
+                         (string-trim '(#\Space) (or (gethash "command" rv) "")))))
                    (result (prog1
                                (dispatch-key context dispatch-sym aid-kw
                                              key-spec has-list-data
                                              repeat-groups list-data-total
-                                             app-package)
+                                             app-package
+                                             (or resp-command ""))
                              (dolist (k transient-fields)
                                (remhash k context)))))
               (when (eq (apply-screen-transition result screen-sym dispatch-sym)

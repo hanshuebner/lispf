@@ -18,9 +18,9 @@ interface ScreenGridProps {
 
 const ROWS = 24;
 const COLS = 80;
-const LOCKED_ROWS = new Set([0, 22, 23]);
+const LOCKED_ROWS = new Set([0, 21, 22, 23]);
 const MIN_APP_ROW = 1;
-const MAX_APP_ROW = 21;
+const MAX_APP_ROW = 20;
 
 function isAppRow(row: number) {
   return row >= MIN_APP_ROW && row <= MAX_APP_ROW;

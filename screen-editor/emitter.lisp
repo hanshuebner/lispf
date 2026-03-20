@@ -8,11 +8,14 @@
   "Look up KEY (a string) in a JSON-style alist."
   (cdr (assoc key alist :test #'string=)))
 
-(defun screen-rows-to-string (rows)
-  "Convert 24 display rows to a .screen file string (21 app rows).
-Strips framework rows (0, 22, 23), keeps only app rows 1-21.
+(defun screen-rows-to-string (rows &key no-command)
+  "Convert 24 display rows to a .screen file string.
+Strips framework rows (0, 21 command, 22, 23), keeps only app rows.
+Without NO-COMMAND: rows 1-20 (20 app rows).
+With NO-COMMAND: rows 1-21 (21 app rows).
 Strips trailing spaces from each row."
-  (let* ((app-rows (subseq rows 1 22))  ; rows 1-21 (21 app rows)
+  (let* ((last-app-row (if no-command 22 21))
+         (app-rows (subseq rows 1 last-app-row))
          (trimmed (mapcar (lambda (row) (string-right-trim " " row)) app-rows))
          (end (1+ (or (position-if-not (lambda (r) (string= r "")) trimmed :from-end t)
                       -1))))
@@ -84,8 +87,9 @@ Offsets rows by -1 to convert from display coordinates to app coordinates."
          (rows (jref screen "rows"))
          (fields (jref screen "fields"))
          (keys (jref screen "keys"))
+         (no-command (jref screen "noCommand"))
          (dynamic-areas (jref screen "dynamicAreas"))
-         (screen-string (screen-rows-to-string rows))
+         (screen-string (screen-rows-to-string rows :no-command no-command))
          (field-plists (mapcar #'field-alist-to-plist fields))
          (key-plists (when keys (mapcar #'key-alist-to-plist keys)))
          (dynamic-area-plists (when dynamic-areas
@@ -93,7 +97,10 @@ Offsets rows by -1 to convert from display coordinates to app coordinates."
          (*package* (find-package :lispf))
          (*print-case* :downcase))
     (with-output-to-string (s)
-      (format s "(:name ~S~% :screen ~S~% :fields (" name screen-string)
+      (format s "(:name ~S" name)
+      (when no-command
+        (format s "~% :no-command t"))
+      (format s "~% :screen ~S~% :fields (" screen-string)
       (loop for (field . rest) on field-plists
             do (prin1 field s)
             when rest do (format s "~%          "))

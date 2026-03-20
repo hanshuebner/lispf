@@ -7,10 +7,14 @@
 
 ;;; Constants
 
-(defconstant +app-rows+ 21
-  "Number of application rows in a .screen file.")
+(defconstant +default-app-rows+ 20
+  "Number of application rows for screens with command line.")
+
+(defconstant +no-command-app-rows+ 21
+  "Number of application rows for no-command screens.")
 
 (defconstant +title-row+ 0)
+(defconstant +command-row+ 21)
 (defconstant +error-row+ 22)
 (defconstant +keys-row+ 23)
 
@@ -27,10 +31,12 @@
             "Awesome App"
             day (aref *month-names* (1- month)) hour min)))
 
-(defun split-screen-string (screen-string &optional screen-name)
-  "Split a .screen file's screen string (21 app rows) into 24 display rows.
-Adds framework rows: title (row 0), error (row 22), keys (row 23)."
-  (let* ((lines (rest (split-sequence:split-sequence #\Newline screen-string)))
+(defun split-screen-string (screen-string &optional screen-name no-command)
+  "Split a .screen file's screen string into 24 display rows.
+Adds framework rows: title (row 0), command (row 21 unless NO-COMMAND),
+error (row 22), keys (row 23)."
+  (let* ((app-rows (if no-command +no-command-app-rows+ +default-app-rows+))
+         (lines (rest (split-sequence:split-sequence #\Newline screen-string)))
          ;; Remove trailing empty string from the final newline
          (lines (if (and lines (string= "" (car (last lines))))
                     (butlast lines)
@@ -39,9 +45,13 @@ Adds framework rows: title (row 0), error (row 22), keys (row 23)."
     ;; Row 0: title
     (setf (aref rows +title-row+)
           (format-editor-title (or screen-name "")))
-    ;; Rows 1-21: app content
-    (dotimes (i (min (length lines) +app-rows+))
+    ;; App content rows
+    (dotimes (i (min (length lines) app-rows))
       (setf (aref rows (1+ i)) (format nil "~80A" (nth i lines))))
+    ;; Row 21: command line (unless no-command)
+    (unless no-command
+      (setf (aref rows +command-row+)
+            (format nil "~80A" " Command ==>")))
     ;; Row 22: error message (empty)
     (setf (aref rows +error-row+) (format nil "~80A" ""))
     ;; Row 23: standard key labels
@@ -118,13 +128,14 @@ Offsets rows by +1 to account for the framework title row."
 
 (defun parse-screen-data (data)
   "Parse a screen data plist into a JSON-friendly alist.
-Expands 21 app rows to 24 display rows with framework rows."
+Expands app rows to 24 display rows with framework rows."
   (let* ((name (getf data :name))
          (screen-string (getf data :screen))
+         (no-command (getf data :no-command))
          (fields-raw (getf data :fields))
          (keys-raw (getf data :keys))
          (dynamic-areas-raw (getf data :dynamic-areas))
-         (rows (split-screen-string screen-string name))
+         (rows (split-screen-string screen-string name no-command))
          (fields (mapcar #'parse-sexp-field fields-raw))
          (keys (when keys-raw (mapcar #'parse-key-spec keys-raw)))
          (dynamic-areas (when dynamic-areas-raw
@@ -132,6 +143,7 @@ Expands 21 app rows to 24 display rows with framework rows."
     (append (list (cons "name" name)
                   (cons "rows" rows)
                   (cons "fields" fields))
+            (when no-command (list (cons "noCommand" t)))
             (when keys (list (cons "keys" keys)))
             (when dynamic-areas (list (cons "dynamicAreas" dynamic-areas))))))
 

@@ -91,6 +91,16 @@
            #:*attribute-intro-char*
            ;; Customization
            #:unknown-key-message
+           ;; Command processing
+           #:process-command
+           #:unknown-command-message
+           ;; Menu system
+           #:find-menu-entry
+           #:load-application-menus
+           #:application-menus
+           #:application-menu-entries
+           ;; Field attribute overrides
+           #:set-field-attribute
            ;; Title utilities
            #:now-time-hhmm))
 

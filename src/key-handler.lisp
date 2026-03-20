@@ -123,6 +123,30 @@ Example:
        (with-field-bindings (*current-field-values* ,@field-names)
          ,@body))))
 
+;;; Command field processing
+
+(defgeneric process-command (application command)
+  (:documentation "Called when Enter is pressed and the 'command' field is non-empty.
+Return a navigation result (screen symbol, :stay, :back, :logoff, (:jump . sym)),
+or NIL to let normal Enter handling proceed.")
+  (:method ((application t) (command t))
+    nil))
+
+(defgeneric unknown-command-message (application command)
+  (:documentation "Return the error message for an unrecognized command.")
+  (:method ((application t) (command t))
+    (format nil "~A: unknown command" command)))
+
+;;; Field attribute overrides
+
+(defun set-field-attribute (field-name &rest attrs)
+  "Override display attributes for FIELD-NAME on the next render.
+Call from within a define-screen-update body.
+Supported attributes: :write, :intense, :hidden, :color, :highlighting.
+Example: (set-field-attribute \"author\" :write nil :intense t)"
+  (let ((name (string-downcase (string field-name))))
+    (push (cons name attrs) *field-attribute-overrides*)))
+
 ;;; Dynamic area updaters
 
 (defgeneric update-dynamic-area (screen-name area-name)
