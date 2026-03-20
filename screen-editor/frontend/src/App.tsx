@@ -883,6 +883,7 @@ export default function App() {
                     onChange={e => updateScreen(s => ({ ...s, anonymous: e.target.checked || undefined }))}
                   />
                 </div>
+                {screen.command && (
                 <div style={{ marginBottom: '4px' }}>
                   <div style={{ color: '#b0b0b0', marginBottom: '2px' }}>Aliases</div>
                   <input
@@ -891,7 +892,6 @@ export default function App() {
                       border: '1px solid #444', borderRadius: '2px', color: '#e0e0e0',
                       fontFamily: 'monospace', fontSize: '12px', boxSizing: 'border-box',
                     }}
-                    placeholder=""
                     value={(screen.aliases || []).join(', ')}
                     onChange={e => {
                       const raw = e.target.value;
@@ -903,6 +903,7 @@ export default function App() {
                     Comma-separated command aliases for this screen
                   </div>
                 </div>
+                )}
               </div>
               <div style={{ flex: '0 0 auto', overflowY: 'auto', maxHeight: '40%' }}>
                 <KeyActionsPanel
