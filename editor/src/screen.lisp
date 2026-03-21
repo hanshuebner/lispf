@@ -158,8 +158,13 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
         (when (marker-line-p session virtual)
           (lspf:set-field-attribute (format nil "prefix.~D" i) :color cl3270:+blue+)
           (lspf:set-field-attribute (format nil "data.~D" i) :write nil :color cl3270:+blue+))))
-    ;; Position cursor on command field
-    (lspf:set-cursor 21 14)
+    ;; Position cursor (use override if set, otherwise command field)
+    (let ((next (editor-next-cursor session)))
+      (if next
+          (progn
+            (lspf:set-cursor (car next) (cdr next))
+            (setf (editor-next-cursor session) nil))
+          (lspf:set-cursor 21 14)))
     ;; Show scroll keys
     (when (> top 0)
       (lspf:show-key :pf7 "Up"))
@@ -200,7 +205,21 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
                  (real (virtual-to-real session virtual)))
             (when real
               (save-undo-state session)
-              (insert-lines-after session real (list "")))))))
+              (insert-lines-after session real (list ""))
+              ;; Position cursor on the new line
+              (let ((new-display-row (1+ cursor-row)))
+                (if (< (1+ data-row) +page-size+)
+                    ;; New line is on the current page
+                    (setf (editor-next-cursor session)
+                          (cons new-display-row 8))
+                    ;; New line would be off-screen; scroll down
+                    (progn
+                      (setf (editor-top-line session)
+                            (+ top (1- +page-size+)))
+                      (clamp-top-line session)
+                      ;; Cursor on first data row of new page
+                      (setf (editor-next-cursor session)
+                            (cons data-start-row 8))))))))))
     :stay))
 
 ;;; PF3 - Exit (with save prompt if modified)

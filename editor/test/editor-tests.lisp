@@ -1314,6 +1314,8 @@ Returns T if the file was falsely marked as modified."
              ;; Should now have 2 lines
              (assert-screen-contains s "Size=2")
              (assert-screen-contains s "000002")
+             ;; Cursor should be on the new line (row 5 = second data line)
+             (assert-cursor-at s 5 8)
              ;; Cancel to exit without saving
              (move-cursor s 21 14)
              (type-text s "CANCEL")
