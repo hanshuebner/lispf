@@ -261,15 +261,12 @@ Returns a message string."
         (if all-p
             ;; Change all occurrences in all lines
             (loop for i from 0 below (line-count session)
-                  do (let ((line (nth i (editor-lines session))))
-                       ;; Count matches on this line
-                       (cl-ppcre:do-matches (s e scanner line)
-                         (declare (ignore s e))
-                         (incf count))
-                       ;; Replace all
-                       (let ((new-line (cl-ppcre:regex-replace-all scanner line to)))
-                         (unless (string= line new-line)
-                           (setf (nth i (editor-lines session)) new-line)))))
+                  do (let* ((line (nth i (editor-lines session)))
+                            (matches (cl-ppcre:all-matches scanner line))
+                            (new-line (cl-ppcre:regex-replace-all scanner line to)))
+                       (incf count (/ (length matches) 2))
+                       (unless (string= line new-line)
+                         (setf (nth i (editor-lines session)) new-line))))
             ;; Change first occurrence from current position
             (loop for i from start-line below (line-count session)
                   do (multiple-value-bind (new-line match-p)
