@@ -1,0 +1,16 @@
+(:name "open"
+ :command t
+ :screen "
+
+ LISPF Editor
+
+
+ Enter a file name to edit, or press PF3 to exit.
+
+
+ File..:
+"
+ :fields ((:from (7 8) :len 60 :name filename :write t :highlighting underscore
+           :required t :error-text "Please enter a file name"))
+ :keys ((:enter "Edit")
+        (:pf3 "Exit" :back t)))

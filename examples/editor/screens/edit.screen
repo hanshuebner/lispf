@@ -1,0 +1,16 @@
+(:name "edit"
+ :command t
+ :screen "
+"
+ :fields ((:from (1 0) :len 79 :name info :color turquoise)
+          (:from (2 0) :len 6 :name prefix :write t :color green :repeat 17)
+          (:from (2 7) :len 72 :name data :write t :repeat 17)
+          (:from (19 1) :len 78 :name status :color blue))
+ :keys ((:enter "")
+        (:pf3 "Exit")
+        (:pf5 "RFind" :hidden t)
+        (:pf6 "RChg" :hidden t)
+        (:pf7 "Up" :hidden t)
+        (:pf8 "Down" :hidden t)
+        (:pf10 "Left" :hidden t)
+        (:pf11 "Right" :hidden t)))
