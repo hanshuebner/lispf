@@ -70,6 +70,57 @@ Returns (values from-string to-string remainder)."
   (when (second parts)
     (parse-integer (second parts) :junk-allowed t)))
 
+(defun handle-find-command (session trimmed cmd-str)
+  "Handle the FIND/F command. Returns a message string."
+  (let ((search-str (if (> (length trimmed) (length cmd-str))
+                        (string-trim '(#\Space) (subseq trimmed (length cmd-str)))
+                        "")))
+    (multiple-value-bind (str end) (parse-delimited-string search-str 0)
+      (declare (ignore end))
+      (if (plusp (length str))
+          (progn
+            (setf (editor-last-find session) str)
+            (setf (editor-last-find-line session) (editor-top-line session))
+            (do-find session str nil))
+          "FIND requires a search string"))))
+
+(defun handle-change-command (session trimmed cmd-str)
+  "Handle the CHANGE/CHG command. Returns a message string."
+  (let ((rest (if (> (length trimmed) (length cmd-str))
+                  (string-trim '(#\Space) (subseq trimmed (length cmd-str)))
+                  "")))
+    (multiple-value-bind (from to remainder)
+        (parse-change-args rest)
+      (let ((all-p (string-equal (string-trim '(#\Space) remainder) "ALL")))
+        (if (plusp (length from))
+            (progn
+              (setf (editor-last-change session) (list from to all-p))
+              (do-change session from to all-p))
+            "CHANGE requires search and replace strings")))))
+
+(defun handle-justify-command (session parts)
+  "Handle the JUSTIFY/JUS command. Returns a message string."
+  (let* ((width (or (parse-command-arg-n parts) +data-width+))
+         (range (editor-justify-range session))
+         (start (if range (car range) 0))
+         (count (if range (cdr range) (line-count session))))
+    (when range
+      (setf (editor-justify-range session) nil))
+    (save-undo-state session)
+    (let ((old-lines (extract-line-range session start count)))
+      (multiple-value-bind (new-lines long-words)
+          (justify-lines old-lines width)
+        (delete-line-range session start count)
+        (insert-lines-after session (1- start) new-lines)
+        (setf (editor-modified session) t)
+        (setf (editor-top-line session) (max 0 start))
+        (clamp-top-line session)
+        (if (plusp long-words)
+            (format nil "Justified ~D line~:P at width ~D (~D word~:P exceed width)"
+                    count width long-words)
+            (format nil "Justified ~D line~:P to ~D at width ~D"
+                    count (length new-lines) width))))))
+
 (defun handle-primary-command (session command)
   "Process a primary (command-line) command.
 Returns :stay, :back, or an error message string. NIL means unrecognized."
@@ -127,32 +178,10 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
                "LOCATE requires a line number")))
 
         ((:FIND :F)
-         (let ((search-str (if (> (length trimmed) (length (first parts)))
-                               (string-trim '(#\Space)
-                                            (subseq trimmed (length (first parts))))
-                               "")))
-           (multiple-value-bind (str end) (parse-delimited-string search-str 0)
-             (declare (ignore end))
-             (if (plusp (length str))
-                 (progn
-                   (setf (editor-last-find session) str)
-                   (setf (editor-last-find-line session) (editor-top-line session))
-                   (do-find session str nil))
-                 "FIND requires a search string"))))
+         (handle-find-command session trimmed (first parts)))
 
         ((:CHANGE :CHG)
-         (let ((rest (if (> (length trimmed) (length (first parts)))
-                         (string-trim '(#\Space)
-                                      (subseq trimmed (length (first parts))))
-                         "")))
-           (multiple-value-bind (from to remainder)
-               (parse-change-args rest)
-             (let ((all-p (string-equal (string-trim '(#\Space) remainder) "ALL")))
-               (if (plusp (length from))
-                   (progn
-                     (setf (editor-last-change session) (list from to all-p))
-                     (do-change session from to all-p))
-                   "CHANGE requires search and replace strings")))))
+         (handle-change-command session trimmed (first parts)))
 
         (:LEFT
          (let ((n (or (parse-command-arg-n parts) +data-width+)))
@@ -180,29 +209,9 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
              (revert session)))
 
         ((:JUSTIFY :JUS)
-         (let* ((width (or (parse-command-arg-n parts) +data-width+))
-                (range (editor-justify-range session))
-                (start (if range (car range) 0))
-                (count (if range (cdr range) (line-count session))))
-           (when range
-             (setf (editor-justify-range session) nil))
-           (save-undo-state session)
-           (let ((old-lines (extract-line-range session start count)))
-             (multiple-value-bind (new-lines long-words)
-                 (justify-lines old-lines width)
-               (delete-line-range session start count)
-               (insert-lines-after session (1- start) new-lines)
-               (setf (editor-modified session) t)
-               (setf (editor-top-line session) (max 0 start))
-               (clamp-top-line session)
-               (if (plusp long-words)
-                   (format nil "Justified ~D line~:P at width ~D (~D word~:P exceed width)"
-                           count width long-words)
-                   (format nil "Justified ~D line~:P to ~D at width ~D"
-                           count (length new-lines) width))))))
+         (handle-justify-command session parts))
 
         (otherwise
-         ;; Bare number: jump to that line
          (let ((cmd-str (first parts)))
            (when (every #'digit-char-p cmd-str)
              (let ((n (parse-integer cmd-str)))
