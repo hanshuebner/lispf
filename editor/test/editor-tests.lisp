@@ -633,6 +633,43 @@
     (assert-true (member "" (ed:editor-lines s) :test #'string=)
                  "Paragraph break should be preserved")))
 
+(define-test justify-long-line-many-output-lines ()
+  ;; A single 200+ char line of short words, justified to width 10.
+  ;; This produces more lines than fit on one screen (17 visible).
+  ;; Must not cause any errors (e.g. "Screen has N application rows").
+  (let* ((words (loop for i from 1 to 80 collect (format nil "w~D" i)))
+         (long-line (format nil "~{~A~^ ~}" words))
+         (s (make-session long-line)))
+    (assert-true (> (length long-line) 200)
+                 (format nil "Input should be >200 chars, got ~D" (length long-line)))
+    ;; Mark with JJ and justify to width 10
+    (ed:execute-prefix-commands s '((0 :jj 0 0) (0 :jj 0 0)))
+    (let ((msg (ed:handle-primary-command s "JUSTIFY 10")))
+      (assert-true (stringp msg) "JUSTIFY should return a message")
+      (assert-string-contains msg "Justified"))
+    ;; Should have many lines now
+    (assert-true (> (ed:line-count s) 17)
+                 (format nil "Should have >17 lines, got ~D" (ed:line-count s)))
+    ;; All lines should fit within width 10
+    (dolist (line (ed:editor-lines s))
+      (assert-true (<= (length line) 10)
+                   (format nil "Line exceeds width 10: ~S" line)))
+    ;; Building screen data for display must not error
+    (setf (ed:editor-top-line s) 0)
+    (multiple-value-bind (prefix data)
+        (ed::build-screen-data s)
+      (let ((prefix-lines (split-sequence:split-sequence #\Newline prefix))
+            (data-lines (split-sequence:split-sequence #\Newline data)))
+        (assert-equal ed:+page-size+ (length prefix-lines)
+                      "Prefix should have exactly page-size lines")
+        (assert-equal ed:+page-size+ (length data-lines)
+                      "Data should have exactly page-size lines")))
+    ;; Scrolling to middle and end must also work
+    (setf (ed:editor-top-line s) 10)
+    (ed::build-screen-data s)  ; should not error
+    (setf (ed:editor-top-line s) (1- (ed:total-virtual-lines s)))
+    (ed::build-screen-data s))) ; should not error
+
 ;;; ============================================================
 ;;; Block command navigation tests
 ;;; ============================================================
@@ -1514,6 +1551,7 @@ Returns T if the file was falsely marked as modified."
    'justify-command-whole-file
    'justify-command-warns-long-words
    'justify-command-preserves-paragraphs
+   'justify-long-line-many-output-lines
    ;; Block navigation
    'block-delete-navigates-to-start
    'block-copy-navigates-to-source
