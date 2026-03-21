@@ -7,7 +7,7 @@
    Search for text (case-insensitive). View scrolls to match.
    Examples:  FIND hello    FIND /hello world/    F 'text'
 
- CHANGE /old/new/ [ALL]
+ CHANGE /old/new/ (ALL)
    Replace text. Without ALL, replaces first from current position.
    With ALL, replaces every occurrence in the file.
    Examples:  CHANGE /foo/bar/    CHG /old/new/ ALL

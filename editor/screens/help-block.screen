@@ -7,7 +7,7 @@
 
    DD..DD  Delete block       CC..CC + A/B  Copy block
    RR..RR  Repeat block       MM..MM + A/B  Move block
-   JJ..JJ  Justify block (JJ5 = width 5, JJ 40 = width 40)
+   JJ..JJ  Mark block, then type JUSTIFY (width) in command field
 
  SAME-SCREEN: Both markers (+ target) on one screen execute
  immediately. TWO-SCREEN: First marker enters PENDING mode.
