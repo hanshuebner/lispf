@@ -211,7 +211,7 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
                 (if (< (1+ data-row) +page-size+)
                     ;; New line is on the current page
                     (setf (editor-next-cursor session)
-                          (cons new-display-row 8))
+                          (cons new-display-row 7))
                     ;; New line would be off-screen; scroll down
                     (progn
                       (setf (editor-top-line session)
@@ -219,7 +219,7 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
                       (clamp-top-line session)
                       ;; Cursor on first data row of new page
                       (setf (editor-next-cursor session)
-                            (cons data-start-row 8))))))))))
+                            (cons data-start-row 7))))))))))
     :stay))
 
 ;;; PF3 - Exit (with save prompt if modified)
