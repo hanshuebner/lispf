@@ -573,11 +573,11 @@
 ;;; --- JJ prefix command parsing ---
 
 (define-test parse-prefix-jj ()
-  ;; No width
+  ;; No width -> 0 (will default to +data-width+ in execution)
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ")
     (assert-equal :jj cmd)
-    (assert-equal 1 count "JJ without width -> default 1"))
-  ;; Single digit width (no space, like other prefix commands)
+    (assert-equal 0 count "JJ without width -> 0"))
+  ;; Single digit width (no space)
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ5")
     (assert-equal :jj cmd)
     (assert-equal 5 count "JJ5 -> width 5"))
@@ -588,11 +588,11 @@
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ 40")
     (assert-equal :jj cmd)
     (assert-equal 40 count "JJ 40 -> width 40"))
-  ;; Overtyped: JJ over 000001 -> "JJ0001" -> single-digit parse, 0 is not non-zero -> 1
+  ;; Overtyped: JJ over 000001 -> "JJ0001" -> leading zero = no width
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ0001")
     (assert-equal :jj cmd "JJ overtyped")
-    (assert-equal 1 count "JJ overtyped -> default 1"))
-  ;; Overtyped: JJ5 over 000001 -> "JJ5001" -> single-digit parse -> 5
+    (assert-equal 0 count "JJ overtyped -> 0 (default)"))
+  ;; Overtyped: JJ5 over 000001 -> "JJ5001" -> first non-zero digit = 5
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ5001")
     (assert-equal :jj cmd)
     (assert-equal 5 count "JJ5 overtyped -> width 5")))
@@ -630,8 +630,8 @@
   (let ((s (make-session "aa bb cc dd ee ff gg hh ii jj kk ll")))
     (let ((msg (ed:execute-prefix-commands s '((0 :jj 10 0)))))
       (assert-string-contains msg "pending"))
-    ;; Second JJ with default count (1) - should use width from pending (10)
-    (let ((msg (ed:execute-prefix-commands s '((0 :jj 1 0)))))
+    ;; Second JJ with default count (0) - should use width from pending (10)
+    (let ((msg (ed:execute-prefix-commands s '((0 :jj 0 0)))))
       (assert-string-contains msg "justified")
       (assert-string-contains msg "width 10"))
     (dolist (line (ed:editor-lines s))
