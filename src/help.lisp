@@ -3,7 +3,7 @@
 ;;;; help.lisp
 ;;;;
 ;;;; Help subsystem for lispf applications.
-;;;; Help screens are .screen files with :help t property.
+;;;; Help screens are .screen files following the naming convention help-<name>.
 ;;;; PF1 navigates to the help screen for the current screen.
 ;;;; The command field in help screens navigates to named help topics.
 
@@ -23,6 +23,12 @@ Returns the help screen name string if found, NIL otherwise."
     (when (find-screen-file help-name)
       help-name)))
 
+(defun help-screen-p (screen-name)
+  "Return T if SCREEN-NAME is a help screen (name starts with 'help-')."
+  (let ((name (screen-name-string screen-name)))
+    (and (>= (length name) 5)
+         (string= "help-" name :end2 5))))
+
 ;;; Help navigation
 
 (defun navigate-to-help (screen-sym app-package)
@@ -34,49 +40,37 @@ Returns the help screen symbol if a help screen exists, NIL otherwise."
 
 ;;; Default PF1 handler: show help
 
-;; Process commands on help screens: typing a topic name navigates there
+(defmethod handle-key (screen-name (aid-key (eql :pf1)))
+  "Default PF1 handler: navigate to help screen for the current screen."
+  (let ((help-sym (navigate-to-help screen-name
+                                     (application-package *application*))))
+    (if help-sym
+        help-sym
+        (progn
+          (setf (gethash "errormsg" *current-field-values*)
+                (msg "No help available"))
+          :stay))))
+
+;;; Help screen Enter handler: empty Enter just stays
+
 (defmethod handle-key :around (screen-name (aid-key (eql :enter)))
-  "On help screens, treat the command field as a help topic navigator.
-Empty Enter on help screens just stays (no error)."
+  "On help screens, empty Enter stays instead of erroring."
   (if (help-screen-p screen-name)
-      (let* ((command (string-trim '(#\Space)
-                                   (or (gethash "command" *current-field-values*) ""))))
-        (if (plusp (length command))
-            ;; Try to navigate to help-<topic>
-            (let ((topic-name (format nil "help-~A" (string-downcase command))))
-              (if (find-screen-file topic-name)
-                  (intern-screen-name topic-name
-                                      (application-package *application*))
-                  (progn
-                    (setf (gethash "errormsg" *current-field-values*)
-                          (msg "~A: help topic not found" command))
-                    :stay)))
-            :stay))
+      :stay
       (call-next-method)))
 
-;;; Help topics via command field on help screens
+;;; Help topic navigation via command field
 
-(defun help-screen-p (screen-name)
-  "Return T if SCREEN-NAME is a help screen (name starts with 'help-')."
-  (let ((name (screen-name-string screen-name)))
-    (and (>= (length name) 5)
-         (string= "help-" name :end2 5))))
-
-;; Process commands on help screens: typing a topic name navigates there
-(defmethod handle-key :around (screen-name (aid-key (eql :enter)))
+(defmethod process-screen-command :around (screen-name (command string))
   "On help screens, treat the command field as a help topic navigator."
   (if (help-screen-p screen-name)
-      (let* ((command (string-trim '(#\Space)
-                                    (or (gethash "command" *current-field-values*) ""))))
-        (if (plusp (length command))
-            ;; Try to navigate to help-<topic>
-            (let ((topic-name (format nil "help-~A" (string-downcase command))))
-              (if (find-screen-file topic-name)
-                  (intern-screen-name topic-name
-                                      (application-package *application*))
-                  (progn
-                    (setf (gethash "errormsg" *current-field-values*)
-                          (msg "~A: help topic not found" command))
-                    :stay)))
-            (call-next-method)))
+      (let* ((topic (string-trim '(#\Space) command))
+             (topic-name (format nil "help-~A" (string-downcase topic))))
+        (if (find-screen-file topic-name)
+            (intern-screen-name topic-name
+                                (application-package *application*))
+            (progn
+              (setf (gethash "errormsg" *current-field-values*)
+                    (msg "~A: help topic not found" topic))
+              :stay)))
       (call-next-method)))
