@@ -250,52 +250,45 @@ Returns a message string."
 
 (defun do-change (session from to all-p)
   "Change FROM to TO in the file. If ALL-P, change all occurrences.
-Both modes use case-insensitive matching. Returns a message string."
+FROM is a regular expression (cl-ppcre). Case-insensitive matching.
+TO can use regex backreferences (\\1, \\2, etc.).
+Returns a message string."
   (save-undo-state session)
-  (let ((count 0)
-        (start-line (max 0 (1- (editor-top-line session))))
-        (upper-from (string-upcase from))
-        (from-len (length from)))
-    (if all-p
-        ;; Change all occurrences in all lines (case-insensitive)
-        (loop for i from 0 below (line-count session)
-              do (let* ((line (nth i (editor-lines session)))
-                        (result (make-string-output-stream))
-                        (search-start 0)
-                        (line-upper (string-upcase line))
-                        (changed nil))
-                   (loop for pos = (search upper-from line-upper :start2 search-start)
-                         while pos
-                         do (write-string (subseq line search-start pos) result)
-                            (write-string to result)
-                            (incf count)
-                            (setf search-start (+ pos from-len))
-                            (setf changed t))
-                   (when changed
-                     (write-string (subseq line search-start) result)
-                     (setf (nth i (editor-lines session))
-                           (get-output-stream-string result)))))
-        ;; Change first occurrence from current position (case-insensitive)
-        (loop for i from start-line below (line-count session)
-              do (let* ((line (nth i (editor-lines session)))
-                        (pos (search upper-from (string-upcase line))))
-                   (when pos
-                     (setf (nth i (editor-lines session))
-                           (concatenate 'string
-                                        (subseq line 0 pos)
-                                        to
-                                        (subseq line (+ pos from-len))))
-                     (setf (editor-top-line session) (1+ i))
-                     (clamp-top-line session)
-                     (incf count)
-                     (return)))))
-    (if (plusp count)
-        (progn
-          (setf (editor-modified session) t)
-          (format nil "CHANGED ~D occurrence~:P" count))
-        (progn
-          ;; Nothing changed, remove undo state
-          (pop (editor-undo-stack session))
-          (format nil "CHARS '~A' not found" from)))))
+  (handler-case
+      (let ((scanner (cl-ppcre:create-scanner from :case-insensitive-mode t))
+            (count 0)
+            (start-line (max 0 (1- (editor-top-line session)))))
+        (if all-p
+            ;; Change all occurrences in all lines
+            (loop for i from 0 below (line-count session)
+                  do (let ((line (nth i (editor-lines session))))
+                       ;; Count matches on this line
+                       (cl-ppcre:do-matches (s e scanner line)
+                         (declare (ignore s e))
+                         (incf count))
+                       ;; Replace all
+                       (let ((new-line (cl-ppcre:regex-replace-all scanner line to)))
+                         (unless (string= line new-line)
+                           (setf (nth i (editor-lines session)) new-line)))))
+            ;; Change first occurrence from current position
+            (loop for i from start-line below (line-count session)
+                  do (multiple-value-bind (new-line match-p)
+                         (cl-ppcre:regex-replace scanner (nth i (editor-lines session)) to)
+                       (when match-p
+                         (setf (nth i (editor-lines session)) new-line)
+                         (setf (editor-top-line session) (1+ i))
+                         (clamp-top-line session)
+                         (incf count)
+                         (return)))))
+        (if (plusp count)
+            (progn
+              (setf (editor-modified session) t)
+              (format nil "CHANGED ~D occurrence~:P" count))
+            (progn
+              (pop (editor-undo-stack session))
+              (format nil "'~A' not found" from))))
+    (cl-ppcre:ppcre-syntax-error (c)
+      (pop (editor-undo-stack session))
+      (format nil "Invalid regex: ~A" c))))
 
 

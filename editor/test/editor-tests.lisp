@@ -958,6 +958,48 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
       (assert-equal "aaaaaa" (first (lines s))))))
 
 ;;; ============================================================
+;;; Regex CHANGE tests
+;;; ============================================================
+
+(define-test change-regex-pattern ()
+  ;; Use regex pattern to match digits
+  (let ((s (make-session "line 123 here" "line 456 there")))
+    (setf (ed:editor-top-line s) 1)
+    (ed:do-change s "\\d+" "NUM" t)
+    (assert-equal "line NUM here" (first (lines s)))
+    (assert-equal "line NUM there" (second (lines s)))))
+
+(define-test change-regex-backreference ()
+  ;; Swap two words using capture groups
+  (let ((s (make-session "hello world")))
+    (setf (ed:editor-top-line s) 1)
+    (ed:do-change s "(hello) (world)" "\\2 \\1" nil)
+    (assert-equal "world hello" (first (lines s)))))
+
+(define-test change-regex-single ()
+  ;; Single replacement with regex
+  (let ((s (make-session "foo123bar" "foo456bar")))
+    (setf (ed:editor-top-line s) 1)
+    (ed:do-change s "\\d+" "NUM" nil)
+    ;; Only first match replaced
+    (assert-equal "fooNUMbar" (first (lines s)))
+    (assert-equal "foo456bar" (second (lines s)))))
+
+(define-test change-regex-invalid ()
+  ;; Invalid regex should return error message, not crash
+  (let ((s (make-session "hello")))
+    (setf (ed:editor-top-line s) 1)
+    (let ((msg (ed:do-change s "(unclosed" "x" nil)))
+      (assert-string-contains msg "Invalid regex"))))
+
+(define-test change-regex-dot-star ()
+  ;; .* pattern
+  (let ((s (make-session "abc def ghi")))
+    (setf (ed:editor-top-line s) 1)
+    (ed:do-change s "def.*" "XYZ" nil)
+    (assert-equal "abc XYZ" (first (lines s)))))
+
+;;; ============================================================
 ;;; Delimited string parsing tests
 ;;; ============================================================
 
@@ -1583,6 +1625,12 @@ Returns T if the file was falsely marked as modified."
    'change-case-insensitive
    'change-not-found
    'change-all-no-infinite-loop
+   ;; Regex CHANGE
+   'change-regex-pattern
+   'change-regex-backreference
+   'change-regex-single
+   'change-regex-invalid
+   'change-regex-dot-star
    ;; Delimited string parsing
    'parse-delimited-slash
    'parse-delimited-quote
