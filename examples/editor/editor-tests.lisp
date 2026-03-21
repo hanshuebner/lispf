@@ -400,12 +400,15 @@
 (define-test exec-block-delete-two-screen ()
   ;; DD on one screen, DD on next screen
   (let ((s (make-session "a" "b" "c" "d" "e")))
+    (setf (ed:editor-top-line s) 5) ; start away from block
     ;; First DD marks start
     (let ((msg (ed:execute-prefix-commands s '((1 :dd 0 1)))))
       (assert-string-contains msg "pending"))
-    ;; Second DD marks end
+    ;; Second DD marks end - should navigate to block start
     (ed:execute-prefix-commands s '((3 :dd 0 3)))
-    (assert-lines s '("a" "e"))))
+    (assert-lines s '("a" "e"))
+    ;; Should navigate to the start of the deleted block (line 1)
+    (assert-equal 1 (ed:editor-top-line s) "Should navigate to block start")))
 
 (define-test exec-block-repeat-same-screen ()
   (let ((s (make-session "a" "b" "c" "d")))
@@ -467,6 +470,35 @@
     (let ((msg (ed:execute-prefix-commands s '((2 :a 0 2)))))
       ;; Target index 3 (after line 2) is inside source block 1-3
       (assert-string-contains msg "inside the source block"))))
+
+;;; ============================================================
+;;; Block command navigation tests
+;;; ============================================================
+
+(define-test block-delete-navigates-to-start ()
+  ;; DD lines 2-100 in a 120-line file, should navigate to line 2 area
+  (let ((s (apply #'make-session
+                  (loop for i from 1 to 120 collect (format nil "line ~D" i)))))
+    (setf (ed:editor-top-line s) 50) ; viewing middle of file
+    ;; DD on line 1 (0-based), pending
+    (ed:execute-prefix-commands s '((1 :dd 0 0)))
+    ;; DD on line 99 (0-based), completes block
+    (ed:execute-prefix-commands s '((99 :dd 0 0)))
+    ;; 99 lines deleted (1-99), leaving line 0 and lines 100-119
+    (assert-equal 21 (ed:line-count s))
+    ;; Should navigate to the start (line 1 = real index 1)
+    (assert-equal 1 (ed:editor-top-line s) "Should navigate to block start")))
+
+(define-test block-copy-navigates-to-source ()
+  (let ((s (make-session "a" "b" "c" "d" "e" "f" "g" "h" "i" "j")))
+    (setf (ed:editor-top-line s) 8)
+    ;; CC lines 1-2 (b, c)
+    (ed:execute-prefix-commands s '((1 :cc 0 0)))
+    (ed:execute-prefix-commands s '((2 :cc 0 0)))
+    ;; A after line 8 (i)
+    (ed:execute-prefix-commands s '((8 :a 0 0)))
+    ;; Should navigate to source start (line 1)
+    (assert-equal 1 (ed:editor-top-line s) "Should navigate to copy source")))
 
 ;;; ============================================================
 ;;; Full round-trip block command tests (simulating 3270 overtype)
@@ -1192,6 +1224,9 @@ Returns T if the file was falsely marked as modified."
    'exec-block-move-two-screen
    'exec-single-copy-with-after
    'exec-move-target-inside-source-rejected
+   ;; Block navigation
+   'block-delete-navigates-to-start
+   'block-copy-navigates-to-source
    ;; Full round-trip block commands
    'round-trip-single-dd-enters-pending
    'round-trip-pending-survives-scroll

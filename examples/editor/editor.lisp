@@ -433,7 +433,8 @@ When both block markers (and optionally A/B targets) appear in the same
 batch, they are executed immediately without pending."
   (let ((pending (editor-pending-block session))
         (did-modify nil)
-        (result-message nil))
+        (result-message nil)
+        (navigate-to nil))
     ;; Save undo state before any modifications
     (save-undo-state session)
 
@@ -463,11 +464,13 @@ batch, they are executed immediately without pending."
               (case block-cmd
                 (:dd (delete-line-range session start bcount)
                      (setf did-modify t
+                           navigate-to start
                            result-message (format nil "~D line~:P deleted" bcount)))
                 (:rr (let ((copies (extract-line-range session start bcount)))
                        (insert-lines-after session (+ start bcount -1)
                                            (copy-list copies))
                        (setf did-modify t
+                             navigate-to start
                              result-message (format nil "~D line~:P duplicated" bcount))))
                 ((:cc :mm)
                  ;; Check for A/B target in same batch
@@ -481,6 +484,7 @@ batch, they are executed immediately without pending."
                                (unless did-modify (pop (editor-undo-stack session)))
                                (return-from execute-prefix-commands msg))
                              (setf did-modify t
+                                   navigate-to start
                                    result-message (format nil "~D line~:P ~A"
                                                           bcount
                                                           (if (eq block-cmd :cc) "copied" "moved")))))
@@ -518,11 +522,13 @@ batch, they are executed immediately without pending."
                  (case block-cmd
                    (:dd (delete-line-range session start bcount)
                         (setf did-modify t
+                              navigate-to start
                               result-message (format nil "~D line~:P deleted" bcount)))
                    (:rr (let ((copies (extract-line-range session start bcount)))
                           (insert-lines-after session (+ start bcount -1)
                                               (copy-list copies))
                           (setf did-modify t
+                                navigate-to start
                                 result-message (format nil "~D line~:P duplicated" bcount))))
                    ((:cc :mm)
                     ;; Check for A/B target in same batch
@@ -536,6 +542,7 @@ batch, they are executed immediately without pending."
                                   (unless did-modify (pop (editor-undo-stack session)))
                                   (return-from execute-prefix-commands msg))
                                 (setf did-modify t
+                                      navigate-to start
                                       result-message (format nil "~D line~:P ~A"
                                                              bcount
                                                              (if (eq block-cmd :cc) "copied" "moved")))))
@@ -566,8 +573,10 @@ batch, they are executed immediately without pending."
                   (unless did-modify (pop (editor-undo-stack session)))
                   (return-from execute-prefix-commands msg))
                 (let ((src-cmd (first pending))
+                      (src-start (second pending))
                       (src-count (third pending)))
                   (setf did-modify t
+                        navigate-to src-start
                         result-message (format nil "~D line~:P ~A"
                                                src-count
                                                (if (member src-cmd '(:cc :c))
@@ -643,6 +652,10 @@ batch, they are executed immediately without pending."
     ;; If nothing was actually modified, pop the undo state we saved
     (unless did-modify
       (pop (editor-undo-stack session)))
+    ;; Navigate to block start after execution
+    (when navigate-to
+      (setf (editor-top-line session) (max 0 navigate-to))
+      (clamp-top-line session))
     result-message))
 
 ;;; ============================================================
