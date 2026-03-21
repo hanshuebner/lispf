@@ -135,7 +135,7 @@ Override in your application to check login state.")
   (:documentation "Return the error message shown when an anonymous user tries
 to access a restricted screen. Override to localize.")
   (:method ((application t))
-    "Login required"))
+    (msg "Login required")))
 
 ;;; Command field processing
 
@@ -158,7 +158,7 @@ The '=' prefix triggers a jump (resets screen stack)."))
 (defgeneric unknown-command-message (application command)
   (:documentation "Return the error message for an unrecognized command.")
   (:method ((application t) (command t))
-    (format nil "~A: unknown command" command)))
+    (msg "~A: unknown command" command)))
 
 ;;; Command label customization
 
@@ -166,25 +166,25 @@ The '=' prefix triggers a jump (resets screen stack)."))
   (:documentation "Return the default command line label for screens.
 Override to localize, e.g. return \"Kommando ==>\" for German.")
   (:method ((application t))
-    "Command ==>"))
+    (msg "Command ==>")))
 
 (defgeneric menu-command-label (application)
   (:documentation "Return the command line label for menu screens.
 Override to localize, e.g. return \"Auswahl ==>\" for German.")
   (:method ((application t))
-    "Option  ==>"))
+    (msg "Option  ==>")))
 
 (defgeneric paging-labels (application)
   (:documentation "Return (values prev-label next-label) for list paging keys.
 Override to localize.")
   (:method ((application t))
-    (values "Prev" "Next")))
+    (values (msg "Prev") (msg "Next"))))
 
 (defgeneric menu-key-labels (application)
   (:documentation "Return (values enter-label pf3-label) for auto-generated menu screens.
 Override to localize.")
   (:method ((application t))
-    (values "Select" "Exit")))
+    (values (msg "Select") (msg "Exit"))))
 
 ;;; Field attribute overrides
 
