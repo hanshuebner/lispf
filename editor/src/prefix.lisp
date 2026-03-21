@@ -60,12 +60,20 @@ Returns (values command count) or nil."
         ((and (>= (length trimmed) 2) (string= trimmed "RR" :end1 2))
          (values :rr 0))
         ((and (>= (length trimmed) 2) (string= trimmed "JJ" :end1 2))
-         (let* ((rest (subseq trimmed 2))
-                (num-end (position-if-not #'digit-char-p rest))
-                (digits (subseq rest 0 num-end))
-                (width (if (plusp (length digits))
-                           (parse-integer digits)
-                           0)))
+         ;; Width parsing: use parse-prefix-count for single digit (handles overtype),
+         ;; but also check the UNTRIMMED text for "JJ <number>" with a space separator
+         ;; which allows multi-digit widths unambiguously.
+         (let* ((raw (string-upcase (string-trim '(#\Space) text)))
+                (space-pos (position #\Space raw :start 2))
+                (width (if space-pos
+                           ;; Space after JJ: parse everything after the space as width
+                           (let ((num-str (string-trim '(#\Space) (subseq raw (1+ space-pos)))))
+                             (if (and (plusp (length num-str))
+                                      (every #'digit-char-p num-str))
+                                 (parse-integer num-str)
+                                 0))
+                           ;; No space: single digit width (like other prefix commands)
+                           (parse-prefix-count trimmed 2))))
            (values :jj width)))
         ;; UC/LC with optional count
         ((and (>= (length trimmed) 2) (string= trimmed "UC" :end1 2))

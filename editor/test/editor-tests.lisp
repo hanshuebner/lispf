@@ -576,24 +576,26 @@
   ;; No width
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ")
     (assert-equal :jj cmd)
-    (assert-equal 0 count "JJ without width should be 0 (default)"))
-  ;; Single digit width
+    (assert-equal 1 count "JJ without width -> default 1"))
+  ;; Single digit width (no space, like other prefix commands)
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ5")
     (assert-equal :jj cmd)
-    (assert-equal 5 count))
-  ;; Multi-digit width
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ10")
+    (assert-equal 5 count "JJ5 -> width 5"))
+  ;; Multi-digit width with space separator
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ 10")
     (assert-equal :jj cmd)
-    (assert-equal 10 count "JJ10 should parse width 10"))
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ40")
+    (assert-equal 10 count "JJ 10 -> width 10"))
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ 40")
     (assert-equal :jj cmd)
-    (assert-equal 40 count "JJ40 should parse width 40"))
-  ;; Overtyped (JJ over 000001)
+    (assert-equal 40 count "JJ 40 -> width 40"))
+  ;; Overtyped: JJ over 000001 -> "JJ0001" -> single-digit parse, 0 is not non-zero -> 1
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ0001")
     (assert-equal :jj cmd "JJ overtyped")
-    ;; "0001" parses as 1, but 0-prefixed could be ambiguous.
-    ;; With our parser: digits after JJ are "0001" -> parse-integer -> 1
-    (assert-true (member count '(0 1)) "JJ overtyped should give 0 or 1")))
+    (assert-equal 1 count "JJ overtyped -> default 1"))
+  ;; Overtyped: JJ5 over 000001 -> "JJ5001" -> single-digit parse -> 5
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ5001")
+    (assert-equal :jj cmd)
+    (assert-equal 5 count "JJ5 overtyped -> width 5")))
 
 ;;; --- JJ block command execution ---
 
@@ -624,11 +626,12 @@
                      (format nil "Width 10: ~S" line))))))
 
 (define-test exec-justify-pending-preserves-width ()
-  ;; JJ10 on first screen, JJ on second - width 10 should be used
+  ;; JJ with width 10 on first screen, plain JJ on second - width 10 should be used
   (let ((s (make-session "aa bb cc dd ee ff gg hh ii jj kk ll")))
     (let ((msg (ed:execute-prefix-commands s '((0 :jj 10 0)))))
       (assert-string-contains msg "pending"))
-    (let ((msg (ed:execute-prefix-commands s '((0 :jj 0 0)))))
+    ;; Second JJ with default count (1) - should use width from pending (10)
+    (let ((msg (ed:execute-prefix-commands s '((0 :jj 1 0)))))
       (assert-string-contains msg "justified")
       (assert-string-contains msg "width 10"))
     (dolist (line (ed:editor-lines s))
