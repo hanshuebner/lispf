@@ -6,6 +6,7 @@
   :pathname "src/"
   :components ((:file "screen")
                (:file "variables")
+               (:file "i18n")
                (:file "registry")
                (:file "field-binding")
                (:file "conditions")
