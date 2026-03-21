@@ -152,12 +152,19 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
                     (format nil "~A pending" cmd-name)
                     (format nil "~A pending from line ~D" cmd-name (1+ start-line))))
               ""))
-    ;; Make marker data areas non-writable (prefix stays writable for I, A, B commands)
-    (dotimes (i +page-size+)
-      (let ((virtual (+ top i)))
-        (when (marker-line-p session virtual)
-          (lspf:set-field-attribute (format nil "prefix.~D" i) :color cl3270:+blue+)
-          (lspf:set-field-attribute (format nil "data.~D" i) :write nil :color cl3270:+blue+))))
+    ;; Make marker and past-EOF rows non-writable
+    (let ((bot-virtual (1+ (line-count session))))
+      (dotimes (i +page-size+)
+        (let ((virtual (+ top i)))
+          (cond
+            ;; Marker lines: data non-writable, prefix writable for I/A/B
+            ((marker-line-p session virtual)
+             (lspf:set-field-attribute (format nil "prefix.~D" i) :color cl3270:+blue+)
+             (lspf:set-field-attribute (format nil "data.~D" i) :write nil :color cl3270:+blue+))
+            ;; Past end of file: both non-writable so Tab skips them
+            ((> virtual bot-virtual)
+             (lspf:set-field-attribute (format nil "prefix.~D" i) :write nil)
+             (lspf:set-field-attribute (format nil "data.~D" i) :write nil))))))
     ;; Position cursor (use override if set, otherwise command field)
     (let ((next (editor-next-cursor session)))
       (if next
