@@ -6,8 +6,8 @@
 ;;; Usage:
 ;;;   (asdf:load-system "lispf")
 ;;;   (asdf:load-system "lispf-test")
-;;;   (load ".../examples/editor/editor.lisp")
-;;;   (load ".../examples/editor/editor-tests.lisp")
+;;;   (asdf:load-system "lispf-editor")
+;;;   (load ".../editor/test/editor-tests.lisp")
 ;;;   (lispf-editor-tests:run-all)
 
 (defpackage #:lispf-editor-tests
@@ -1022,7 +1022,7 @@ Returns T if the file was falsely marked as modified."
 (defvar *open-screen* nil)
 
 (defvar *screen-dir*
-  (merge-pathnames #P"examples/editor/screens/"
+  (merge-pathnames #P"editor/screens/"
                    (asdf:system-source-directory :lispf)))
 
 (defun load-editor-screen-data ()
