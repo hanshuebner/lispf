@@ -61,77 +61,75 @@ Returns (values from-string to-string remainder)."
 (declaim (ftype (function (t t t t) string) do-change))
 (declaim (ftype (function (t) t) save-editor-file))
 
+(defun command-keyword (cmd-string)
+  "Intern CMD-STRING as a keyword symbol for case dispatch."
+  (find-symbol cmd-string :keyword))
+
+(defun parse-command-arg-n (parts)
+  "Parse an optional numeric argument from the second element of PARTS."
+  (when (second parts)
+    (parse-integer (second parts) :junk-allowed t)))
+
 (defun handle-primary-command (session command)
   "Process a primary (command-line) command.
 Returns :stay, :back, or an error message string. NIL means unrecognized."
   (let* ((trimmed (string-trim '(#\Space) command))
          (upper (string-upcase trimmed))
          (parts (split-sequence:split-sequence #\Space upper
-                                                :remove-empty-subseqs t)))
+                                               :remove-empty-subseqs t)))
     (when (null parts)
       (return-from handle-primary-command :stay))
-    (let ((cmd (first parts)))
-      (cond
-        ;; SAVE
-        ((string= cmd "SAVE")
+    (let ((cmd-key (command-keyword (first parts))))
+      (case cmd-key
+        (:SAVE
          (save-editor-file session)
          :stay)
 
-        ;; CANCEL / CAN
-        ((or (string= cmd "CANCEL") (string= cmd "CAN"))
+        ((:CANCEL :CAN)
          (if (editor-restricted-p session)
              "CANCEL not available in restricted mode"
-             (progn
-               (setf (editor-modified session) nil)
-               :back)))
+             (progn (setf (editor-modified session) nil) :back)))
 
-        ;; SUBMIT / FILE (save and exit)
-        ((or (string= cmd "SUBMIT") (string= cmd "FILE"))
+        ((:SUBMIT :FILE)
          (save-editor-file session)
          :back)
 
-        ;; TOP
-        ((string= cmd "TOP")
+        (:TOP
          (setf (editor-top-line session) 0)
          :stay)
 
-        ;; BOTTOM / BOT
-        ((or (string= cmd "BOTTOM") (string= cmd "BOT"))
+        ((:BOTTOM :BOT)
          (setf (editor-top-line session)
                (max 0 (- (total-virtual-lines session) +page-size+)))
          (clamp-top-line session)
          :stay)
 
-        ;; UP n
-        ((string= cmd "UP")
-         (let ((n (if (second parts) (parse-integer (second parts) :junk-allowed t) +page-size+)))
+        (:UP
+         (let ((n (or (parse-command-arg-n parts) +page-size+)))
            (setf (editor-top-line session)
-                 (max 0 (- (editor-top-line session) (or n +page-size+))))
+                 (max 0 (- (editor-top-line session) n)))
            :stay))
 
-        ;; DOWN n
-        ((string= cmd "DOWN")
-         (let ((n (if (second parts) (parse-integer (second parts) :junk-allowed t) +page-size+)))
+        (:DOWN
+         (let ((n (or (parse-command-arg-n parts) +page-size+)))
            (setf (editor-top-line session)
-                 (+ (editor-top-line session) (or n +page-size+)))
+                 (+ (editor-top-line session) n))
            (clamp-top-line session)
            :stay))
 
-        ;; LOCATE n / L n
-        ((or (string= cmd "LOCATE") (string= cmd "L"))
-         (let ((n (when (second parts) (parse-integer (second parts) :junk-allowed t))))
+        ((:LOCATE :L)
+         (let ((n (parse-command-arg-n parts)))
            (if n
                (progn
-                 ;; Line number is 1-based, virtual index = real + 1
                  (setf (editor-top-line session) (max 0 n))
                  (clamp-top-line session)
                  :stay)
                "LOCATE requires a line number")))
 
-        ;; FIND string
-        ((or (string= cmd "FIND") (string= cmd "F"))
-         (let ((search-str (if (> (length trimmed) (length cmd))
-                               (string-trim '(#\Space) (subseq trimmed (length cmd)))
+        ((:FIND :F)
+         (let ((search-str (if (> (length trimmed) (length (first parts)))
+                               (string-trim '(#\Space)
+                                            (subseq trimmed (length (first parts))))
                                "")))
            (multiple-value-bind (str end) (parse-delimited-string search-str 0)
              (declare (ignore end))
@@ -142,10 +140,10 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
                    (do-find session str nil))
                  "FIND requires a search string"))))
 
-        ;; CHANGE /s1/s2/ [ALL]
-        ((or (string= cmd "CHANGE") (string= cmd "CHG"))
-         (let ((rest (if (> (length trimmed) (length cmd))
-                         (string-trim '(#\Space) (subseq trimmed (length cmd)))
+        ((:CHANGE :CHG)
+         (let ((rest (if (> (length trimmed) (length (first parts)))
+                         (string-trim '(#\Space)
+                                      (subseq trimmed (length (first parts))))
                          "")))
            (multiple-value-bind (from to remainder)
                (parse-change-args rest)
@@ -156,41 +154,33 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
                      (do-change session from to all-p))
                    "CHANGE requires search and replace strings")))))
 
-        ;; LEFT n
-        ((string= cmd "LEFT")
-         (let ((n (if (second parts) (parse-integer (second parts) :junk-allowed t) +data-width+)))
+        (:LEFT
+         (let ((n (or (parse-command-arg-n parts) +data-width+)))
            (setf (editor-col-offset session)
-                 (max 0 (- (editor-col-offset session) (or n +data-width+))))
+                 (max 0 (- (editor-col-offset session) n)))
            :stay))
 
-        ;; RIGHT n
-        ((string= cmd "RIGHT")
-         (let ((n (if (second parts) (parse-integer (second parts) :junk-allowed t) +data-width+)))
+        (:RIGHT
+         (let ((n (or (parse-command-arg-n parts) +data-width+)))
            (setf (editor-col-offset session)
-                 (+ (editor-col-offset session) (or n +data-width+)))
+                 (+ (editor-col-offset session) n))
            :stay))
 
-        ;; RESET
-        ((or (string= cmd "RESET") (string= cmd "RES"))
+        ((:RESET :RES)
          (setf (editor-pending-block session) nil)
+         (setf (editor-justify-range session) nil)
          :stay)
 
-        ;; UNDO
-        ((string= cmd "UNDO")
+        (:UNDO
          (undo session))
 
-        ;; REVERT - reload file from disk
-        ((or (string= cmd "REVERT") (string= cmd "REV"))
+        ((:REVERT :REV)
          (if (editor-restricted-p session)
              "REVERT not available in restricted mode"
              (revert session)))
 
-        ;; JUSTIFY [width] - justify marked JJ block or entire file
-        ((or (string= cmd "JUSTIFY") (string= cmd "JUS"))
-         (let* ((width (if (second parts)
-                           (parse-integer (second parts) :junk-allowed t)
-                           +data-width+))
-                (width (or width +data-width+))
+        ((:JUSTIFY :JUS)
+         (let* ((width (or (parse-command-arg-n parts) +data-width+))
                 (range (editor-justify-range session))
                 (start (if range (car range) 0))
                 (count (if range (cdr range) (line-count session))))
@@ -211,14 +201,14 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
                    (format nil "Justified ~D line~:P to ~D at width ~D"
                            count (length new-lines) width))))))
 
-        ;; Bare number: jump to that line (shortcut for LOCATE)
-        ((every #'digit-char-p cmd)
-         (let ((n (parse-integer cmd)))
-           (setf (editor-top-line session) (max 0 n))
-           (clamp-top-line session)
-           :stay))
-
-        (t nil)))))
+        (otherwise
+         ;; Bare number: jump to that line
+         (let ((cmd-str (first parts)))
+           (when (every #'digit-char-p cmd-str)
+             (let ((n (parse-integer cmd-str)))
+               (setf (editor-top-line session) (max 0 n))
+               (clamp-top-line session)
+               :stay))))))))
 
 (defun do-find (session search-str advance-p)
   "Find the next occurrence of SEARCH-STR.
