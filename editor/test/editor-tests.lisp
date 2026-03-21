@@ -472,6 +472,50 @@
       (assert-string-contains msg "inside the source block"))))
 
 ;;; ============================================================
+;;; Justify tests
+;;; ============================================================
+
+(define-test justify-basic ()
+  ;; Simple word wrap
+  (let ((result (ed:justify-lines '("hello world this is a test of justification") 20)))
+    (assert-true (> (length result) 1) "Should wrap to multiple lines")
+    (dolist (line result)
+      (assert-true (<= (length line) 20) "Each line should fit within width"))))
+
+(define-test justify-preserves-paragraphs ()
+  (let ((result (ed:justify-lines '("first paragraph words" "" "second paragraph words") 40)))
+    (assert-true (member "" result :test #'string=) "Empty line should be preserved")))
+
+(define-test justify-short-lines ()
+  ;; Lines already within width should be joined
+  (let ((result (ed:justify-lines '("short" "lines" "here") 40)))
+    (assert-equal 1 (length result) "Short lines should be joined")
+    (assert-equal "short lines here" (first result))))
+
+(define-test justify-long-word ()
+  ;; A word longer than width should still appear (not truncated)
+  (let ((result (ed:justify-lines '("superlongword that wraps") 10)))
+    (assert-true (find "superlongword" result :test #'string=)
+                 "Long word should be preserved on its own line")))
+
+(define-test exec-block-justify-same-screen ()
+  (let ((s (make-session "This is a really long line that should be wrapped when justified"
+                         "And this is another long line that also needs wrapping when done"
+                         "Plus a third line to make the total content longer than two lines at 72 chars width")))
+    (let ((msg (ed:execute-prefix-commands s '((0 :jj 0 0) (2 :jj 0 2)))))
+      (assert-string-contains msg "justified")
+      ;; All output lines should fit within data width
+      (dolist (line (ed:editor-lines s))
+        (assert-true (<= (length line) ed:+data-width+)
+                     (format nil "Line too long (~D): ~S" (length line) line))))))
+
+(define-test parse-prefix-jj ()
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ")
+    (assert-equal :jj cmd))
+  (multiple-value-bind (cmd) (ed:parse-prefix-command "JJ0001")
+    (assert-equal :jj cmd "JJ overtyped")))
+
+;;; ============================================================
 ;;; Block command navigation tests
 ;;; ============================================================
 
@@ -1249,6 +1293,13 @@ Returns T if the file was falsely marked as modified."
    'exec-block-move-two-screen
    'exec-single-copy-with-after
    'exec-move-target-inside-source-rejected
+   ;; Justify
+   'justify-basic
+   'justify-preserves-paragraphs
+   'justify-short-lines
+   'justify-long-word
+   'exec-block-justify-same-screen
+   'parse-prefix-jj
    ;; Block navigation
    'block-delete-navigates-to-start
    'block-copy-navigates-to-source

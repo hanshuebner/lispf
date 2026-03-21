@@ -59,6 +59,8 @@ Returns (values command count) or nil."
          (values :mm 0))
         ((and (>= (length trimmed) 2) (string= trimmed "RR" :end1 2))
          (values :rr 0))
+        ((and (>= (length trimmed) 2) (string= trimmed "JJ" :end1 2))
+         (values :jj 0))
         ;; UC/LC with optional count
         ((and (>= (length trimmed) 2) (string= trimmed "UC" :end1 2))
          (values :uc (parse-prefix-count trimmed 2)))
@@ -93,6 +95,44 @@ Returns (values command count) or nil."
 ;;; ============================================================
 ;;; Prefix command execution
 ;;; ============================================================
+
+(defun justify-lines (lines width)
+  "Justify/reflow a list of lines to fit within WIDTH columns.
+Preserves paragraph breaks (empty lines). Returns a new list of lines."
+  (let ((result '())
+        (current-paragraph '()))
+    (flet ((flush-paragraph ()
+             (when current-paragraph
+               (let* ((words (loop for line in (nreverse current-paragraph)
+                                   nconc (split-sequence:split-sequence
+                                          #\Space line :remove-empty-subseqs t)))
+                      (output-lines '())
+                      (current-line ""))
+                 (dolist (word words)
+                   (cond
+                     ;; First word on line
+                     ((zerop (length current-line))
+                      (setf current-line word))
+                     ;; Word fits on current line
+                     ((<= (+ (length current-line) 1 (length word)) width)
+                      (setf current-line (concatenate 'string current-line " " word)))
+                     ;; Start new line
+                     (t
+                      (push current-line output-lines)
+                      (setf current-line word))))
+                 (when (plusp (length current-line))
+                   (push current-line output-lines))
+                 (dolist (line (nreverse output-lines))
+                   (push line result)))
+               (setf current-paragraph nil))))
+      (dolist (line lines)
+        (if (every (lambda (c) (char= c #\Space)) line)
+            (progn
+              (flush-paragraph)
+              (push "" result))
+            (push line current-paragraph)))
+      (flush-paragraph))
+    (nreverse result)))
 
 (defun find-block-markers (commands cmd-type)
   "Find all entries in COMMANDS with command CMD-TYPE. Returns a list."
@@ -139,7 +179,7 @@ batch, they are executed immediately without pending."
 
     ;; First pass: handle block commands
     ;; Check for paired block markers within this batch
-    (dolist (block-cmd '(:dd :cc :mm :rr))
+    (dolist (block-cmd '(:dd :cc :mm :rr :jj))
       (let ((markers (find-block-markers commands block-cmd)))
         (when (>= (length markers) 2)
           ;; Two markers in same batch - check for conflicts with pending
@@ -171,6 +211,14 @@ batch, they are executed immediately without pending."
                        (setf did-modify t
                              navigate-to start
                              result-message (format nil "~D line~:P duplicated" bcount))))
+                (:jj (let* ((old-lines (extract-line-range session start bcount))
+                            (new-lines (justify-lines old-lines +data-width+)))
+                       (delete-line-range session start bcount)
+                       (insert-lines-after session (1- start) new-lines)
+                       (setf did-modify t
+                             navigate-to start
+                             result-message (format nil "~D line~:P justified to ~D"
+                                                    bcount (length new-lines)))))
                 ((:cc :mm)
                  ;; Check for A/B target in same batch
                  (let ((target (find-target commands)))
@@ -229,6 +277,14 @@ batch, they are executed immediately without pending."
                           (setf did-modify t
                                 navigate-to start
                                 result-message (format nil "~D line~:P duplicated" bcount))))
+                   (:jj (let* ((old-lines (extract-line-range session start bcount))
+                               (new-lines (justify-lines old-lines +data-width+)))
+                          (delete-line-range session start bcount)
+                          (insert-lines-after session (1- start) new-lines)
+                          (setf did-modify t
+                                navigate-to start
+                                result-message (format nil "~D line~:P justified to ~D"
+                                                       bcount (length new-lines)))))
                    ((:cc :mm)
                     ;; Check for A/B target in same batch
                     (let ((target (find-target commands)))
@@ -345,7 +401,7 @@ batch, they are executed immediately without pending."
                      (setf did-modify t))))
                 ((:a :b)
                  nil)  ; standalone A/B without pending
-                ((:dd :cc :mm :rr)
+                ((:dd :cc :mm :rr :jj)
                  nil)))))))  ; already handled in first pass
 
     ;; If nothing was actually modified, pop the undo state we saved

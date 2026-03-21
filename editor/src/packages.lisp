@@ -54,6 +54,9 @@
            #:parse-prefix-command
            #:execute-prefix-commands
 
+           ;; Justify
+           #:justify-lines
+
            ;; Primary commands
            #:parse-delimited-string
            #:handle-primary-command
