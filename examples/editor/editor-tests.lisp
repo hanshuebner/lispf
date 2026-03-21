@@ -393,7 +393,8 @@
   ;; Both DD markers on the same Enter press should execute immediately
   (let ((s (make-session "a" "b" "c" "d" "e")))
     (let ((msg (ed:execute-prefix-commands s '((1 :dd 0 1) (3 :dd 0 3)))))
-      (assert-nil msg "Same-screen DD..DD should not return pending message"))
+      (assert-string-contains msg "deleted" "Should report deletion")
+      (assert-string-contains msg "3" "Should report count"))
     (assert-lines s '("a" "e"))))
 
 (define-test exec-block-delete-two-screen ()
@@ -421,7 +422,7 @@
   ;; CC..CC + A target all on one Enter
   (let ((s (make-session "a" "b" "c" "d" "e")))
     (let ((msg (ed:execute-prefix-commands s '((1 :cc 0 1) (2 :cc 0 2) (4 :a 0 4)))))
-      (assert-nil msg "Same-screen CC..CC+A should not pend"))
+      (assert-string-contains msg "copied" "Should report copy"))
     (assert-lines s '("a" "b" "c" "d" "e" "b" "c"))))
 
 (define-test exec-block-copy-two-screen ()
@@ -436,7 +437,7 @@
   ;; MM..MM + B target all on one Enter
   (let ((s (make-session "a" "b" "c" "d" "e")))
     (let ((msg (ed:execute-prefix-commands s '((1 :mm 0 1) (2 :mm 0 2) (4 :b 0 4)))))
-      (assert-nil msg "Same-screen MM..MM+B should not pend"))
+      (assert-string-contains msg "moved" "Should report move"))
     (assert-lines s '("a" "d" "b" "c" "e"))))
 
 (define-test exec-block-move-two-screen ()
@@ -512,24 +513,26 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
                     "Single DD should not modify the file"))))
 
 (define-test round-trip-dd-pair-deletes-block ()
-  ;; User types "dd" on lines 2 and 4 (screen rows 1 and 3)
+  ;; With top=0: row 0=Top marker, row 1=line "a" (real 0), row 2=line "b", row 3=line "c"
+  ;; DD on rows 2 and 3 should delete lines b and c (real 1-2)
   (let ((s (make-session "a" "b" "c" "d" "e")))
     (setf (ed:editor-top-line s) 0)
-    (let* ((context (make-context-with-prefix s '((1 . "dd") (3 . "dd"))))
+    (let* ((context (make-context-with-prefix s '((2 . "dd") (3 . "dd"))))
            (msg (ed::process-editor-changes s context)))
-      (assert-nil msg "DD pair should not return a message")
+      (assert-string-contains msg "deleted" "Should report deletion")
       (assert-nil (ed:editor-pending-block s)
                   "DD pair should not leave pending")
       (assert-lines s '("a" "d" "e")
                     "DD pair should delete lines b and c"))))
 
 (define-test round-trip-cc-pair-with-a-copies ()
-  ;; CC on rows 1,2 and A on row 4
+  ;; With top=0: row 0=Top marker, row 1="a"(real 0), row 2="b"(real 1), row 3="c", row 4="d", row 5="e"
+  ;; CC on rows 2,3 (lines b,c) and A on row 5 (after "e")
   (let ((s (make-session "a" "b" "c" "d" "e")))
     (setf (ed:editor-top-line s) 0)
-    (let* ((context (make-context-with-prefix s '((1 . "cc") (2 . "cc") (4 . "a"))))
+    (let* ((context (make-context-with-prefix s '((2 . "cc") (3 . "cc") (5 . "a"))))
            (msg (ed::process-editor-changes s context)))
-      (assert-nil msg)
+      (assert-string-contains msg "copied")
       (assert-lines s '("a" "b" "c" "d" "e" "b" "c")))))
 
 ;;; ============================================================
@@ -1025,8 +1028,10 @@ Returns T if the file was falsely marked as modified."
              (assert-command-field-clean s "Command field clean on initial display")
 
              ;; Scroll forward through entire file
-             ;; With page-size lines per page, we need ceil((n-lines+2)/page) pages
-             (let ((pages-down (ceiling (+ n-lines 2) page)))
+             ;; PF8 scrolls by (1- page) lines (DATA mode with 1-line overlap)
+             (let* ((scroll-step (1- page))
+                    (total-virtual (+ n-lines 2))
+                    (pages-down (ceiling total-virtual scroll-step)))
                (dotimes (i pages-down)
                  (press-pf s 8)
                  (assert-no-modify-flag s
@@ -1034,13 +1039,16 @@ Returns T if the file was falsely marked as modified."
                  (assert-command-field-clean s
                    (format nil "Command field clean after PF8 #~D" (1+ i)))))
 
-             ;; At bottom: should see Bottom-of-Data marker
+             ;; Scroll back one page so last line and Bottom marker are both visible
+             (press-pf s 7)
+             ;; Should see Bottom-of-Data marker and last file line
              (assert-screen-contains s "Bottom of Data")
-             ;; Last file line should be visible
              (assert-screen-contains s (format nil "Line ~D of ~D" n-lines n-lines))
 
              ;; Scroll backward through entire file
-             (let ((pages-up (1+ (ceiling (+ n-lines 2) page))))
+             (let* ((scroll-step (1- page))
+                    (total-virtual (+ n-lines 2))
+                    (pages-up (1+ (ceiling total-virtual scroll-step))))
                (dotimes (i pages-up)
                  (press-pf s 7)
                  (assert-no-modify-flag s

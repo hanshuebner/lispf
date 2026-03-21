@@ -295,10 +295,11 @@ the visible window."
         (setf (editor-modified session) t)))))
 
 (defun clamp-top-line (session)
-  "Clamp top-line to valid range."
+  "Clamp top-line to valid range.
+Allows scrolling past the end so Bottom-of-Data can reach the top of the screen."
   (setf (editor-top-line session)
         (max 0 (min (editor-top-line session)
-                     (max 0 (- (total-virtual-lines session) +page-size+))))))
+                     (max 0 (1- (total-virtual-lines session)))))))
 
 ;;; ============================================================
 ;;; Prefix command parsing
@@ -431,7 +432,8 @@ COMMANDS is a list of (real-line-index command count screen-row).
 When both block markers (and optionally A/B targets) appear in the same
 batch, they are executed immediately without pending."
   (let ((pending (editor-pending-block session))
-        (did-modify nil))
+        (did-modify nil)
+        (result-message nil))
     ;; Save undo state before any modifications
     (save-undo-state session)
 
@@ -460,11 +462,13 @@ batch, they are executed immediately without pending."
               (setf (editor-pending-block session) nil)
               (case block-cmd
                 (:dd (delete-line-range session start bcount)
-                     (setf did-modify t))
+                     (setf did-modify t
+                           result-message (format nil "~D line~:P deleted" bcount)))
                 (:rr (let ((copies (extract-line-range session start bcount)))
                        (insert-lines-after session (+ start bcount -1)
                                            (copy-list copies))
-                       (setf did-modify t)))
+                       (setf did-modify t
+                             result-message (format nil "~D line~:P duplicated" bcount))))
                 ((:cc :mm)
                  ;; Check for A/B target in same batch
                  (let ((target (find-target commands)))
@@ -476,7 +480,10 @@ batch, they are executed immediately without pending."
                              (progn
                                (unless did-modify (pop (editor-undo-stack session)))
                                (return-from execute-prefix-commands msg))
-                             (setf did-modify t)))
+                             (setf did-modify t
+                                   result-message (format nil "~D line~:P ~A"
+                                                          bcount
+                                                          (if (eq block-cmd :cc) "copied" "moved")))))
                        ;; No target yet - pend
                        (progn
                          (setf (editor-pending-block session)
@@ -510,11 +517,13 @@ batch, they are executed immediately without pending."
                  (setf (editor-pending-block session) nil)
                  (case block-cmd
                    (:dd (delete-line-range session start bcount)
-                        (setf did-modify t))
+                        (setf did-modify t
+                              result-message (format nil "~D line~:P deleted" bcount)))
                    (:rr (let ((copies (extract-line-range session start bcount)))
                           (insert-lines-after session (+ start bcount -1)
                                               (copy-list copies))
-                          (setf did-modify t)))
+                          (setf did-modify t
+                                result-message (format nil "~D line~:P duplicated" bcount))))
                    ((:cc :mm)
                     ;; Check for A/B target in same batch
                     (let ((target (find-target commands)))
@@ -526,7 +535,10 @@ batch, they are executed immediately without pending."
                                 (progn
                                   (unless did-modify (pop (editor-undo-stack session)))
                                   (return-from execute-prefix-commands msg))
-                                (setf did-modify t)))
+                                (setf did-modify t
+                                      result-message (format nil "~D line~:P ~A"
+                                                             bcount
+                                                             (if (eq block-cmd :cc) "copied" "moved")))))
                           (progn
                             (setf (editor-pending-block session)
                                   (list block-cmd start bcount))
@@ -553,7 +565,13 @@ batch, they are executed immediately without pending."
                 (progn
                   (unless did-modify (pop (editor-undo-stack session)))
                   (return-from execute-prefix-commands msg))
-                (setf did-modify t))))))
+                (let ((src-cmd (first pending))
+                      (src-count (third pending)))
+                  (setf did-modify t
+                        result-message (format nil "~D line~:P ~A"
+                                               src-count
+                                               (if (member src-cmd '(:cc :c))
+                                                   "copied" "moved")))))))))
 
     ;; Third pass: single-line commands (process in order, tracking index shifts)
     (let ((offset 0))
@@ -625,7 +643,7 @@ batch, they are executed immediately without pending."
     ;; If nothing was actually modified, pop the undo state we saved
     (unless did-modify
       (pop (editor-undo-stack session)))
-    nil))
+    result-message))
 
 ;;; ============================================================
 ;;; Primary command processing
@@ -802,6 +820,13 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
         ((string= cmd "UNDO")
          (undo session))
 
+        ;; Bare number: jump to that line (shortcut for LOCATE)
+        ((every #'digit-char-p cmd)
+         (let ((n (parse-integer cmd)))
+           (setf (editor-top-line session) (max 0 n))
+           (clamp-top-line session)
+           :stay))
+
         (t nil)))))
 
 (defun do-find (session search-str advance-p)
@@ -900,6 +925,7 @@ suitable for the framework's repeat field split mechanism."
   (let ((top (editor-top-line session))
         (col-offset (editor-col-offset session))
         (n (line-count session))
+        (pending (editor-pending-block session))
         (prefix-lines '())
         (data-lines '()))
     (dotimes (i +page-size+)
@@ -918,8 +944,12 @@ suitable for the framework's repeat field split mechanism."
           ;; File line
           ((and (> virtual 0) (<= virtual n))
            (let* ((real (1- virtual))
-                  (line (or (nth real (editor-lines session)) "")))
-             (push (format nil "~6,'0D" (1+ real)) prefix-lines)
+                  (line (or (nth real (editor-lines session)) ""))
+                  (pending-start-p (and pending (= real (second pending)))))
+             (push (if pending-start-p
+                       (format nil "~6A" (string-upcase (symbol-name (first pending))))
+                       (format nil "~6,'0D" (1+ real)))
+                   prefix-lines)
              (push (visible-portion line col-offset) data-lines)))
           ;; Past end
           (t
@@ -1051,10 +1081,16 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
                        (line-count session)
                        (max 1 (1+ (max 0 (1- top))))
                        mod-flag))
-    ;; Status line (only used for pending block commands)
+    ;; Status line: show pending block command info with start line
     (setf status
           (if pending
-              (format nil "Pending: ~A" (string-upcase (symbol-name (first pending))))
+              (let* ((cmd-name (string-upcase (symbol-name (first pending))))
+                     (start-line (second pending))
+                     (start-visible (<= top (1+ start-line)
+                                        (+ top +page-size+ -1))))
+                (if start-visible
+                    (format nil "~A pending" cmd-name)
+                    (format nil "~A pending from line ~D" cmd-name (1+ start-line))))
               ""))
     ;; Make marker data areas non-writable (prefix stays writable for I, A, B commands)
     (dotimes (i +page-size+)
@@ -1119,18 +1155,18 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
           (setf (gethash "errormsg" lspf:*current-field-values*) "No previous CHANGE")
           :stay))))
 
-;;; PF7 - Scroll Up
+;;; PF7 - Scroll Up (DATA mode: one-line overlap for context)
 (lspf:define-key-handler edit :pf7 ()
   (process-editor-changes lspf:*session* lspf:*current-field-values*)
   (setf (editor-top-line lspf:*session*)
-        (max 0 (- (editor-top-line lspf:*session*) +page-size+)))
+        (max 0 (- (editor-top-line lspf:*session*) (1- +page-size+))))
   :stay)
 
-;;; PF8 - Scroll Down
+;;; PF8 - Scroll Down (DATA mode: one-line overlap for context)
 (lspf:define-key-handler edit :pf8 ()
   (process-editor-changes lspf:*session* lspf:*current-field-values*)
   (setf (editor-top-line lspf:*session*)
-        (+ (editor-top-line lspf:*session*) +page-size+))
+        (+ (editor-top-line lspf:*session*) (1- +page-size+)))
   (clamp-top-line lspf:*session*)
   :stay)
 
