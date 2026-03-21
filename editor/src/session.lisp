@@ -46,7 +46,9 @@ Virtual 0 = Top-of-Data marker, 1..N = file lines, N+1 = Bottom-of-Data marker."
    (restricted :initform nil :accessor editor-restricted-p
                :documentation "When T, FILE/SUBMIT/CANCEL/REVERT commands are disabled.")
    (next-cursor :initform nil :accessor editor-next-cursor
-                :documentation "When set to (row . col), overrides cursor positioning on next display.")))
+                :documentation "When set to (row . col), overrides cursor positioning on next display.")
+   (justify-range :initform nil :accessor editor-justify-range
+                  :documentation "When set to (start . count), the JJ-marked range for JUSTIFY command.")))
 
 (defun make-test-session (lines)
   "Create an editor session for testing (no application binding needed)."

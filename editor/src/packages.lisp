@@ -59,6 +59,7 @@
 
            ;; Justify
            #:justify-lines
+           #:editor-justify-range
 
            ;; Primary commands
            #:parse-delimited-string

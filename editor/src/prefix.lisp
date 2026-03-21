@@ -60,21 +60,7 @@ Returns (values command count) or nil."
         ((and (>= (length trimmed) 2) (string= trimmed "RR" :end1 2))
          (values :rr 0))
         ((and (>= (length trimmed) 2) (string= trimmed "JJ" :end1 2))
-         ;; Width parsing for JJ: use space separator for width.
-         ;; "JJ"      -> 0 (default, will use +data-width+)
-         ;; "JJ 10"   -> 10
-         ;; "JJ 40"   -> 40
-         ;; "JJ0001"  -> 0 (overtyped line number remnant, no space)
-         (let* ((raw (string-upcase (string-trim '(#\Space) text)))
-                (space-pos (position #\Space raw :start 2))
-                (width (if space-pos
-                           (let ((num-str (string-trim '(#\Space) (subseq raw (1+ space-pos)))))
-                             (if (and (plusp (length num-str))
-                                      (every #'digit-char-p num-str))
-                                 (parse-integer num-str)
-                                 0))
-                           0)))
-           (values :jj width)))
+         (values :jj 0))
         ;; UC/LC with optional count
         ((and (>= (length trimmed) 2) (string= trimmed "UC" :end1 2))
          (values :uc (parse-prefix-count trimmed 2)))
@@ -230,22 +216,10 @@ batch, they are executed immediately without pending."
                        (setf did-modify t
                              navigate-to start
                              result-message (format nil "~D line~:P duplicated" bcount))))
-                (:jj (let* ((marker-width (third first-marker))
-                            (jj-width (if (and marker-width (plusp marker-width))
-                                          marker-width +data-width+))
-                            (old-lines (extract-line-range session start bcount)))
-                       (multiple-value-bind (new-lines long-words)
-                           (justify-lines old-lines jj-width)
-                         (delete-line-range session start bcount)
-                         (insert-lines-after session (1- start) new-lines)
-                         (setf did-modify t
-                               navigate-to start
-                               result-message
-                               (if (plusp long-words)
-                                   (format nil "Justified at width ~D (~D word~:P exceed~[s~;~:;~] width)"
-                                           jj-width long-words long-words)
-                                   (format nil "~D line~:P justified to ~D at width ~D"
-                                           bcount (length new-lines) jj-width))))))
+                (:jj (setf (editor-justify-range session) (cons start bcount))
+                     (unless did-modify (pop (editor-undo-stack session)))
+                     (return-from execute-prefix-commands
+                       (format nil "~D line~:P marked for JUSTIFY" bcount)))
 
                 ((:cc :mm)
                  ;; Check for A/B target in same batch
@@ -306,27 +280,10 @@ batch, they are executed immediately without pending."
                           (setf did-modify t
                                 navigate-to start
                                 result-message (format nil "~D line~:P duplicated" bcount))))
-                   (:jj (let* ((pending-width (third pending))
-                               (marker-width (third marker))
-                               (jj-width (cond
-                                           ((and pending-width (plusp pending-width))
-                                            pending-width)
-                                           ((and marker-width (plusp marker-width))
-                                            marker-width)
-                                           (t +data-width+)))
-                               (old-lines (extract-line-range session start bcount)))
-                          (multiple-value-bind (new-lines long-words)
-                              (justify-lines old-lines jj-width)
-                            (delete-line-range session start bcount)
-                            (insert-lines-after session (1- start) new-lines)
-                            (setf did-modify t
-                                  navigate-to start
-                                  result-message
-                                  (if (plusp long-words)
-                                      (format nil "Justified at width ~D (~D word~:P exceed~[s~;~:;~] width)"
-                                              jj-width long-words long-words)
-                                      (format nil "~D line~:P justified to ~D at width ~D"
-                                              bcount (length new-lines) jj-width))))))
+                   (:jj (setf (editor-justify-range session) (cons start bcount))
+                        (unless did-modify (pop (editor-undo-stack session)))
+                        (return-from execute-prefix-commands
+                          (format nil "~D line~:P marked for JUSTIFY" bcount)))
                    ((:cc :mm)
                     ;; Check for A/B target in same batch
                     (let ((target (find-target commands)))

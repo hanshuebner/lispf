@@ -573,93 +573,65 @@
 ;;; --- JJ prefix command parsing ---
 
 (define-test parse-prefix-jj ()
-  ;; No width -> 0 (will default to +data-width+ in execution)
+  ;; JJ is a simple block marker (no width)
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ")
     (assert-equal :jj cmd)
-    (assert-equal 0 count "JJ without width -> 0"))
-  ;; Width with space separator
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ 5")
-    (assert-equal :jj cmd)
-    (assert-equal 5 count "JJ 5 -> width 5"))
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ 10")
-    (assert-equal :jj cmd)
-    (assert-equal 10 count "JJ 10 -> width 10"))
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ 40")
-    (assert-equal :jj cmd)
-    (assert-equal 40 count "JJ 40 -> width 40"))
-  ;; Overtyped: JJ over 000001 -> "JJ0001" -> no space = no width
+    (assert-equal 0 count))
+  ;; Overtyped: JJ over 000001
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ0001")
-    (assert-equal :jj cmd "JJ overtyped")
-    (assert-equal 0 count "JJ overtyped -> 0 (default)"))
-  ;; Without space, digits are treated as line number remnants
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ5001")
-    (assert-equal :jj cmd)
-    (assert-equal 0 count "JJ5001 without space -> 0 (default)")))
+    (assert-equal :jj cmd)))
 
-;;; --- JJ block command execution ---
+;;; --- JJ marks region, JUSTIFY command executes ---
 
-(define-test exec-justify-same-screen-default-width ()
-  (let ((s (make-session "This is a long line that should be wrapped at the default seventy two column width"
-                         "And another line with more content to make it longer than a single line")))
-    (let ((msg (ed:execute-prefix-commands s '((0 :jj 0 0) (1 :jj 0 1)))))
-      (assert-string-contains msg "justified")
-      (assert-string-contains msg "width 72")
-      (dolist (line (ed:editor-lines s))
-        (assert-true (<= (length line) 72)
-                     (format nil "Default width: ~S" line))))))
+(define-test jj-marks-region ()
+  ;; JJ..JJ marks a region for JUSTIFY
+  (let ((s (make-session "aa bb cc" "dd ee ff" "gg hh ii")))
+    (let ((msg (ed:execute-prefix-commands s '((0 :jj 0 0) (2 :jj 0 2)))))
+      (assert-string-contains msg "marked")
+      ;; Lines should be unchanged
+      (assert-lines s '("aa bb cc" "dd ee ff" "gg hh ii"))
+      ;; Range should be stored
+      (assert-true (ed::editor-justify-range s)))))
 
-(define-test exec-justify-same-screen-width-20 ()
-  (let ((s (make-session "aa bb cc dd ee ff gg hh ii jj kk ll mm nn oo")))
-    (let ((msg (ed:execute-prefix-commands s '((0 :jj 20 0) (0 :jj 20 0)))))
-      (assert-string-contains msg "width 20")
-      (dolist (line (ed:editor-lines s))
-        (assert-true (<= (length line) 20)
-                     (format nil "Width 20: ~S" line))))))
-
-(define-test exec-justify-same-screen-width-10 ()
-  (let ((s (make-session "aa bb cc dd ee ff gg")))
-    (let ((msg (ed:execute-prefix-commands s '((0 :jj 10 0) (0 :jj 10 0)))))
+(define-test justify-command-on-marked-range ()
+  ;; Mark with JJ, then JUSTIFY 10 in command field
+  (let ((s (make-session "aa bb cc dd ee ff gg hh ii jj kk ll")))
+    (ed:execute-prefix-commands s '((0 :jj 0 0) (0 :jj 0 0)))
+    (let ((msg (ed:handle-primary-command s "JUSTIFY 10")))
+      (assert-string-contains msg "Justified")
       (assert-string-contains msg "width 10")
       (dolist (line (ed:editor-lines s))
         (assert-true (<= (length line) 10)
                      (format nil "Width 10: ~S" line))))))
 
-(define-test exec-justify-pending-preserves-width ()
-  ;; JJ with width 10 on first screen, plain JJ on second - width 10 should be used
-  (let ((s (make-session "aa bb cc dd ee ff gg hh ii jj kk ll")))
-    (let ((msg (ed:execute-prefix-commands s '((0 :jj 10 0)))))
-      (assert-string-contains msg "pending"))
-    ;; Second JJ with default count (0) - should use width from pending (10)
-    (let ((msg (ed:execute-prefix-commands s '((0 :jj 0 0)))))
-      (assert-string-contains msg "justified")
-      (assert-string-contains msg "width 10"))
-    (dolist (line (ed:editor-lines s))
-      (assert-true (<= (length line) 10)
-                   (format nil "Width 10 from pending: ~S" line)))))
+(define-test justify-command-default-width ()
+  ;; JUSTIFY without width uses 72
+  (let ((s (make-session "this is a short line that fits in 72 columns easily")))
+    (ed:execute-prefix-commands s '((0 :jj 0 0) (0 :jj 0 0)))
+    (let ((msg (ed:handle-primary-command s "JUSTIFY")))
+      (assert-string-contains msg "width 72"))))
 
-(define-test exec-justify-warns-long-words ()
-  (let ((s (make-session "superlongword short words here")))
-    (let ((msg (ed:execute-prefix-commands s '((0 :jj 5 0) (0 :jj 5 0)))))
+(define-test justify-command-whole-file ()
+  ;; JUSTIFY without JJ marks operates on entire file
+  (let ((s (make-session "aa bb cc dd ee ff gg hh ii jj kk ll")))
+    (let ((msg (ed:handle-primary-command s "JUSTIFY 10")))
+      (assert-string-contains msg "Justified")
+      (dolist (line (ed:editor-lines s))
+        (assert-true (<= (length line) 10)
+                     (format nil "Width 10: ~S" line))))))
+
+(define-test justify-command-warns-long-words ()
+  (let ((s (make-session "superlongword short words")))
+    (let ((msg (ed:handle-primary-command s "JUSTIFY 5")))
       (assert-string-contains msg "exceed")
-      ;; Long word should still be in the output (not lost)
       (assert-true (find "superlongword" (ed:editor-lines s) :test #'string=)
                    "Long word should be preserved"))))
 
-(define-test exec-justify-multi-line-file ()
-  (let ((s (make-session "line one with words"
-                         "line two with more words"
-                         ""
-                         "second paragraph here"
-                         "with additional text")))
-    (ed:execute-prefix-commands s '((0 :jj 20 0) (4 :jj 20 0)))
-    ;; Should have paragraph break preserved
+(define-test justify-command-preserves-paragraphs ()
+  (let ((s (make-session "first paragraph words" "" "second paragraph words")))
+    (ed:handle-primary-command s "JUSTIFY 20")
     (assert-true (member "" (ed:editor-lines s) :test #'string=)
-                 "Paragraph break should be preserved")
-    ;; All non-empty lines should fit
-    (dolist (line (ed:editor-lines s))
-      (when (plusp (length line))
-        (assert-true (<= (length line) 20)
-                     (format nil "Width 20: ~S" line))))))
+                 "Paragraph break should be preserved")))
 
 ;;; ============================================================
 ;;; Block command navigation tests
@@ -1534,15 +1506,14 @@ Returns T if the file was falsely marked as modified."
    'justify-width-72-default
    'justify-empty-input
    'justify-all-empty-lines
-   ;; Justify - parsing
+   ;; JJ marking and JUSTIFY command
    'parse-prefix-jj
-   ;; Justify - execution
-   'exec-justify-same-screen-default-width
-   'exec-justify-same-screen-width-20
-   'exec-justify-same-screen-width-10
-   'exec-justify-pending-preserves-width
-   'exec-justify-warns-long-words
-   'exec-justify-multi-line-file
+   'jj-marks-region
+   'justify-command-on-marked-range
+   'justify-command-default-width
+   'justify-command-whole-file
+   'justify-command-warns-long-words
+   'justify-command-preserves-paragraphs
    ;; Block navigation
    'block-delete-navigates-to-start
    'block-copy-navigates-to-source

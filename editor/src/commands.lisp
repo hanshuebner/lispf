@@ -185,6 +185,32 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
              "REVERT not available in restricted mode"
              (revert session)))
 
+        ;; JUSTIFY [width] - justify marked JJ block or entire file
+        ((or (string= cmd "JUSTIFY") (string= cmd "JUS"))
+         (let* ((width (if (second parts)
+                           (parse-integer (second parts) :junk-allowed t)
+                           +data-width+))
+                (width (or width +data-width+))
+                (range (editor-justify-range session))
+                (start (if range (car range) 0))
+                (count (if range (cdr range) (line-count session))))
+           (when range
+             (setf (editor-justify-range session) nil))
+           (save-undo-state session)
+           (let ((old-lines (extract-line-range session start count)))
+             (multiple-value-bind (new-lines long-words)
+                 (justify-lines old-lines width)
+               (delete-line-range session start count)
+               (insert-lines-after session (1- start) new-lines)
+               (setf (editor-modified session) t)
+               (setf (editor-top-line session) (max 0 start))
+               (clamp-top-line session)
+               (if (plusp long-words)
+                   (format nil "Justified ~D line~:P at width ~D (~D word~:P exceed width)"
+                           count width long-words)
+                   (format nil "Justified ~D line~:P to ~D at width ~D"
+                           count (length new-lines) width))))))
+
         ;; Bare number: jump to that line (shortcut for LOCATE)
         ((every #'digit-char-p cmd)
          (let ((n (parse-integer cmd)))
