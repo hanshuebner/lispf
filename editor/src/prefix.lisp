@@ -60,30 +60,20 @@ Returns (values command count) or nil."
         ((and (>= (length trimmed) 2) (string= trimmed "RR" :end1 2))
          (values :rr 0))
         ((and (>= (length trimmed) 2) (string= trimmed "JJ" :end1 2))
-         ;; Width parsing for JJ:
+         ;; Width parsing for JJ: use space separator for width.
          ;; "JJ"      -> 0 (default, will use +data-width+)
-         ;; "JJ5"     -> 5 (single non-zero digit)
-         ;; "JJ 10"   -> 10 (space separator for multi-digit)
+         ;; "JJ 10"   -> 10
          ;; "JJ 40"   -> 40
-         ;; "JJ0001"  -> 0 (overtyped, leading zero = line number remnant)
-         ;; "JJ5001"  -> 5 (overtyped, first non-zero digit)
+         ;; "JJ0001"  -> 0 (overtyped line number remnant, no space)
          (let* ((raw (string-upcase (string-trim '(#\Space) text)))
                 (space-pos (position #\Space raw :start 2))
-                (width (cond
-                         ;; Space after JJ: multi-digit width
-                         (space-pos
-                          (let ((num-str (string-trim '(#\Space) (subseq raw (1+ space-pos)))))
-                            (if (and (plusp (length num-str))
-                                     (every #'digit-char-p num-str))
-                                (parse-integer num-str)
-                                0)))
-                         ;; No space: check for a non-zero digit after JJ
-                         ((and (> (length trimmed) 2)
-                               (digit-char-p (char trimmed 2))
-                               (char/= (char trimmed 2) #\0))
-                          (digit-char-p (char trimmed 2)))
-                         ;; No width specified
-                         (t 0))))
+                (width (if space-pos
+                           (let ((num-str (string-trim '(#\Space) (subseq raw (1+ space-pos)))))
+                             (if (and (plusp (length num-str))
+                                      (every #'digit-char-p num-str))
+                                 (parse-integer num-str)
+                                 0))
+                           0)))
            (values :jj width)))
         ;; UC/LC with optional count
         ((and (>= (length trimmed) 2) (string= trimmed "UC" :end1 2))

@@ -4,22 +4,19 @@
  Find and Change Commands
 
  FIND string
-   Search for text (case-insensitive). The view scrolls to show
-   the line where the text was found.
-   Examples:  FIND hello       FIND /hello world/       F 'text'
+   Search for text (case-insensitive). View scrolls to match.
+   Examples:  FIND hello    FIND /hello world/    F 'text'
 
  CHANGE /old/new/ [ALL]
-   Replace text. Without ALL, replaces the first occurrence from
-   the current position. With ALL, replaces every occurrence.
-   Examples:  CHANGE /foo/bar/       CHG /old/new/ ALL
+   Replace text. Without ALL, replaces first from current position.
+   With ALL, replaces every occurrence in the file.
+   Examples:  CHANGE /foo/bar/    CHG /old/new/ ALL
 
- DELIMITERS:
-   Use / ' or \" to delimit strings containing spaces.
-   Without delimiters, each word is a separate argument.
+ Use / ' or double-quote as delimiters for strings with spaces.
 
- REPEAT FIND/CHANGE:
-   PF5    Repeat the last FIND (advances to next match)
-   PF6    Repeat the last CHANGE
+ REPEAT:
+   PF5    Repeat last FIND (advance to next match)
+   PF6    Repeat last CHANGE
 
  See also: EDIT, KEYS
 "

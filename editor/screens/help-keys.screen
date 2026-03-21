@@ -3,25 +3,16 @@
  :screen "
  Function Keys
 
-   PF1     Help (this screen)
-   PF3     Exit editor (prompts if file was modified)
-   PF5     Repeat last FIND (advance to next match)
-   PF6     Repeat last CHANGE
-   PF7     Scroll up one page (with 1-line overlap)
-   PF8     Scroll down one page (with 1-line overlap)
-   PF10    Scroll left one screen width
-   PF11    Scroll right one screen width
+   PF1     Help             PF7     Scroll up (1-line overlap)
+   PF3     Exit editor      PF8     Scroll down (1-line overlap)
+   PF5     Repeat FIND      PF10    Scroll left
+   PF6     Repeat CHANGE    PF11    Scroll right
 
- SCROLLING:
-   PF7/PF8 use DATA mode scrolling with a 1-line overlap for
-   context. You can also type UP n or DOWN n in the command field.
+ SCROLLING: PF7/PF8 use DATA mode with 1-line overlap.
+ You can also type UP n or DOWN n in the command field.
+ Scrolling past end of file is allowed.
 
-   You can scroll past the end of the file. The Bottom-of-Data
-   marker can reach the top of the screen.
-
- COMMAND SHORTCUTS:
-   Type a line number in the command field to jump there.
-   This is equivalent to the LOCATE command.
+ SHORTCUT: Type a line number in the command field to jump there.
 
  See also: EDIT, FIND, PREFIX
 "

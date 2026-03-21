@@ -577,25 +577,24 @@
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ")
     (assert-equal :jj cmd)
     (assert-equal 0 count "JJ without width -> 0"))
-  ;; Single digit width (no space)
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ5")
+  ;; Width with space separator
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ 5")
     (assert-equal :jj cmd)
-    (assert-equal 5 count "JJ5 -> width 5"))
-  ;; Multi-digit width with space separator
+    (assert-equal 5 count "JJ 5 -> width 5"))
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ 10")
     (assert-equal :jj cmd)
     (assert-equal 10 count "JJ 10 -> width 10"))
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ 40")
     (assert-equal :jj cmd)
     (assert-equal 40 count "JJ 40 -> width 40"))
-  ;; Overtyped: JJ over 000001 -> "JJ0001" -> leading zero = no width
+  ;; Overtyped: JJ over 000001 -> "JJ0001" -> no space = no width
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ0001")
     (assert-equal :jj cmd "JJ overtyped")
     (assert-equal 0 count "JJ overtyped -> 0 (default)"))
-  ;; Overtyped: JJ5 over 000001 -> "JJ5001" -> first non-zero digit = 5
+  ;; Without space, digits are treated as line number remnants
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ5001")
     (assert-equal :jj cmd)
-    (assert-equal 5 count "JJ5 overtyped -> width 5")))
+    (assert-equal 0 count "JJ5001 without space -> 0 (default)")))
 
 ;;; --- JJ block command execution ---
 

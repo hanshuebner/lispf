@@ -1,27 +1,21 @@
 (:name "help-prefix"
  :command t
  :screen "
- Prefix Commands
+ Prefix Commands - type in the line number area
 
- Prefix commands are typed into the line number area (the 6-digit
- number on the left of each line). The old number is overwritten.
-
- SINGLE LINE COMMANDS (with optional count):
-   I[n]   Insert n blank lines after this line (default: 1)
-   D[n]   Delete n lines starting from this line (default: 1)
-   R[n]   Repeat (duplicate) this line n times (default: 1)
-   C[n]   Copy n lines - then type A or B on the target line
-   M[n]   Move n lines - then type A or B on the target line
-
- TARGETS (for Copy and Move):
-   A      Place copied/moved lines After this line
-   B      Place copied/moved lines Before this line
+ SINGLE LINE (with optional count n):
+   I[n]   Insert n blank lines     C[n]   Copy (need A/B target)
+   D[n]   Delete n lines           M[n]   Move (need A/B target)
+   R[n]   Repeat line n times      A/B    After/Before target
 
  CASE AND SHIFT:
-   UC[n]  Convert n lines to uppercase
-   LC[n]  Convert n lines to lowercase
-   ([n]   Shift line left by n columns
-   )[n]   Shift line right by n columns
+   UC[n]  Uppercase n lines        ([n]   Shift left n columns
+   LC[n]  Lowercase n lines        )[n]   Shift right n columns
+
+ BLOCK COMMANDS (mark start and end lines):
+   DD     Delete block              CC     Copy block (+ A/B)
+   RR     Repeat block              MM     Move block (+ A/B)
+   JJ[n]  Justify to n cols         JJ 40  Justify to 40 cols
 
  See also: BLOCK, EDIT
 "
