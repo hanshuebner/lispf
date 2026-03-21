@@ -176,6 +176,10 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
         ((string= cmd "UNDO")
          (undo session))
 
+        ;; REVERT - reload file from disk
+        ((or (string= cmd "REVERT") (string= cmd "REV"))
+         (revert session))
+
         ;; Bare number: jump to that line (shortcut for LOCATE)
         ((every #'digit-char-p cmd)
          (let ((n (parse-integer cmd)))
@@ -263,10 +267,4 @@ Both modes use case-insensitive matching. Returns a message string."
           (pop (editor-undo-stack session))
           (format nil "CHARS '~A' not found" from)))))
 
-(defun save-editor-file (session)
-  "Save the editor buffer to disk."
-  (let ((path (editor-filepath session)))
-    (when path
-      (write-file-lines path (editor-lines session))
-      (setf (editor-modified session) nil))))
 

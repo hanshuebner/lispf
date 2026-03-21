@@ -873,6 +873,31 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
 (define-test read-nonexistent-file ()
   (assert-nil (ed:read-file-lines #P"/nonexistent/path/file.txt")))
 
+(define-test revert-restores-file ()
+  (let ((path (merge-pathnames "lispf-revert-test.txt" (uiop:temporary-directory))))
+    (unwind-protect
+         (progn
+           (ed:write-file-lines path '("original" "content"))
+           (let ((s (make-session "original" "content")))
+             (setf (ed:editor-filepath s) path)
+             ;; Modify the buffer
+             (setf (nth 0 (ed:editor-lines s)) "changed")
+             (setf (ed:editor-modified s) t)
+             (ed:save-undo-state s)
+             ;; Revert
+             (let ((msg (ed:revert s)))
+               (assert-string-contains msg "Reverted")
+               (assert-lines s '("original" "content"))
+               (assert-nil (ed:editor-modified s) "Modified should be cleared")
+               (assert-nil (ed:editor-undo-stack s) "Undo stack should be cleared")
+               (assert-nil (ed:editor-pending-block s) "Pending should be cleared"))))
+      (ignore-errors (delete-file path)))))
+
+(define-test revert-no-file ()
+  (let ((s (make-session "hello")))
+    (let ((msg (ed:revert s)))
+      (assert-string-contains msg "No file"))))
+
 ;;; ============================================================
 ;;; Build screen data tests
 ;;; ============================================================
@@ -1273,6 +1298,8 @@ Returns T if the file was falsely marked as modified."
    ;; File I/O
    'file-round-trip
    'read-nonexistent-file
+   'revert-restores-file
+   'revert-no-file
    ;; Screen data
    'screen-data-shows-top-marker
    'screen-data-shows-file-lines

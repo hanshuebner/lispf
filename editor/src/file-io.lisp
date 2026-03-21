@@ -18,3 +18,23 @@
                           :if-does-not-exist :create)
     (dolist (line lines)
       (write-line line s))))
+
+(defun save-editor-file (session)
+  "Save the editor buffer to disk."
+  (let ((path (editor-filepath session)))
+    (when path
+      (write-file-lines path (editor-lines session))
+      (setf (editor-modified session) nil))))
+
+(defun revert (session)
+  "Reload the file from disk, discarding all changes and undo history.
+Returns a message string."
+  (let ((path (editor-filepath session)))
+    (if (and path (probe-file path))
+        (let ((lines (read-file-lines path)))
+          (setf (editor-lines session) (or lines (list "")))
+          (setf (editor-modified session) nil)
+          (setf (editor-undo-stack session) nil)
+          (setf (editor-pending-block session) nil)
+          (format nil "Reverted to ~A" (file-namestring path)))
+        "No file to revert to")))

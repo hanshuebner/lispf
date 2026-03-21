@@ -58,4 +58,6 @@
            #:parse-delimited-string
            #:handle-primary-command
            #:do-find
-           #:do-change))
+           #:do-change
+           #:save-editor-file
+           #:revert))
