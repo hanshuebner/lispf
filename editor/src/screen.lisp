@@ -181,10 +181,26 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
     (or help-sym :stay)))
 
 ;;; Enter key (no command) - process prefix commands and edits
+;;; If cursor is on a data line and no prefix commands were entered,
+;;; insert a new line after the cursor line (standard text entry behavior).
 (lspf:define-key-handler edit :enter ()
-  (let ((msg (process-editor-changes lspf:*session* lspf:*current-field-values*)))
+  (let* ((session lspf:*session*)
+         (msg (process-editor-changes session lspf:*current-field-values*)))
     (when msg
       (setf (gethash "errormsg" lspf:*current-field-values*) msg))
+    ;; Auto-insert new line when Enter is pressed on a data line
+    ;; with no prefix commands active
+    (unless msg
+      (let* ((cursor-row lspf:*cursor-row*)
+             (data-start-row 3)  ; display row where data fields begin
+             (data-row (- cursor-row data-start-row))
+             (top (editor-top-line session)))
+        (when (and (>= data-row 0) (< data-row +page-size+))
+          (let* ((virtual (+ top data-row))
+                 (real (virtual-to-real session virtual)))
+            (when real
+              (save-undo-state session)
+              (insert-lines-after session real (list "")))))))
     :stay))
 
 ;;; PF3 - Exit (with save prompt if modified)

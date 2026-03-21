@@ -1294,6 +1294,33 @@ Returns T if the file was falsely marked as modified."
              (assert-on-screen s "OPEN")))
       (ignore-errors (delete-file path)))))
 
+(define-test e2e-enter-inserts-line ()
+  ;; Open a 1-line file, move cursor to the data area, press Enter
+  ;; A new blank line should be inserted
+  (let ((path #P"/tmp/lispf-e2e-enter.txt"))
+    (unwind-protect
+         (progn
+           (ed:write-file-lines path '("hello"))
+           (with-test-app (s ed::*editor-app* :port 13279)
+             (type-text s (namestring path))
+             (press-enter s)
+             (assert-on-screen s "EDIT")
+             ;; Should show 1 line
+             (assert-screen-contains s "Size=1")
+             ;; Move cursor to the data area (row 4 = first file line after top marker)
+             ;; and press Enter
+             (move-cursor s 4 10)
+             (press-enter s)
+             ;; Should now have 2 lines
+             (assert-screen-contains s "Size=2")
+             (assert-screen-contains s "000002")
+             ;; Cancel to exit without saving
+             (move-cursor s 21 14)
+             (type-text s "CANCEL")
+             (press-enter s)
+             (assert-on-screen s "OPEN")))
+      (ignore-errors (delete-file path)))))
+
 (define-test e2e-open-file-and-see-edit-screen ()
   ;; Write a temp file to edit
   (let ((path #P"/tmp/lispf-e2e.txt"))
@@ -1473,5 +1500,6 @@ Returns T if the file was falsely marked as modified."
    'scroll-short-file-no-false-modify
    'scroll-file-with-trailing-spaces-no-false-modify
    ;; End-to-end (requires s3270)
+   'e2e-enter-inserts-line
    'e2e-scroll-full-file
    'e2e-open-file-and-see-edit-screen))
