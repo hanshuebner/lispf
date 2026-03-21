@@ -34,16 +34,25 @@ Returns the help screen symbol if a help screen exists, NIL otherwise."
 
 ;;; Default PF1 handler: show help
 
-(defmethod handle-key (screen-name (aid-key (eql :pf1)))
-  "Default PF1 handler: navigate to help screen for the current screen."
-  (let* ((help-sym (navigate-to-help screen-name
-                                      (application-package *application*))))
-    (if help-sym
-        help-sym
-        (progn
-          (setf (gethash "errormsg" *current-field-values*)
-                (msg "No help available"))
-          :stay))))
+;; Process commands on help screens: typing a topic name navigates there
+(defmethod handle-key :around (screen-name (aid-key (eql :enter)))
+  "On help screens, treat the command field as a help topic navigator.
+Empty Enter on help screens just stays (no error)."
+  (if (help-screen-p screen-name)
+      (let* ((command (string-trim '(#\Space)
+                                   (or (gethash "command" *current-field-values*) ""))))
+        (if (plusp (length command))
+            ;; Try to navigate to help-<topic>
+            (let ((topic-name (format nil "help-~A" (string-downcase command))))
+              (if (find-screen-file topic-name)
+                  (intern-screen-name topic-name
+                                      (application-package *application*))
+                  (progn
+                    (setf (gethash "errormsg" *current-field-values*)
+                          (msg "~A: help topic not found" command))
+                    :stay)))
+            :stay))
+      (call-next-method)))
 
 ;;; Help topics via command field on help screens
 
