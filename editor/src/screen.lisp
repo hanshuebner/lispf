@@ -173,6 +173,13 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
 ;;; Edit screen - key handlers
 ;;; ============================================================
 
+;;; PF1 - Help (process edits first, then navigate to help)
+(lspf:define-key-handler edit :pf1 ()
+  (process-editor-changes lspf:*session* lspf:*current-field-values*)
+  (let ((help-sym (lspf:navigate-to-help 'edit
+                    (lspf::application-package lspf:*application*))))
+    (or help-sym :stay)))
+
 ;;; Enter key (no command) - process prefix commands and edits
 (lspf:define-key-handler edit :enter ()
   (let ((msg (process-editor-changes lspf:*session* lspf:*current-field-values*)))

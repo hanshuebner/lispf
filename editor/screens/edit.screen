@@ -8,6 +8,7 @@
           (:from (2 7) :len 72 :name data :write t :repeat 17)
           (:from (19 1) :len 78 :name status :color blue))
  :keys ((:enter "")
+        (:pf1 "Help" :hidden t)
         (:pf3 "Exit")
         (:pf5 "RFind" :hidden t)
         (:pf6 "RChg" :hidden t)

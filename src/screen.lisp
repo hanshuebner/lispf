@@ -112,7 +112,21 @@
            ;; Field attribute overrides
            #:set-field-attribute
            ;; Title utilities
-           #:now-time-hhmm))
+           #:now-time-hhmm
+           ;; Help system
+           #:help-screen-name
+           #:find-help-screen
+           #:navigate-to-help
+           #:help-screen-p
+           ;; Internationalization
+           #:msg
+           #:load-message-catalog
+           #:set-message-catalog
+           #:get-message-catalog
+           #:count-format-directives
+           #:validate-translation
+           #:extract-messages-from-catalog
+           #:write-translation-template))
 
 (in-package #:lispf)
 

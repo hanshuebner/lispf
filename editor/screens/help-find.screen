@@ -1,0 +1,28 @@
+(:name "help-find"
+ :command t
+ :screen "
+ Find and Change Commands
+
+ FIND string
+   Search for text (case-insensitive). The view scrolls to show
+   the line where the text was found.
+   Examples:  FIND hello       FIND /hello world/       F 'text'
+
+ CHANGE /old/new/ [ALL]
+   Replace text. Without ALL, replaces the first occurrence from
+   the current position. With ALL, replaces every occurrence.
+   Examples:  CHANGE /foo/bar/       CHG /old/new/ ALL
+
+ DELIMITERS:
+   Use / ' or \" to delimit strings containing spaces.
+   Without delimiters, each word is a separate argument.
+
+ REPEAT FIND/CHANGE:
+   PF5    Repeat the last FIND (advances to next match)
+   PF6    Repeat the last CHANGE
+
+ See also: EDIT, KEYS
+"
+ :fields ()
+ :keys ((:pf3 "Return" :back t)
+        (:enter "Topic")))

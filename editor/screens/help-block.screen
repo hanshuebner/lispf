@@ -1,0 +1,32 @@
+(:name "help-block"
+ :command t
+ :screen "
+ Block Commands
+
+ Block commands operate on a range of lines. Mark the start and end
+ of the block by typing the same command on two different lines.
+
+ BLOCK COMMANDS:
+   DD     Delete block   - type DD on first and last line to delete
+   RR     Repeat block   - type RR on first and last line to duplicate
+   CC     Copy block     - type CC on both lines, then A or B on target
+   MM     Move block     - type MM on both lines, then A or B on target
+   JJ     Justify block  - type JJ on both lines to reflow text
+
+ SAME-SCREEN vs TWO-SCREEN:
+   If both markers and the target (for CC/MM) are on the same screen,
+   the command executes immediately when you press Enter.
+
+   If only one marker is visible, the command enters PENDING mode.
+   The status line shows which command is pending. Type the second
+   marker on another screen and press Enter to complete.
+
+ PENDING COMMANDS:
+   The pending marker is shown in the prefix area instead of the
+   line number. Use RESET in the command field to cancel.
+
+ See also: PREFIX, EDIT
+"
+ :fields ()
+ :keys ((:pf3 "Return" :back t)
+        (:enter "Topic")))

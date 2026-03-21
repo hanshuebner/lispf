@@ -1,0 +1,30 @@
+(:name "help-edit"
+ :command t
+ :screen "
+ LISPF Editor Help
+
+ The editor displays a file with line numbers on the left (prefix area)
+ and file content on the right (data area). You can edit the data area
+ directly - changes are applied when you press any key.
+
+ COMMANDS - Type in the command field at the bottom:
+   SAVE          Save file           FIND string   Search for text
+   FILE          Save and exit       CHANGE /a/b/  Replace text
+   CANCEL        Quit (no save)      LOCATE n      Go to line n
+   TOP / BOTTOM  Go to start/end     UNDO          Undo last change
+   UP n / DOWN n Scroll n lines      REVERT        Reload from disk
+   LEFT / RIGHT  Scroll columns      RESET         Clear pending
+
+ PREFIX COMMANDS - Type in the line number area:
+   I[n]    Insert n lines      C[n] / CC  Copy (need A/B target)
+   D[n]    Delete n lines      M[n] / MM  Move (need A/B target)
+   R[n]    Repeat n times      A / B      After/Before target
+   DD      Block delete         UC / LC    Upper/Lower case
+   RR      Block repeat         ( / )      Shift left/right
+   JJ      Justify block
+
+ Type a topic name for more help: PREFIX, BLOCK, FIND, KEYS
+"
+ :fields ()
+ :keys ((:pf3 "Return" :back t)
+        (:enter "Topic")))

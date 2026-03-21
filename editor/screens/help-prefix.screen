@@ -1,0 +1,30 @@
+(:name "help-prefix"
+ :command t
+ :screen "
+ Prefix Commands
+
+ Prefix commands are typed into the line number area (the 6-digit
+ number on the left of each line). The old number is overwritten.
+
+ SINGLE LINE COMMANDS (with optional count):
+   I[n]   Insert n blank lines after this line (default: 1)
+   D[n]   Delete n lines starting from this line (default: 1)
+   R[n]   Repeat (duplicate) this line n times (default: 1)
+   C[n]   Copy n lines - then type A or B on the target line
+   M[n]   Move n lines - then type A or B on the target line
+
+ TARGETS (for Copy and Move):
+   A      Place copied/moved lines After this line
+   B      Place copied/moved lines Before this line
+
+ CASE AND SHIFT:
+   UC[n]  Convert n lines to uppercase
+   LC[n]  Convert n lines to lowercase
+   ([n]   Shift line left by n columns
+   )[n]   Shift line right by n columns
+
+ See also: BLOCK, EDIT
+"
+ :fields ()
+ :keys ((:pf3 "Return" :back t)
+        (:enter "Topic")))

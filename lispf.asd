@@ -11,7 +11,8 @@
                (:file "field-binding")
                (:file "conditions")
                (:file "key-handler")
-               (:file "application"))
+               (:file "application")
+               (:file "help"))
   :depends-on (#:cl3270
                #:alexandria
                #:split-sequence

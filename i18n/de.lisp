@@ -10,4 +10,6 @@
  "Exit" "Ende"
  "~A: unknown command" "~A: unbekannter Befehl"
  "Login required" "Anmeldung erforderlich"
+ "No help available" "Keine Hilfe verfügbar"
+ "~A: help topic not found" "~A: Hilfethema nicht gefunden"
 )
