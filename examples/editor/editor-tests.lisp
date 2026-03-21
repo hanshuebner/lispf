@@ -512,6 +512,37 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
       (assert-lines s '("a" "b" "c" "d" "e")
                     "Single DD should not modify the file"))))
 
+(define-test round-trip-pending-survives-scroll ()
+  ;; DD on line "a" (screen row 1), then scroll down and back without editing.
+  ;; The pending command should survive because the "DD" shown in the prefix
+  ;; on re-display is NOT a new command from the user.
+  (let ((s (make-session "a" "b" "c" "d" "e" "f" "g" "h" "i" "j"
+                         "k" "l" "m" "n" "o" "p" "q" "r" "s" "t")))
+    (setf (ed:editor-top-line s) 0)
+    ;; User types DD on row 1 (line "a")
+    (let* ((context (make-context-with-prefix s '((1 . "dd"))))
+           (msg (ed::process-editor-changes s context)))
+      (assert-true (ed:editor-pending-block s) "DD should be pending")
+      (assert-string-contains msg "pending"))
+    ;; Scroll down: process-editor-changes with no user edits
+    (setf (ed:editor-top-line s) 16) ; scroll down
+    (let* ((context (make-context-with-prefix s nil)) ; no user prefix edits
+           (msg (ed::process-editor-changes s context)))
+      (declare (ignore msg))
+      (assert-true (ed:editor-pending-block s)
+                   "Pending should survive scroll down"))
+    ;; Scroll back up: the pending line's prefix shows "DD" from build-screen-data
+    ;; This must NOT be treated as a new DD command
+    (setf (ed:editor-top-line s) 0)
+    (let* ((context (make-context-with-prefix s nil))
+           (msg (ed::process-editor-changes s context)))
+      (declare (ignore msg))
+      (assert-true (ed:editor-pending-block s)
+                   "Pending should survive scroll back up")
+      (assert-lines s '("a" "b" "c" "d" "e" "f" "g" "h" "i" "j"
+                        "k" "l" "m" "n" "o" "p" "q" "r" "s" "t")
+                    "File should be unmodified"))))
+
 (define-test round-trip-dd-pair-deletes-block ()
   ;; With top=0: row 0=Top marker, row 1=line "a" (real 0), row 2=line "b", row 3=line "c"
   ;; DD on rows 2 and 3 should delete lines b and c (real 1-2)
@@ -1163,6 +1194,7 @@ Returns T if the file was falsely marked as modified."
    'exec-move-target-inside-source-rejected
    ;; Full round-trip block commands
    'round-trip-single-dd-enters-pending
+   'round-trip-pending-survives-scroll
    'round-trip-dd-pair-deletes-block
    'round-trip-cc-pair-with-a-copies
    ;; Pending/reset

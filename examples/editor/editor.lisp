@@ -962,6 +962,18 @@ suitable for the framework's repeat field split mechanism."
 ;;; Edit processing (called before any key action)
 ;;; ============================================================
 
+(defun pending-prefix-for-line-p (session real-index prefix-val)
+  "Return T if PREFIX-VAL matches the pending command marker that
+build-screen-data would have placed on this line. This means the user
+did not type a new command - the prefix is just our own marker echoed back."
+  (let ((pending (editor-pending-block session)))
+    (when (and pending real-index (= real-index (second pending)))
+      (let* ((cmd-name (string-upcase (symbol-name (first pending))))
+             (expected (format nil "~6A" cmd-name))
+             (trimmed (string-right-trim '(#\Space) prefix-val))
+             (expected-trimmed (string-right-trim '(#\Space) expected)))
+        (string-equal trimmed expected-trimmed)))))
+
 (defun process-data-edits (session prefix-lines data-lines)
   "Compare data fields with current buffer and apply edits.
 Also collects prefix commands. Returns a list of (real-index cmd count row)."
@@ -982,7 +994,8 @@ Also collects prefix commands. Returns a list of (real-index cmd count row)."
             (unless (string= (string-right-trim '(#\Space) data-val)
                              (string-right-trim '(#\Space) original))
               (apply-edit session real data-val))))
-        ;; Parse prefix commands
+        ;; Parse prefix commands (skip if it's our own pending marker echoed back)
+        (unless (pending-prefix-for-line-p session real prefix-val)
         (multiple-value-bind (cmd count) (parse-prefix-command prefix-val)
           (when cmd
             (cond
@@ -1001,7 +1014,7 @@ Also collects prefix commands. Returns a list of (real-index cmd count row)."
               ;; Empty row past EOF
               (t
                (when (member cmd '(:a :b))
-                 (push (list (line-count session) cmd count i) commands))))))))
+                 (push (list (line-count session) cmd count i) commands)))))))))
     (nreverse commands)))
 
 (defun process-editor-changes (session context)
