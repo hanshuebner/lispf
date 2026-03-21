@@ -60,7 +60,12 @@ Returns (values command count) or nil."
         ((and (>= (length trimmed) 2) (string= trimmed "RR" :end1 2))
          (values :rr 0))
         ((and (>= (length trimmed) 2) (string= trimmed "JJ" :end1 2))
-         (let ((width (parse-prefix-count trimmed 2)))
+         (let* ((rest (subseq trimmed 2))
+                (num-end (position-if-not #'digit-char-p rest))
+                (digits (subseq rest 0 num-end))
+                (width (if (plusp (length digits))
+                           (parse-integer digits)
+                           0)))
            (values :jj width)))
         ;; UC/LC with optional count
         ((and (>= (length trimmed) 2) (string= trimmed "UC" :end1 2))
@@ -99,9 +104,12 @@ Returns (values command count) or nil."
 
 (defun justify-lines (lines width)
   "Justify/reflow a list of lines to fit within WIDTH columns.
-Preserves paragraph breaks (empty lines). Returns a new list of lines."
+Preserves paragraph breaks (empty lines). Words longer than WIDTH
+are kept intact on their own line (not broken).
+Returns (values new-lines long-word-count)."
   (let ((result '())
-        (current-paragraph '()))
+        (current-paragraph '())
+        (long-words 0))
     (flet ((flush-paragraph ()
              (when current-paragraph
                (let* ((words (loop for line in (nreverse current-paragraph)
@@ -110,6 +118,8 @@ Preserves paragraph breaks (empty lines). Returns a new list of lines."
                       (output-lines '())
                       (current-line ""))
                  (dolist (word words)
+                   (when (> (length word) width)
+                     (incf long-words))
                    (cond
                      ;; First word on line
                      ((zerop (length current-line))
@@ -133,7 +143,7 @@ Preserves paragraph breaks (empty lines). Returns a new list of lines."
               (push "" result))
             (push line current-paragraph)))
       (flush-paragraph))
-    (nreverse result)))
+    (values (nreverse result) long-words)))
 
 (defun find-block-markers (commands cmd-type)
   "Find all entries in COMMANDS with command CMD-TYPE. Returns a list."
@@ -213,16 +223,22 @@ batch, they are executed immediately without pending."
                              navigate-to start
                              result-message (format nil "~D line~:P duplicated" bcount))))
                 (:jj (let* ((marker-width (third first-marker))
-                            (jj-width (if (and marker-width (> marker-width 1))
+                            (jj-width (if (and marker-width (plusp marker-width))
                                           marker-width +data-width+))
-                            (old-lines (extract-line-range session start bcount))
-                            (new-lines (justify-lines old-lines jj-width)))
-                       (delete-line-range session start bcount)
-                       (insert-lines-after session (1- start) new-lines)
-                       (setf did-modify t
-                             navigate-to start
-                             result-message (format nil "~D line~:P justified to ~D at width ~D"
-                                                    bcount (length new-lines) jj-width))))
+                            (old-lines (extract-line-range session start bcount)))
+                       (multiple-value-bind (new-lines long-words)
+                           (justify-lines old-lines jj-width)
+                         (delete-line-range session start bcount)
+                         (insert-lines-after session (1- start) new-lines)
+                         (setf did-modify t
+                               navigate-to start
+                               result-message
+                               (if (plusp long-words)
+                                   (format nil "Justified at width ~D (~D word~:P exceed~[s~;~:;~] width)"
+                                           jj-width long-words long-words)
+                                   (format nil "~D line~:P justified to ~D at width ~D"
+                                           bcount (length new-lines) jj-width))))))
+
                 ((:cc :mm)
                  ;; Check for A/B target in same batch
                  (let ((target (find-target commands)))
@@ -285,19 +301,24 @@ batch, they are executed immediately without pending."
                    (:jj (let* ((pending-width (third pending))
                                (marker-width (third marker))
                                (jj-width (cond
-                                           ((and pending-width (> pending-width 1))
+                                           ((and pending-width (plusp pending-width))
                                             pending-width)
-                                           ((and marker-width (> marker-width 1))
+                                           ((and marker-width (plusp marker-width))
                                             marker-width)
                                            (t +data-width+)))
-                               (old-lines (extract-line-range session start bcount))
-                               (new-lines (justify-lines old-lines jj-width)))
-                          (delete-line-range session start bcount)
-                          (insert-lines-after session (1- start) new-lines)
-                          (setf did-modify t
-                                navigate-to start
-                                result-message (format nil "~D line~:P justified to ~D at width ~D"
-                                                       bcount (length new-lines) jj-width))))
+                               (old-lines (extract-line-range session start bcount)))
+                          (multiple-value-bind (new-lines long-words)
+                              (justify-lines old-lines jj-width)
+                            (delete-line-range session start bcount)
+                            (insert-lines-after session (1- start) new-lines)
+                            (setf did-modify t
+                                  navigate-to start
+                                  result-message
+                                  (if (plusp long-words)
+                                      (format nil "Justified at width ~D (~D word~:P exceed~[s~;~:;~] width)"
+                                              jj-width long-words long-words)
+                                      (format nil "~D line~:P justified to ~D at width ~D"
+                                              bcount (length new-lines) jj-width))))))
                    ((:cc :mm)
                     ;; Check for A/B target in same batch
                     (let ((target (find-target commands)))

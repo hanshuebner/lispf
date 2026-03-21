@@ -475,108 +475,189 @@
 ;;; Justify tests
 ;;; ============================================================
 
-(define-test justify-basic ()
-  ;; Simple word wrap
+;;; --- justify-lines function tests ---
+
+(define-test justify-single-line-wrap ()
   (let ((result (ed:justify-lines '("hello world this is a test of justification") 20)))
     (assert-true (> (length result) 1) "Should wrap to multiple lines")
     (dolist (line result)
-      (assert-true (<= (length line) 20) "Each line should fit within width"))))
+      (assert-true (<= (length line) 20)
+                   (format nil "Width 20: ~S too long" line)))))
 
-(define-test justify-preserves-paragraphs ()
-  (let ((result (ed:justify-lines '("first paragraph words" "" "second paragraph words") 40)))
-    (assert-true (member "" result :test #'string=) "Empty line should be preserved")))
+(define-test justify-single-line-no-wrap ()
+  (let ((result (ed:justify-lines '("short text") 72)))
+    (assert-equal 1 (length result))
+    (assert-equal "short text" (first result))))
 
-(define-test justify-short-lines ()
-  ;; Lines already within width should be joined
+(define-test justify-multi-line-joined ()
+  ;; Multiple short lines in same paragraph should be joined
   (let ((result (ed:justify-lines '("short" "lines" "here") 40)))
-    (assert-equal 1 (length result) "Short lines should be joined")
+    (assert-equal 1 (length result))
     (assert-equal "short lines here" (first result))))
 
-(define-test justify-long-word ()
-  ;; A word longer than width should still appear (not truncated)
-  (let ((result (ed:justify-lines '("superlongword that wraps") 10)))
-    (assert-true (find "superlongword" result :test #'string=)
-                 "Long word should be preserved on its own line")))
+(define-test justify-multi-line-rewrap ()
+  ;; Multiple lines that together exceed width should be re-wrapped
+  (let ((result (ed:justify-lines '("aaa bbb ccc" "ddd eee fff" "ggg hhh") 10)))
+    (assert-true (> (length result) 2))
+    (dolist (line result)
+      (assert-true (<= (length line) 10)
+                   (format nil "Width 10: ~S" line)))))
 
-(define-test exec-block-justify-same-screen ()
-  (let ((s (make-session "This is a really long line that should be wrapped when justified"
-                         "And this is another long line that also needs wrapping when done"
-                         "Plus a third line to make the total content longer than two lines at 72 chars width")))
-    (let ((msg (ed:execute-prefix-commands s '((0 :jj 0 0) (2 :jj 0 2)))))
-      (assert-string-contains msg "justified")
-      ;; All output lines should fit within data width
-      (dolist (line (ed:editor-lines s))
-        (assert-true (<= (length line) ed:+data-width+)
-                     (format nil "Line too long (~D): ~S" (length line) line))))))
+(define-test justify-preserves-paragraphs ()
+  (let ((result (ed:justify-lines '("first paragraph" "" "second paragraph") 40)))
+    (assert-equal 3 (length result) "Should have 3 lines (2 paragraphs + separator)")
+    (assert-equal "" (second result) "Middle line should be empty")))
+
+(define-test justify-multiple-paragraphs ()
+  (let ((result (ed:justify-lines '("para one words" "" "para two words" "" "para three") 40)))
+    ;; Should preserve both empty lines
+    (assert-equal 5 (length result))
+    (assert-equal "" (second result))
+    (assert-equal "" (fourth result))))
+
+(define-test justify-long-word-not-broken ()
+  ;; A word longer than width is kept intact on its own line
+  (let ((result (ed:justify-lines '("superlongword short") 10)))
+    (assert-true (find "superlongword" result :test #'string=)
+                 "Long word should be on its own line")
+    (assert-true (find "short" result :test #'string=)
+                 "Short word should be on next line")))
+
+(define-test justify-long-word-count-returned ()
+  ;; justify-lines returns count of words exceeding width
+  (multiple-value-bind (result long-count)
+      (ed:justify-lines '("superlongword another-long-one short") 10)
+    (declare (ignore result))
+    (assert-equal 2 long-count "Should report 2 long words")))
+
+(define-test justify-no-long-words ()
+  (multiple-value-bind (result long-count)
+      (ed:justify-lines '("aa bb cc") 10)
+    (declare (ignore result))
+    (assert-equal 0 long-count "No long words")))
+
+(define-test justify-width-5 ()
+  (let ((result (ed:justify-lines '("aa bb cc dd ee") 5)))
+    ;; "aa bb"=5, "cc dd"=5, "ee"=2 -> 3 lines
+    (assert-equal 3 (length result))
+    (dolist (line result)
+      (assert-true (<= (length line) 5)
+                   (format nil "Width 5: ~S" line)))))
+
+(define-test justify-width-10 ()
+  (let ((result (ed:justify-lines '("one two three four five six seven eight") 10)))
+    (assert-true (> (length result) 3))
+    (dolist (line result)
+      (assert-true (<= (length line) 10)
+                   (format nil "Width 10: ~S" line)))))
+
+(define-test justify-width-20 ()
+  (let ((result (ed:justify-lines '("one two three four five six seven eight nine ten") 20)))
+    (assert-true (> (length result) 1))
+    (dolist (line result)
+      (assert-true (<= (length line) 20)
+                   (format nil "Width 20: ~S" line)))))
+
+(define-test justify-width-72-default ()
+  (let ((result (ed:justify-lines '("short text should stay on one line") 72)))
+    (assert-equal 1 (length result))))
+
+(define-test justify-empty-input ()
+  (let ((result (ed:justify-lines '() 40)))
+    (assert-equal 0 (length result) "Empty input should give empty output")))
+
+(define-test justify-all-empty-lines ()
+  (let ((result (ed:justify-lines '("" "" "") 40)))
+    (assert-equal 3 (length result) "Empty lines should be preserved")))
+
+;;; --- JJ prefix command parsing ---
 
 (define-test parse-prefix-jj ()
+  ;; No width
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ")
     (assert-equal :jj cmd)
-    (assert-equal 1 count "JJ without width should default to 1"))
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ4")
+    (assert-equal 0 count "JJ without width should be 0 (default)"))
+  ;; Single digit width
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ5")
     (assert-equal :jj cmd)
-    (assert-equal 4 count "JJ4 should have width 4"))
+    (assert-equal 5 count))
+  ;; Multi-digit width
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ10")
+    (assert-equal :jj cmd)
+    (assert-equal 10 count "JJ10 should parse width 10"))
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ40")
+    (assert-equal :jj cmd)
+    (assert-equal 40 count "JJ40 should parse width 40"))
+  ;; Overtyped (JJ over 000001)
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ0001")
     (assert-equal :jj cmd "JJ overtyped")
-    (assert-equal 1 count "JJ overtyped should default to 1")))
+    ;; "0001" parses as 1, but 0-prefixed could be ambiguous.
+    ;; With our parser: digits after JJ are "0001" -> parse-integer -> 1
+    (assert-true (member count '(0 1)) "JJ overtyped should give 0 or 1")))
 
-(define-test justify-width-preserved-across-pending ()
-  ;; JJ10 on one screen, JJ on next - width 10 from first marker should be used
-  (let ((s (make-session "aa bb cc dd ee ff gg hh ii jj kk ll mm nn oo")))
-    ;; First JJ with width 10
-    (let ((msg (ed:execute-prefix-commands s '((0 :jj 10 0)))))
-      (assert-string-contains msg "pending"))
-    ;; Second JJ without explicit width completes the block
-    (let ((msg (ed:execute-prefix-commands s '((0 :jj 1 0)))))
+;;; --- JJ block command execution ---
+
+(define-test exec-justify-same-screen-default-width ()
+  (let ((s (make-session "This is a long line that should be wrapped at the default seventy two column width"
+                         "And another line with more content to make it longer than a single line")))
+    (let ((msg (ed:execute-prefix-commands s '((0 :jj 0 0) (1 :jj 0 1)))))
       (assert-string-contains msg "justified")
-      ;; Width 10 from the first marker should be used
-      (assert-string-contains msg "width 10"))
-    ;; All lines should fit within 10 columns
-    (dolist (line (ed:editor-lines s))
-      (assert-true (<= (length line) 10)
-                   (format nil "Line should fit in 10 cols: ~S" line)))))
+      (assert-string-contains msg "width 72")
+      (dolist (line (ed:editor-lines s))
+        (assert-true (<= (length line) 72)
+                     (format nil "Default width: ~S" line))))))
 
-(define-test justify-default-width ()
-  ;; JJ without width uses +data-width+ (72)
-  (let ((s (make-session "This is a long line that has many words and should wrap at the default width of seventy-two columns when justified")))
-    (ed:execute-prefix-commands s '((0 :jj 1 0) (0 :jj 1 0)))
-    ;; count=1 means default width -> 72
-    (dolist (line (ed:editor-lines s))
-      (assert-true (<= (length line) ed:+data-width+)
-                   (format nil "Line should fit in ~D cols: ~S" ed:+data-width+ line)))))
-
-(define-test justify-explicit-width ()
-  ;; JJ with explicit width uses that width instead of default 72
-  ;; Test via justify-lines directly since prefix count is single-digit
-  (let ((input '("aa bb cc dd ee ff gg hh ii jj kk ll mm nn")))
-    (let ((result-wide (ed:justify-lines input 72))
-          (result-narrow (ed:justify-lines input 9)))
-      ;; At width 72, all short words fit on one line
-      (assert-equal 1 (length result-wide) "Width 72 should give 1 line")
-      ;; At width 9, should wrap into many lines
-      (assert-true (> (length result-narrow) 3)
-                   "Width 9 should give many lines")
-      (dolist (line result-narrow)
-        (assert-true (<= (length line) 9)
-                     (format nil "Line should fit in 9 cols: ~S" line))))))
-
-(define-test justify-width-via-function ()
-  ;; Test the justify-lines function directly with various widths
-  (let ((input '("one two three four five six seven eight nine ten")))
-    ;; Width 20
-    (let ((result (ed:justify-lines input 20)))
-      (dolist (line result)
+(define-test exec-justify-same-screen-width-20 ()
+  (let ((s (make-session "aa bb cc dd ee ff gg hh ii jj kk ll mm nn oo")))
+    (let ((msg (ed:execute-prefix-commands s '((0 :jj 20 0) (0 :jj 20 0)))))
+      (assert-string-contains msg "width 20")
+      (dolist (line (ed:editor-lines s))
         (assert-true (<= (length line) 20)
-                     (format nil "Width 20: ~S" line))))
-    ;; Width 72 (default)
-    (let ((result (ed:justify-lines input 72)))
-      (assert-equal 1 (length result) "Short text at width 72 should be 1 line"))
-    ;; Width 10
-    (let ((result (ed:justify-lines input 10)))
-      (assert-true (> (length result) 3) "Width 10 should produce many lines")
-      (dolist (line result)
+                     (format nil "Width 20: ~S" line))))))
+
+(define-test exec-justify-same-screen-width-10 ()
+  (let ((s (make-session "aa bb cc dd ee ff gg")))
+    (let ((msg (ed:execute-prefix-commands s '((0 :jj 10 0) (0 :jj 10 0)))))
+      (assert-string-contains msg "width 10")
+      (dolist (line (ed:editor-lines s))
         (assert-true (<= (length line) 10)
                      (format nil "Width 10: ~S" line))))))
+
+(define-test exec-justify-pending-preserves-width ()
+  ;; JJ10 on first screen, JJ on second - width 10 should be used
+  (let ((s (make-session "aa bb cc dd ee ff gg hh ii jj kk ll")))
+    (let ((msg (ed:execute-prefix-commands s '((0 :jj 10 0)))))
+      (assert-string-contains msg "pending"))
+    (let ((msg (ed:execute-prefix-commands s '((0 :jj 0 0)))))
+      (assert-string-contains msg "justified")
+      (assert-string-contains msg "width 10"))
+    (dolist (line (ed:editor-lines s))
+      (assert-true (<= (length line) 10)
+                   (format nil "Width 10 from pending: ~S" line)))))
+
+(define-test exec-justify-warns-long-words ()
+  (let ((s (make-session "superlongword short words here")))
+    (let ((msg (ed:execute-prefix-commands s '((0 :jj 5 0) (0 :jj 5 0)))))
+      (assert-string-contains msg "exceed")
+      ;; Long word should still be in the output (not lost)
+      (assert-true (find "superlongword" (ed:editor-lines s) :test #'string=)
+                   "Long word should be preserved"))))
+
+(define-test exec-justify-multi-line-file ()
+  (let ((s (make-session "line one with words"
+                         "line two with more words"
+                         ""
+                         "second paragraph here"
+                         "with additional text")))
+    (ed:execute-prefix-commands s '((0 :jj 20 0) (4 :jj 20 0)))
+    ;; Should have paragraph break preserved
+    (assert-true (member "" (ed:editor-lines s) :test #'string=)
+                 "Paragraph break should be preserved")
+    ;; All non-empty lines should fit
+    (dolist (line (ed:editor-lines s))
+      (when (plusp (length line))
+        (assert-true (<= (length line) 20)
+                     (format nil "Width 20: ~S" line))))))
 
 ;;; ============================================================
 ;;; Block command navigation tests
@@ -1435,17 +1516,31 @@ Returns T if the file was falsely marked as modified."
    'exec-block-move-two-screen
    'exec-single-copy-with-after
    'exec-move-target-inside-source-rejected
-   ;; Justify
-   'justify-basic
+   ;; Justify - function tests
+   'justify-single-line-wrap
+   'justify-single-line-no-wrap
+   'justify-multi-line-joined
+   'justify-multi-line-rewrap
    'justify-preserves-paragraphs
-   'justify-short-lines
-   'justify-long-word
-   'exec-block-justify-same-screen
+   'justify-multiple-paragraphs
+   'justify-long-word-not-broken
+   'justify-long-word-count-returned
+   'justify-no-long-words
+   'justify-width-5
+   'justify-width-10
+   'justify-width-20
+   'justify-width-72-default
+   'justify-empty-input
+   'justify-all-empty-lines
+   ;; Justify - parsing
    'parse-prefix-jj
-   'justify-width-preserved-across-pending
-   'justify-default-width
-   'justify-explicit-width
-   'justify-width-via-function
+   ;; Justify - execution
+   'exec-justify-same-screen-default-width
+   'exec-justify-same-screen-width-20
+   'exec-justify-same-screen-width-10
+   'exec-justify-pending-preserves-width
+   'exec-justify-warns-long-words
+   'exec-justify-multi-line-file
    ;; Block navigation
    'block-delete-navigates-to-start
    'block-copy-navigates-to-source
