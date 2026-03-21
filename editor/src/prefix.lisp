@@ -252,9 +252,10 @@ batch, they are executed immediately without pending."
           (let* ((marker (first markers))
                  (real-index (first marker)))
             (cond
-              ;; No pending block - start one
+              ;; No pending block - start one (store count for JJ width)
               ((null pending)
-               (setf (editor-pending-block session) (list block-cmd real-index))
+               (setf (editor-pending-block session)
+                     (list block-cmd real-index (third marker)))
                (unless did-modify (pop (editor-undo-stack session)))
                (return-from execute-prefix-commands
                  (format nil "~A pending - mark end line"
@@ -281,9 +282,14 @@ batch, they are executed immediately without pending."
                           (setf did-modify t
                                 navigate-to start
                                 result-message (format nil "~D line~:P duplicated" bcount))))
-                   (:jj (let* ((marker-width (third marker))
-                               (jj-width (if (and marker-width (> marker-width 1))
-                                              marker-width +data-width+))
+                   (:jj (let* ((pending-width (third pending))
+                               (marker-width (third marker))
+                               (jj-width (cond
+                                           ((and pending-width (> pending-width 1))
+                                            pending-width)
+                                           ((and marker-width (> marker-width 1))
+                                            marker-width)
+                                           (t +data-width+)))
                                (old-lines (extract-line-range session start bcount))
                                (new-lines (justify-lines old-lines jj-width)))
                           (delete-line-range session start bcount)

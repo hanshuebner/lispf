@@ -520,6 +520,22 @@
     (assert-equal :jj cmd "JJ overtyped")
     (assert-equal 1 count "JJ overtyped should default to 1")))
 
+(define-test justify-width-preserved-across-pending ()
+  ;; JJ10 on one screen, JJ on next - width 10 from first marker should be used
+  (let ((s (make-session "aa bb cc dd ee ff gg hh ii jj kk ll mm nn oo")))
+    ;; First JJ with width 10
+    (let ((msg (ed:execute-prefix-commands s '((0 :jj 10 0)))))
+      (assert-string-contains msg "pending"))
+    ;; Second JJ without explicit width completes the block
+    (let ((msg (ed:execute-prefix-commands s '((0 :jj 1 0)))))
+      (assert-string-contains msg "justified")
+      ;; Width 10 from the first marker should be used
+      (assert-string-contains msg "width 10"))
+    ;; All lines should fit within 10 columns
+    (dolist (line (ed:editor-lines s))
+      (assert-true (<= (length line) 10)
+                   (format nil "Line should fit in 10 cols: ~S" line)))))
+
 (define-test justify-default-width ()
   ;; JJ without width uses +data-width+ (72)
   (let ((s (make-session "This is a long line that has many words and should wrap at the default width of seventy-two columns when justified")))
@@ -1426,6 +1442,7 @@ Returns T if the file was falsely marked as modified."
    'justify-long-word
    'exec-block-justify-same-screen
    'parse-prefix-jj
+   'justify-width-preserved-across-pending
    'justify-default-width
    'justify-explicit-width
    'justify-width-via-function
