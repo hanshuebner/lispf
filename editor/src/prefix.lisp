@@ -346,10 +346,20 @@ batch, they are executed immediately without pending."
             (let ((adjusted (+ real-index offset)))
               (case cmd
                 (:i
-                 (let ((new-lines (make-list count :initial-element "")))
+                 (let* ((new-lines (make-list count :initial-element ""))
+                        (first-new-real (1+ adjusted)))
                    (insert-lines-after session adjusted new-lines)
                    (incf offset count)
-                   (setf did-modify t)))
+                   (setf did-modify t
+                         navigate-to (max 0 first-new-real))
+                   ;; Place cursor on the first new line
+                   (let* ((virtual (1+ first-new-real))
+                          (top (editor-top-line session))
+                          (data-row (- virtual top))
+                          (data-start-row 3))
+                     (when (and (>= data-row 0) (< data-row +page-size+))
+                       (setf (editor-next-cursor session)
+                             (cons (+ data-start-row data-row) 7))))))
                 (:d
                  (let ((actual-count (min count (- (line-count session) adjusted))))
                    (when (plusp actual-count)
