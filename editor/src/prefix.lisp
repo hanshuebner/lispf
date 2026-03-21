@@ -351,8 +351,8 @@ batch, they are executed immediately without pending."
                    (insert-lines-after session adjusted new-lines)
                    (incf offset count)
                    (setf did-modify t
-                         navigate-to (max 0 first-new-real))
-                   ;; Place cursor on the first new line
+                         result-message (format nil "~D line~:P inserted" count))
+                   ;; Place cursor on the first new line (don't scroll)
                    (let* ((virtual (1+ first-new-real))
                           (top (editor-top-line session))
                           (data-row (- virtual top))
