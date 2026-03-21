@@ -337,6 +337,12 @@
 ;;; Prefix command execution tests
 ;;; ============================================================
 
+(define-test exec-insert-at-top-of-data ()
+  ;; I on Top-of-Data marker (real-index -1) should insert at beginning
+  (let ((s (make-session "a" "b" "c")))
+    (ed:execute-prefix-commands s '((-1 :i 1 0)))
+    (assert-lines s '("" "a" "b" "c"))))
+
 (define-test exec-insert ()
   (let ((s (make-session "a" "b" "c")))
     (ed:execute-prefix-commands s '((0 :i 2 0)))
@@ -1549,6 +1555,7 @@ Returns T if the file was falsely marked as modified."
    'parse-prefix-with-spaces
    'parse-prefix-overtyped-line-number
    ;; Prefix execution
+   'exec-insert-at-top-of-data
    'exec-insert
    'exec-delete
    'exec-delete-multiple

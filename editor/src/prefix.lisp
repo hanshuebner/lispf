@@ -341,7 +341,8 @@ batch, they are executed immediately without pending."
       (dolist (cmd-entry commands)
         (destructuring-bind (real-index cmd count screen-row) cmd-entry
           (declare (ignore screen-row))
-          (when (and (>= real-index 0) (< real-index (+ (line-count session) offset)))
+          (when (or (and (>= real-index 0) (< real-index (+ (line-count session) offset)))
+                    (and (= real-index -1) (eq cmd :i)))  ; allow I on Top-of-Data
             (let ((adjusted (+ real-index offset)))
               (case cmd
                 (:i
