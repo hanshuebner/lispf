@@ -51,14 +51,6 @@ Returns the help screen symbol if a help screen exists, NIL otherwise."
                 (msg "No help available"))
           :stay))))
 
-;;; Help screen Enter handler: empty Enter just stays
-
-(defmethod handle-key :around (screen-name (aid-key (eql :enter)))
-  "On help screens, empty Enter stays instead of erroring."
-  (if (help-screen-p screen-name)
-      :stay
-      (call-next-method)))
-
 ;;; Help topic navigation via command field
 
 (defmethod process-screen-command :around (screen-name (command string))
