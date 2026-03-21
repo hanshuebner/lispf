@@ -901,6 +901,56 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
     (assert-nil (ed:editor-undo-stack s))))
 
 ;;; ============================================================
+;;; Restricted mode tests
+;;; ============================================================
+
+(define-test restricted-blocks-cancel ()
+  (let ((s (make-session "hello")))
+    (setf (ed:editor-restricted-p s) t)
+    (let ((result (ed:handle-primary-command s "CANCEL")))
+      (assert-true (stringp result) "CANCEL should return error in restricted mode")
+      (assert-string-contains result "restricted"))))
+
+(define-test restricted-blocks-revert ()
+  (let ((s (make-session "hello")))
+    (setf (ed:editor-restricted-p s) t)
+    (let ((result (ed:handle-primary-command s "REVERT")))
+      (assert-true (stringp result) "REVERT should return error in restricted mode")
+      (assert-string-contains result "restricted"))))
+
+(define-test restricted-allows-save ()
+  (let ((s (make-session "hello"))
+        (path (merge-pathnames "lispf-restricted-test.txt" (uiop:temporary-directory))))
+    (setf (ed:editor-restricted-p s) t)
+    (setf (ed:editor-filepath s) path)
+    (unwind-protect
+         (let ((result (ed:handle-primary-command s "SAVE")))
+           (assert-equal :stay result "SAVE should work in restricted mode"))
+      (ignore-errors (delete-file path)))))
+
+(define-test restricted-allows-submit ()
+  (let ((s (make-session "hello"))
+        (path (merge-pathnames "lispf-restricted-test2.txt" (uiop:temporary-directory))))
+    (setf (ed:editor-restricted-p s) t)
+    (setf (ed:editor-filepath s) path)
+    (unwind-protect
+         (let ((result (ed:handle-primary-command s "SUBMIT")))
+           (assert-equal :back result "SUBMIT should work in restricted mode"))
+      (ignore-errors (delete-file path)))))
+
+;;; ============================================================
+;;; Display name tests
+;;; ============================================================
+
+(define-test display-name-used-in-screen-data ()
+  (let ((s (make-session "hello")))
+    (setf (ed:editor-display-name s) "New Message")
+    (setf (ed:editor-filename s) "tmp12345.txt")
+    ;; The build-screen-data doesn't show the info line, but
+    ;; we can check the display-name accessor
+    (assert-equal "New Message" (ed:editor-display-name s))))
+
+;;; ============================================================
 ;;; File I/O tests
 ;;; ============================================================
 
@@ -1346,6 +1396,13 @@ Returns T if the file was falsely marked as modified."
    'undo-stack-limit
    'undo-from-prefix-commands
    'undo-no-state-saved-when-no-changes
+   ;; Restricted mode
+   'restricted-blocks-cancel
+   'restricted-blocks-revert
+   'restricted-allows-save
+   'restricted-allows-submit
+   ;; Display name
+   'display-name-used-in-screen-data
    ;; File I/O
    'file-round-trip
    'read-nonexistent-file

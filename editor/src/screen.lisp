@@ -132,9 +132,11 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
     (multiple-value-bind (prefix-str data-str) (build-screen-data session)
       (setf prefix prefix-str)
       (setf data data-str))
-    ;; Info line
+    ;; Info line (use display-name if set, otherwise filename)
     (setf info (format nil "EDIT  ~A~30TCol ~5,'0D ~5,'0D  Size=~D  Line=~D  ~A"
-                       (or (editor-filename session) "(new)")
+                       (or (editor-display-name session)
+                           (editor-filename session)
+                           "(new)")
                        col-start col-end
                        (line-count session)
                        (max 1 (1+ (max 0 (1- top))))

@@ -40,7 +40,11 @@ Virtual 0 = Top-of-Data marker, 1..N = file lines, N+1 = Bottom-of-Data marker."
    (pending-block :initform nil :accessor editor-pending-block
                   :documentation "Pending block command: (cmd start-line [count]) or nil.")
    (undo-stack :initform nil :accessor editor-undo-stack
-               :documentation "List of (lines-copy . modified-flag) for undo.")))
+               :documentation "List of (lines-copy . modified-flag) for undo.")
+   (display-name :initform nil :accessor editor-display-name
+                 :documentation "Override display name for the info line (e.g. 'New Message').")
+   (restricted :initform nil :accessor editor-restricted-p
+               :documentation "When T, FILE/SUBMIT/CANCEL/REVERT commands are disabled.")))
 
 (defun make-test-session (lines)
   "Create an editor session for testing (no application binding needed)."

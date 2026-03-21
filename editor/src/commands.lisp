@@ -79,8 +79,11 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
 
         ;; CANCEL / CAN
         ((or (string= cmd "CANCEL") (string= cmd "CAN"))
-         (setf (editor-modified session) nil)
-         :back)
+         (if (editor-restricted-p session)
+             "CANCEL not available in restricted mode"
+             (progn
+               (setf (editor-modified session) nil)
+               :back)))
 
         ;; SUBMIT / FILE (save and exit)
         ((or (string= cmd "SUBMIT") (string= cmd "FILE"))
@@ -178,7 +181,9 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
 
         ;; REVERT - reload file from disk
         ((or (string= cmd "REVERT") (string= cmd "REV"))
-         (revert session))
+         (if (editor-restricted-p session)
+             "REVERT not available in restricted mode"
+             (revert session)))
 
         ;; Bare number: jump to that line (shortcut for LOCATE)
         ((every #'digit-char-p cmd)

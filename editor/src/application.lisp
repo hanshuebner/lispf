@@ -75,15 +75,19 @@
 ;;; Subapplication API
 ;;; ============================================================
 
-(defun edit-file (path &key display-name)
+(defun edit-file (path &key display-name restricted)
   "Invoke the editor on PATH as a subapplication.
 Call from a key handler body. Returns the screen symbol to navigate to.
 The calling application's session must extend editor-session.
-DISPLAY-NAME overrides the filename shown in the info line.
+
+DISPLAY-NAME overrides the filename shown in the info line (e.g. 'New Message').
+RESTRICTED when T disables CANCEL and REVERT commands (for controlled editing).
 
 Example:
   (define-key-handler my-screen :pf4 (filename)
-    (lispf-editor:edit-file (pathname filename)))
+    (lispf-editor:edit-file (pathname filename)
+                            :display-name \"New Message\"
+                            :restricted t))
 
 The calling application must register the editor screens at startup:
   (lspf:register-screen-directory
@@ -92,8 +96,9 @@ The calling application must register the editor screens at startup:
   (let ((session lspf:*session*))
     (let ((lines (read-file-lines path)))
       (setf (editor-filepath session) path)
-      (setf (editor-filename session)
-            (or display-name (file-namestring path)))
+      (setf (editor-filename session) (file-namestring path))
+      (setf (editor-display-name session) display-name)
+      (setf (editor-restricted-p session) restricted)
       (setf (editor-lines session) (or lines (list "")))
       (setf (editor-modified session) nil)
       (setf (editor-top-line session) 0)

@@ -29,6 +29,8 @@
            #:editor-last-find-line
            #:editor-pending-block
            #:editor-undo-stack
+           #:editor-display-name
+           #:editor-restricted-p
            #:make-test-session
 
            ;; Buffer operations
