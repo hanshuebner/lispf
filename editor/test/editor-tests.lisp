@@ -511,9 +511,56 @@
 
 (define-test parse-prefix-jj ()
   (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ")
-    (assert-equal :jj cmd))
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "JJ0001")
-    (assert-equal :jj cmd "JJ overtyped")))
+    (assert-equal :jj cmd)
+    (assert-equal 1 count "JJ without width should default to 1"))
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ4")
+    (assert-equal :jj cmd)
+    (assert-equal 4 count "JJ4 should have width 4"))
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ0001")
+    (assert-equal :jj cmd "JJ overtyped")
+    (assert-equal 1 count "JJ overtyped should default to 1")))
+
+(define-test justify-default-width ()
+  ;; JJ without width uses +data-width+ (72)
+  (let ((s (make-session "This is a long line that has many words and should wrap at the default width of seventy-two columns when justified")))
+    (ed:execute-prefix-commands s '((0 :jj 1 0) (0 :jj 1 0)))
+    ;; count=1 means default width -> 72
+    (dolist (line (ed:editor-lines s))
+      (assert-true (<= (length line) ed:+data-width+)
+                   (format nil "Line should fit in ~D cols: ~S" ed:+data-width+ line)))))
+
+(define-test justify-explicit-width ()
+  ;; JJ with explicit width uses that width instead of default 72
+  ;; Test via justify-lines directly since prefix count is single-digit
+  (let ((input '("aa bb cc dd ee ff gg hh ii jj kk ll mm nn")))
+    (let ((result-wide (ed:justify-lines input 72))
+          (result-narrow (ed:justify-lines input 9)))
+      ;; At width 72, all short words fit on one line
+      (assert-equal 1 (length result-wide) "Width 72 should give 1 line")
+      ;; At width 9, should wrap into many lines
+      (assert-true (> (length result-narrow) 3)
+                   "Width 9 should give many lines")
+      (dolist (line result-narrow)
+        (assert-true (<= (length line) 9)
+                     (format nil "Line should fit in 9 cols: ~S" line))))))
+
+(define-test justify-width-via-function ()
+  ;; Test the justify-lines function directly with various widths
+  (let ((input '("one two three four five six seven eight nine ten")))
+    ;; Width 20
+    (let ((result (ed:justify-lines input 20)))
+      (dolist (line result)
+        (assert-true (<= (length line) 20)
+                     (format nil "Width 20: ~S" line))))
+    ;; Width 72 (default)
+    (let ((result (ed:justify-lines input 72)))
+      (assert-equal 1 (length result) "Short text at width 72 should be 1 line"))
+    ;; Width 10
+    (let ((result (ed:justify-lines input 10)))
+      (assert-true (> (length result) 3) "Width 10 should produce many lines")
+      (dolist (line result)
+        (assert-true (<= (length line) 10)
+                     (format nil "Width 10: ~S" line))))))
 
 ;;; ============================================================
 ;;; Block command navigation tests
@@ -1350,6 +1397,9 @@ Returns T if the file was falsely marked as modified."
    'justify-long-word
    'exec-block-justify-same-screen
    'parse-prefix-jj
+   'justify-default-width
+   'justify-explicit-width
+   'justify-width-via-function
    ;; Block navigation
    'block-delete-navigates-to-start
    'block-copy-navigates-to-source

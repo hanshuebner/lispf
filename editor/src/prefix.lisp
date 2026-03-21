@@ -60,7 +60,8 @@ Returns (values command count) or nil."
         ((and (>= (length trimmed) 2) (string= trimmed "RR" :end1 2))
          (values :rr 0))
         ((and (>= (length trimmed) 2) (string= trimmed "JJ" :end1 2))
-         (values :jj 0))
+         (let ((width (parse-prefix-count trimmed 2)))
+           (values :jj width)))
         ;; UC/LC with optional count
         ((and (>= (length trimmed) 2) (string= trimmed "UC" :end1 2))
          (values :uc (parse-prefix-count trimmed 2)))
@@ -211,14 +212,17 @@ batch, they are executed immediately without pending."
                        (setf did-modify t
                              navigate-to start
                              result-message (format nil "~D line~:P duplicated" bcount))))
-                (:jj (let* ((old-lines (extract-line-range session start bcount))
-                            (new-lines (justify-lines old-lines +data-width+)))
+                (:jj (let* ((marker-width (third first-marker))
+                            (jj-width (if (and marker-width (> marker-width 1))
+                                          marker-width +data-width+))
+                            (old-lines (extract-line-range session start bcount))
+                            (new-lines (justify-lines old-lines jj-width)))
                        (delete-line-range session start bcount)
                        (insert-lines-after session (1- start) new-lines)
                        (setf did-modify t
                              navigate-to start
-                             result-message (format nil "~D line~:P justified to ~D"
-                                                    bcount (length new-lines)))))
+                             result-message (format nil "~D line~:P justified to ~D at width ~D"
+                                                    bcount (length new-lines) jj-width))))
                 ((:cc :mm)
                  ;; Check for A/B target in same batch
                  (let ((target (find-target commands)))
@@ -277,14 +281,17 @@ batch, they are executed immediately without pending."
                           (setf did-modify t
                                 navigate-to start
                                 result-message (format nil "~D line~:P duplicated" bcount))))
-                   (:jj (let* ((old-lines (extract-line-range session start bcount))
-                               (new-lines (justify-lines old-lines +data-width+)))
+                   (:jj (let* ((marker-width (third marker))
+                               (jj-width (if (and marker-width (> marker-width 1))
+                                              marker-width +data-width+))
+                               (old-lines (extract-line-range session start bcount))
+                               (new-lines (justify-lines old-lines jj-width)))
                           (delete-line-range session start bcount)
                           (insert-lines-after session (1- start) new-lines)
                           (setf did-modify t
                                 navigate-to start
-                                result-message (format nil "~D line~:P justified to ~D"
-                                                       bcount (length new-lines)))))
+                                result-message (format nil "~D line~:P justified to ~D at width ~D"
+                                                       bcount (length new-lines) jj-width))))
                    ((:cc :mm)
                     ;; Check for A/B target in same batch
                     (let ((target (find-target commands)))
