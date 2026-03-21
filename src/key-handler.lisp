@@ -139,6 +139,15 @@ to access a restricted screen. Override to localize.")
 
 ;;; Command field processing
 
+(defgeneric process-screen-command (screen-name command)
+  (:documentation "Called when Enter is pressed with a non-empty command field.
+Dispatches on the screen name symbol (EQL specialized).
+Return a navigation result, or NIL to fall through to process-command.
+Use this for screen-specific commands (e.g., editor commands on the edit screen).")
+  (:method (screen-name command)
+    (declare (ignore screen-name command))
+    nil))
+
 (defgeneric process-command (application command)
   (:documentation "Called when Enter is pressed and the 'command' field is non-empty.
 Return a navigation result (screen symbol, :stay, :back, :logoff, (:jump . sym)),

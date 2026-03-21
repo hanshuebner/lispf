@@ -1083,7 +1083,8 @@ COMMAND is the trimmed value from the command field (extracted from response)."
            :stay)
           ;; Command field processing: check before normal key dispatch
           ((and (eq aid-kw :enter) (plusp (length command)))
-           (let ((result (process-command *application* command)))
+           (let ((result (or (process-screen-command dispatch-sym command)
+                             (process-command *application* command))))
              (cond
                (result
                 ;; Command triggered navigation: save cursor at command field start
@@ -1199,8 +1200,10 @@ Returns the 3270 response."
            (repeat-groups (screen-info-repeat-groups screen-info))
            (no-command (screen-info-no-command screen-info))
            (is-menu (screen-info-menu screen-info))
+           (handler-package (screen-info-handler-package screen-info))
            (context (session-context *session*))
-           (dispatch-sym (intern-screen-name name-string app-package))
+           (dispatch-sym (intern-screen-name name-string
+                                             (or handler-package app-package)))
            (field-values (cl3270:make-dict :test #'equal)))
       (ensure-key-handlers-validated dispatch-sym key-specs)
       (setf *current-field-values* context)

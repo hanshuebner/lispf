@@ -51,28 +51,58 @@
 ;;; Command processing (for primary commands on edit screen)
 ;;; ============================================================
 
-(defmethod lspf:process-command ((app (eql *editor-app*)) (command string))
-  (if (eq (lspf:session-current-screen lspf:*session*) 'edit)
-      ;; Edit screen: process editor changes + primary command
-      (let ((msg (process-editor-changes lspf:*session* lspf:*current-field-values*))
-            (result (handle-primary-command lspf:*session* command)))
-        (cond
-          ;; Primary command returned a navigation result
-          ((and result (symbolp result) (not (eq result :stay)))
-           result)
-          ;; Primary command was handled (returned :stay)
-          ((eq result :stay)
-           (when msg
-             (setf (gethash "errormsg" lspf:*current-field-values*) msg))
-           :stay)
-          ;; Primary command returned a message string (info or error)
-          ((stringp result)
-           (setf (gethash "errormsg" lspf:*current-field-values*) result)
-           :stay)
-          ;; Unknown command
-          (t nil)))
-      ;; Other screens: default behavior
-      (call-next-method)))
+(defmethod lspf:process-screen-command ((screen-name (eql 'edit)) (command string))
+  "Process primary commands on the edit screen."
+  (let ((msg (process-editor-changes lspf:*session* lspf:*current-field-values*))
+        (result (handle-primary-command lspf:*session* command)))
+    (cond
+      ;; Primary command returned a navigation result
+      ((and result (symbolp result) (not (eq result :stay)))
+       result)
+      ;; Primary command was handled (returned :stay)
+      ((eq result :stay)
+       (when msg
+         (setf (gethash "errormsg" lspf:*current-field-values*) msg))
+       :stay)
+      ;; Primary command returned a message string (info or error)
+      ((stringp result)
+       (setf (gethash "errormsg" lspf:*current-field-values*) result)
+       :stay)
+      ;; Unknown command - fall through to app-level process-command
+      (t nil))))
+
+;;; ============================================================
+;;; Subapplication API
+;;; ============================================================
+
+(defun edit-file (path &key display-name)
+  "Invoke the editor on PATH as a subapplication.
+Call from a key handler body. Returns the screen symbol to navigate to.
+The calling application's session must extend editor-session.
+DISPLAY-NAME overrides the filename shown in the info line.
+
+Example:
+  (define-key-handler my-screen :pf4 (filename)
+    (lispf-editor:edit-file (pathname filename)))
+
+The calling application must register the editor screens at startup:
+  (lspf:register-screen-directory
+    (merge-pathnames #P\"editor/screens/\"
+                     (asdf:system-source-directory :lispf)))"
+  (let ((session lspf:*session*))
+    (let ((lines (read-file-lines path)))
+      (setf (editor-filepath session) path)
+      (setf (editor-filename session)
+            (or display-name (file-namestring path)))
+      (setf (editor-lines session) (or lines (list "")))
+      (setf (editor-modified session) nil)
+      (setf (editor-top-line session) 0)
+      (setf (editor-col-offset session) 0)
+      (setf (editor-undo-stack session) nil)
+      (setf (editor-pending-block session) nil))
+    ;; Return the screen symbol in lispf-editor package
+    ;; (the edit.screen has :handler-package "LISPF-EDITOR")
+    'edit))
 
 ;;; ============================================================
 ;;; Server entry point

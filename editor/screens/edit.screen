@@ -1,4 +1,5 @@
 (:name "edit"
+ :handler-package "LISPF-EDITOR"
  :command t
  :screen "
 "

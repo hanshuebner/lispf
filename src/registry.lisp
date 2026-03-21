@@ -29,6 +29,7 @@
   (aliases nil)
   (anonymous nil)
   (navigable nil)
+  (handler-package nil)
   (file-timestamp 0))
 
 (defstruct dynamic-area
@@ -318,6 +319,8 @@ when keys are shown or hidden at runtime."
                           (getf data :aliases)))
          (anonymous (getf data :anonymous))
          (navigable (getf data :navigable))
+         (handler-package (let ((hp (getf data :handler-package)))
+                            (when hp (find-package (string-upcase (string hp))))))
          (screen-string (pad-screen-string (getf data :screen) :no-command no-command))
          (raw-fields (getf data :fields))
          (raw-keys (getf data :keys))
@@ -347,7 +350,8 @@ when keys are shown or hidden at runtime."
            :menu menu-name
            :aliases aliases
            :anonymous anonymous
-           :navigable navigable))))))
+           :navigable navigable
+           :handler-package handler-package))))))
 
 ;;; Registry operations
 
@@ -445,6 +449,10 @@ For menu screens without a .screen file, generates one automatically."
 (defun get-screen-dynamic-areas (screen-name)
   "Get the dynamic area list for a screen."
   (screen-info-dynamic-areas (ensure-screen-loaded screen-name)))
+
+(defun get-screen-handler-package (screen-name)
+  "Get the handler package for a screen, or nil for app default."
+  (screen-info-handler-package (ensure-screen-loaded screen-name)))
 
 (defun reload-screen (screen-name)
   "Force reload a screen from disk."

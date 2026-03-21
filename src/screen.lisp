@@ -86,6 +86,7 @@
            #:dynamic-area-to-row
            #:dynamic-area-to-col
            #:get-screen-dynamic-areas
+           #:get-screen-handler-package
            #:update-dynamic-area
            #:define-dynamic-area-updater
            #:*attribute-intro-char*
@@ -95,6 +96,7 @@
            #:session-authenticated-p
            #:anonymous-access-denied-message
            ;; Command processing
+           #:process-screen-command
            #:process-command
            #:unknown-command-message
            #:default-command-label

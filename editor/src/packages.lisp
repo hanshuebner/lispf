@@ -9,6 +9,7 @@
                     (#:cl3270 #:cl3270))
   (:export ;; Entry point
            #:start
+           #:edit-file
 
            ;; Constants
            #:+page-size+
