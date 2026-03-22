@@ -177,8 +177,14 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
          (col-start (1+ (editor-col-offset session)))
          (col-end (+ (editor-col-offset session) +data-width+))
          (pending (editor-pending-block session)))
-    ;; Ensure top-line is within valid range (may be out after block delete/justify)
-    (clamp-top-line session)
+    ;; Ensure top-line is within valid range (may be out after block delete/justify).
+    ;; If the file is shorter than one page, show from the top.
+    ;; Otherwise, ensure we show as much content as possible (no unnecessary blank rows).
+    (let ((effective-page (if (layout-scale-row layout)
+                              (1- (page-size session))
+                              (page-size session))))
+      (when (> top (max 0 (- total effective-page)))
+        (setf (editor-top-line session) (max 0 (- total effective-page)))))
     (setf top (editor-top-line session))
     ;; Populate data
     (multiple-value-bind (prefix-str data-str) (build-screen-data session)
@@ -214,7 +220,6 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
     ;; which data slots have scale vs file content.
     (let* ((bot-virtual (1+ (line-count session)))
            (cur-line (editor-current-line session))
-           (cur-virtual (1+ cur-line))
            (scale-slot-attr (when (layout-scale-row layout)
                              (let ((slot (- (layout-scale-row layout)
                                             (layout-data-start-row layout))))
@@ -300,7 +305,12 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
     ;; Auto-insert new line when Enter is pressed on a data line
     (unless msg
       (let* ((cursor-row lspf:*cursor-row*)
-             (data-row (- cursor-row data-start))
+             (scale-row-pos (layout-scale-row layout))
+             ;; Adjust data-row if cursor is at or after the scale row
+             (data-row (let ((raw (- cursor-row data-start)))
+                         (if (and scale-row-pos (>= cursor-row scale-row-pos))
+                             (1- raw)  ; scale consumed one slot
+                             raw)))
              (top (editor-top-line session)))
         (when (and (>= data-row 0) (< data-row (page-size session)))
           (let* ((virtual (+ top data-row))
@@ -308,7 +318,12 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
             (when real
               (save-undo-state session)
               (insert-lines-after session real (list ""))
-              (let ((new-display-row (1+ cursor-row)))
+              (let* ((scale-row (layout-scale-row layout))
+                     (new-display-row (1+ cursor-row))
+                     ;; Skip scale row if the new line would land on it
+                     (new-display-row (if (and scale-row (= new-display-row scale-row))
+                                          (1+ new-display-row)
+                                          new-display-row)))
                 (if (< (1+ data-row) (page-size session))
                     (setf (editor-next-cursor session)
                           (cons new-display-row data-col))

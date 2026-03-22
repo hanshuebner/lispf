@@ -100,7 +100,6 @@
           :documentation "List of strings, one per line.")
    (filename :initform nil :accessor editor-filename)
    (filepath :initform nil :accessor editor-filepath)
-   (modified :initform nil :accessor editor-modified)
    (top-line :initform 0 :accessor editor-top-line
              :documentation "0-based virtual index of the first visible row.
 Virtual 0 = Top-of-Data marker, 1..N = file lines, N+1 = Bottom-of-Data marker.")
@@ -131,6 +130,15 @@ Virtual 0 = Top-of-Data marker, 1..N = file lines, N+1 = Bottom-of-Data marker."
 
 (defmethod page-size ((session editor-session))
   (page-size (editor-layout session)))
+
+(defmethod editor-modified ((session editor-session))
+  "File is modified when alteration count is non-zero."
+  (plusp (editor-alteration-count session)))
+
+(defmethod (setf editor-modified) (value (session editor-session))
+  "Setting modified to NIL resets alteration count to 0."
+  (unless value
+    (setf (editor-alteration-count session) 0)))
 
 (defun make-test-session (lines &key layout)
   "Create an editor session for testing (no application binding needed)."

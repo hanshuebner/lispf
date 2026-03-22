@@ -112,7 +112,6 @@ Returns (values from-string to-string remainder)."
           (justify-lines old-lines width)
         (delete-line-range session start count)
         (insert-lines-after session (1- start) new-lines)
-        (setf (editor-modified session) t)
         (setf (editor-top-line session) (max 0 start))
         (clamp-top-line session)
         (if (plusp long-words)
@@ -351,7 +350,7 @@ Returns a message string."
                          (return)))))
         (if (plusp count)
             (progn
-              (setf (editor-modified session) t)
+              (incf (editor-alteration-count session) count)
               (format nil "CHANGED ~D occurrence~:P" count))
             (progn
               (pop (editor-undo-stack session))
