@@ -975,8 +975,12 @@ Returns (values list-data-count list-data-total has-list-data)."
        field-values))
     (values list-data-count list-data-total has-list-data)))
 
-(defun set-framework-fields (screen-sym field-values &key no-command is-menu)
-  "Set title, command line, errormsg, and key label fields in FIELD-VALUES."
+(defun set-framework-fields (screen-sym field-values &key no-command is-menu
+                                                              full-control)
+  "Set title, command line, errormsg, and key label fields in FIELD-VALUES.
+With FULL-CONTROL, do nothing (app manages all fields)."
+  (when full-control
+    (return-from set-framework-fields))
   (setf (gethash "title" field-values)
         (format-title-line screen-sym (session-indicator-texts)))
   ;; Command line (only on screens with command field)
@@ -1202,6 +1206,7 @@ Returns the 3270 response."
            (no-command (screen-info-no-command screen-info))
            (is-menu (screen-info-menu screen-info))
            (handler-package (screen-info-handler-package screen-info))
+           (full-control (screen-info-full-control screen-info))
            (context (session-context *session*))
            (dispatch-sym (intern-screen-name name-string
                                              (or handler-package app-package)))
@@ -1230,7 +1235,8 @@ Returns the 3270 response."
             (populate-field-values context field-values screen
                                    dispatch-sym repeat-groups)
           (set-framework-fields screen-sym field-values
-                                :no-command no-command :is-menu is-menu)
+                                :no-command no-command :is-menu is-menu
+                                :full-control full-control)
           (let* ((display-screen (apply-field-attribute-overrides
                                  (if has-list-data
                                      (filter-screen-fields screen repeat-groups

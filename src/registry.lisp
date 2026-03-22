@@ -30,6 +30,7 @@
   (anonymous nil)
   (navigable nil)
   (handler-package nil)
+  (full-control nil)
   (file-timestamp 0))
 
 (defstruct dynamic-area
@@ -64,12 +65,15 @@
 
 ;;; Framework row management
 
-(defun pad-screen-string (screen-string &key no-command)
+(defun pad-screen-string (screen-string &key no-command full-control)
   "Wrap application screen content with framework rows.
 Without NO-COMMAND: up to 20 app rows + command line (row 21).
 With NO-COMMAND: up to 21 app rows, no command line.
-Always adds title (row 0), error (row 22), and keys (row 23)."
-  (let* ((max-rows (if no-command 21 +app-rows+))
+With FULL-CONTROL: all 24 rows (0-23) belong to the application.
+Always adds title (row 0), error (row 22), and keys (row 23) unless FULL-CONTROL."
+  (let* ((max-rows (cond (full-control 24)
+                         (no-command 21)
+                         (t +app-rows+)))
          (parts (split-sequence:split-sequence #\Newline screen-string))
          (app-rows (rest parts))
          (app-rows (if (and app-rows (string= "" (car (last app-rows))))
@@ -80,15 +84,22 @@ Always adds title (row 0), error (row 22), and keys (row 23)."
       (error "Screen has ~D application rows, maximum is ~D" n max-rows))
     (with-output-to-string (s)
       (terpri s)                                ; leading \n
-      (terpri s)                                ; row 0: blank (title)
-      (dolist (row app-rows)
-        (write-string row s) (terpri s))        ; app rows
-      (dotimes (i (- max-rows n))
-        (terpri s))                             ; padding to max app rows
-      (unless no-command
-        (terpri s))                             ; row 21: blank (command)
-      (terpri s))))                             ; row 22: blank (errormsg)
-                                                ; row 23 = trailing "" (keys)
+      (if full-control
+          (progn
+            ;; Full control: all 24 rows are app content
+            (dolist (row app-rows)
+              (write-string row s) (terpri s))
+            (dotimes (i (- max-rows n))
+              (terpri s)))
+          (progn
+            (terpri s)                          ; row 0: blank (title)
+            (dolist (row app-rows)
+              (write-string row s) (terpri s))  ; app rows
+            (dotimes (i (- max-rows n))
+              (terpri s))                       ; padding to max app rows
+            (unless no-command
+              (terpri s))                       ; row 21: blank (command)
+            (terpri s))))))
 
 (defun offset-field-rows (field-definitions)
   "Add 1 to all :from row values to account for the framework title row."
@@ -182,8 +193,11 @@ distributes to \"name.0\" ... \"name.N-1\", removes base key."
   ;; Fallback
   80)
 
-(defun make-framework-fields (&key no-command)
-  "Create framework-managed fields: title, command line (unless NO-COMMAND), errormsg, keys."
+(defun make-framework-fields (&key no-command full-control)
+  "Create framework-managed fields: title, command line (unless NO-COMMAND), errormsg, keys.
+With FULL-CONTROL, no framework fields are created (app manages all rows)."
+  (when full-control
+    (return-from make-framework-fields '()))
   (append
    (list (cl3270:make-field :row 0 :col 0 :name "title"))
    (unless no-command
@@ -321,7 +335,10 @@ when keys are shown or hidden at runtime."
          (navigable (getf data :navigable))
          (handler-package (let ((hp (getf data :handler-package)))
                             (when hp (find-package (string-upcase (string hp))))))
-         (screen-string (pad-screen-string (getf data :screen) :no-command no-command))
+         (full-control (getf data :full-control))
+         (screen-string (pad-screen-string (getf data :screen)
+                                            :no-command no-command
+                                            :full-control full-control))
          (raw-fields (getf data :fields))
          (raw-keys (getf data :keys))
          (raw-dynamic-areas (getf data :dynamic-areas)))
@@ -329,12 +346,15 @@ when keys are shown or hidden at runtime."
         (expand-repeat-fields raw-fields)
       (multiple-value-bind (clean-fields rules transient-fields)
           (extract-rules-from-fields expanded-fields)
-        (let* ((offset-fields (offset-field-rows clean-fields))
-               (mapped-fields (mapcar #'map-field-attributes offset-fields))
+        (let* ((positioned-fields (if full-control
+                                      clean-fields
+                                      (offset-field-rows clean-fields)))
+               (mapped-fields (mapcar #'map-field-attributes positioned-fields))
                (field-forms (parse-screen screen-string mapped-fields))
                (app-fields (mapcar #'eval field-forms))
                (all-fields (append app-fields
-                                   (make-framework-fields :no-command no-command)))
+                                   (make-framework-fields :no-command no-command
+                                                          :full-control full-control)))
                (keys (when raw-keys (normalize-key-specs raw-keys)))
                (key-layout (when keys (compute-key-layout keys))))
           (make-screen-info
@@ -351,7 +371,8 @@ when keys are shown or hidden at runtime."
            :aliases aliases
            :anonymous anonymous
            :navigable navigable
-           :handler-package handler-package))))))
+           :handler-package handler-package
+           :full-control full-control))))))
 
 ;;; Registry operations
 
