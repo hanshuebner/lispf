@@ -11,6 +11,7 @@
 
 (defclass application ()
   ((name :initarg :name :accessor application-name)
+   (title :initarg :title :accessor application-title :initform nil)
    (entry-screen :initarg :entry-screen :accessor application-entry-screen)
    (screen-directory :initarg :screen-directory :accessor application-screen-directory)
    (package :initarg :package :accessor application-package)
@@ -49,6 +50,7 @@ KEY-NAME is the string name of the key (e.g. \"PF5\").")
 
 (defclass session ()
   ((application :initarg :application :reader session-application)
+   (active-application :accessor session-active-application :initform nil)
    (current-screen :accessor session-current-screen)
    (screen-stack :initform nil :accessor session-screen-stack)
    (context :initform (make-hash-table :test 'equal) :accessor session-context)
@@ -276,14 +278,17 @@ Options:
   :entry-screen symbol   - first screen to display (required)
   :screen-directory path - directory containing .screen files (required)
   :session-class symbol  - custom session class (default: session)
+  :title string          - display title for the title line (default: name)
 
 Example:
   (define-application *my-app*
+    :title \"My App\"
     :entry-screen welcome
     :screen-directory #p\"screens/\")"
   (let ((entry-screen (getf options :entry-screen))
         (screen-directory (getf options :screen-directory))
-        (session-class (getf options :session-class ''session)))
+        (session-class (getf options :session-class ''session))
+        (title (getf options :title)))
     (unless entry-screen
       (error "define-application requires :entry-screen"))
     (unless screen-directory
@@ -293,6 +298,7 @@ Example:
       `(defvar ,name
          (make-instance 'application
                         :name ,(string-downcase (string name))
+                        ,@(when title `(:title ,title))
                         :entry-screen ',entry-sym
                         :screen-directory ,screen-directory
                         :package (find-package ,(package-name *package*))
@@ -1369,6 +1375,7 @@ Binds dynamic variables, creates a session, and loops through screens."
          (app-package (application-package application)))
     (bt:with-lock-held ((application-sessions-lock application))
       (push *session* (application-sessions application)))
+    (setf (session-active-application *session*) application)
     (unwind-protect
          (progn
            (setf (session-current-screen *session*)
@@ -1377,3 +1384,29 @@ Binds dynamic variables, creates a session, and loops through screens."
       (bt:with-lock-held ((application-sessions-lock application))
         (setf (application-sessions application)
               (remove *session* (application-sessions application)))))))
+
+(defun invoke-subapplication (subapp entry-screen)
+  "Switch to SUBAPP starting at ENTRY-SCREEN within the current session.
+Call from a key handler or screen-update body. Saves the parent application's
+screen stack and context, rebinds *application* to SUBAPP, and runs a nested
+screen loop. When the subapplication exits, restores parent state.
+Returns :stay so the parent screen loop redisplays the current screen.
+
+The current session object remains the same -- its class must be compatible
+with the subapplication's expected session class."
+  (let ((saved-stack (session-screen-stack *session*))
+        (saved-context (session-context *session*))
+        (saved-screen (session-current-screen *session*)))
+    (load-application-menus subapp)
+    (setf (session-active-application *session*) subapp)
+    (unwind-protect
+         (let ((*application* subapp))
+           (setf (session-screen-stack *session*) nil
+                 (session-context *session*) (make-hash-table :test 'equal)
+                 (session-current-screen *session*) entry-screen)
+           (run-screen-loop (application-package subapp)))
+      (setf (session-active-application *session*) *application*
+            (session-screen-stack *session*) saved-stack
+            (session-context *session*) saved-context
+            (session-current-screen *session*) saved-screen)))
+  :stay)

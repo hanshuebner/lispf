@@ -9,6 +9,7 @@
 ;;; ============================================================
 
 (lspf:define-application *editor-app*
+  :title "EDIT"
   :entry-screen open
   :screen-directory (merge-pathnames
                      #P"editor/screens/"
@@ -67,7 +68,7 @@
 
 (defun edit-file (path &key display-name restricted)
   "Invoke the editor on PATH as a subapplication.
-Call from a key handler body. Returns the screen symbol to navigate to.
+Call from a key handler or screen-update body. Blocks until the editor exits.
 The calling application's session must extend editor-session.
 
 DISPLAY-NAME overrides the filename shown in the info line (e.g. 'New Message').
@@ -77,16 +78,11 @@ Example:
   (define-key-handler my-screen :pf4 (filename)
     (lispf-editor:edit-file (pathname filename)
                             :display-name \"New Message\"
-                            :restricted t))
-
-The calling application must register the editor screens at startup:
-  (lspf:register-screen-directory
-    (merge-pathnames #P\"editor/screens/\"
-                     (asdf:system-source-directory :lispf)))"
+                            :restricted t))"
   (open-file lspf:*session* path
              :display-name display-name
              :restricted restricted)
-  'edit)
+  (lspf:invoke-subapplication *editor-app* 'edit))
 
 ;;; ============================================================
 ;;; Server entry point

@@ -50,11 +50,14 @@
            ;; Application framework
            #:application
            #:application-name
+           #:application-title
            #:application-entry-screen
            #:application-screen-directory
            #:application-session-class
+           #:invoke-subapplication
            #:session
            #:session-application
+           #:session-active-application
            #:session-current-screen
            #:session-screen-stack
            #:session-context

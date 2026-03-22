@@ -188,8 +188,14 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
          (save-editor-file session)
          :back)
 
-        ((:CANCEL :CAN)
+        ((:CANCEL :CAN :QQUIT)
          (setf (editor-undo-stack session) nil) :back)
+
+        ((:END :EXIT :QUIT)
+         (when (editor-modified session)
+           (return-from handle-primary-command
+             "File modified - use SAVE, SUBMIT, or CANCEL"))
+         :back)
 
         (:TOP
          (setf (editor-top-line session) 0)

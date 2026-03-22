@@ -216,29 +216,29 @@ With FULL-CONTROL, no framework fields are created (app manages all rows)."
     (format nil "~2,'0D:~2,'0D" h m)))
 
 (defun format-title-line (screen-name &optional indicators)
-  "Format the title line: SCREENNAME  appname  (IND1) (IND2)  date HH:MM
-Padded to exactly 78 characters. INDICATORS is an optional list of text strings
-to display in parentheses between the app name and the date."
+  "Format the title line with the app title at a fixed center position.
+Left: SCREENNAME, Center: app title (+ indicators), Right: date HH:MM.
+The center section is always positioned at column 39 regardless of
+screen name length. Padded to exactly 78 characters."
   (let* ((left (string-upcase (screen-name-string screen-name)))
          (right (concatenate 'string (cl3270:today-date) " " (now-time-hhmm)))
-         (center (application-name *application*))
+         (center (or (application-title *application*)
+                     (application-name *application*)))
          (middle (if indicators
                      (format nil "~A  ~{(~A)~^ ~}" center indicators)
                      center))
-         (used (+ (length left) (length middle) (length right)))
-         (total-gap (max 2 (- 78 used)))
-         (left-gap (floor total-gap 2))
-         (right-gap (- total-gap left-gap))
-         (line (concatenate 'string
-                            left
-                            (make-string left-gap :initial-element #\Space)
-                            middle
-                            (make-string right-gap :initial-element #\Space)
-                            right)))
-    (if (< (length line) 78)
-        (concatenate 'string line
-                     (make-string (- 78 (length line)) :initial-element #\Space))
-        (subseq line 0 78))))
+         (mid-col 39)
+         (mid-start (max (1+ (length left))
+                         (- mid-col (floor (length middle) 2))))
+         (mid-end (+ mid-start (length middle)))
+         (right-start (max (1+ mid-end) (- 78 (length right))))
+         (line (make-string 78 :initial-element #\Space)))
+    (replace line left :start1 0)
+    (when (<= (+ mid-start (length middle)) 78)
+      (replace line middle :start1 mid-start))
+    (when (<= right-start (- 78 (length right)))
+      (replace line right :start1 (- 78 (length right))))
+    line))
 
 ;;; Rule extraction from .screen field definitions
 
