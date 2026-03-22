@@ -1154,7 +1154,7 @@ Screen stack entries are (symbol cursor-row . cursor-col) to restore cursor on :
 (defun show-screen-and-read (screen display-screen screen-rules key-specs
                              field-values dispatch-sym repeat-groups
                              has-list-data list-data-count
-                             &key no-command)
+                             &key no-command full-control)
   "Prepare the display screen, compute cursor, and read user input.
 Returns the 3270 response."
   (multiple-value-bind (cursor-row cursor-col)
@@ -1172,7 +1172,7 @@ Returns the 3270 response."
           (display-and-read display-screen screen-rules field-values
                             pf-keys exit-keys "errormsg"
                             cursor-row cursor-col *connection*
-                            :screen-sym dispatch-sym)
+                            :screen-sym (unless full-control dispatch-sym))
         (when err (error err))
         response))))
 
@@ -1247,7 +1247,8 @@ Returns the 3270 response."
                                                  field-values dispatch-sym
                                                  repeat-groups has-list-data
                                                  list-data-count
-                                                 :no-command no-command)))
+                                                 :no-command no-command
+                                                :full-control full-control)))
             (process-response response context dispatch-sym transient-fields
                               repeat-groups has-list-data)
             ;; Temporarily inject transient field values so key handlers can

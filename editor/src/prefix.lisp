@@ -65,6 +65,8 @@ Returns (values command count) or nil."
         ((string= trimmed "LC") (values :lc 1))
         ;; Text split
         ((string= trimmed "TS") (values :ts 0))
+        ;; Current line marker
+        ((string= trimmed "/") (values :current-line 0))
         ;; Targets
         ((string= trimmed "A") (values :a 0))
         ((string= trimmed "B") (values :b 0))
@@ -409,6 +411,9 @@ batch, they are executed immediately without pending."
                                                 line)))
                      (setf (line-at session adjusted) shifted)
                      (setf did-modify t))))
+                (:current-line
+                 (setf (editor-current-line session) adjusted)
+                 (setf result-message (format nil "Current line set to ~D" (1+ adjusted))))
                 ((:a :b)
                  nil)  ; standalone A/B without pending
                 ((:dd :cc :mm :rr :jj)

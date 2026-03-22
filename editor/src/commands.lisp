@@ -305,6 +305,7 @@ Returns a message string."
           when (search upper-search (string-upcase (nth i lines)))
             do (setf (editor-top-line session) (1+ i))  ; virtual = real + 1
                (setf (editor-last-find-line session) i)
+               (setf (editor-current-line session) i)
                (clamp-top-line session)
                (return-from do-find
                  (format nil "CHARS '~A' found on line ~D" search-str (1+ i))))
@@ -313,6 +314,7 @@ Returns a message string."
           when (search upper-search (string-upcase (nth i lines)))
             do (setf (editor-top-line session) (1+ i))
                (setf (editor-last-find-line session) i)
+               (setf (editor-current-line session) i)
                (clamp-top-line session)
                (return-from do-find
                  (format nil "CHARS '~A' found on line ~D (wrapped)" search-str (1+ i))))

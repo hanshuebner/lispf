@@ -10,15 +10,32 @@
   "Build prefix and data strings for display.
 Returns (values prefix-string data-string) as newline-joined strings
 suitable for the framework's repeat field split mechanism."
-  (let ((top (editor-top-line session))
-        (col-offset (editor-col-offset session))
-        (n (line-count session))
-        (pending (editor-pending-block session))
-        (prefix-lines '())
-        (data-lines '()))
+  (let* ((layout (editor-layout session))
+         (top (editor-top-line session))
+         (col-offset (editor-col-offset session))
+         (n (line-count session))
+         (pending (editor-pending-block session))
+         (scale-row (layout-scale-row layout))
+         (scale-slot (when scale-row
+                       (- scale-row (layout-data-start-row layout))))
+         (scale-string (when scale-row
+                         (with-output-to-string (s)
+                           (write-string "..." s)
+                           (loop for c from 4 to +data-width+
+                                 do (cond ((zerop (mod c 10))
+                                           (write-char (digit-char (mod (floor c 10) 10)) s))
+                                          ((zerop (mod c 5))
+                                           (write-char #\+ s))
+                                          (t (write-char #\- s)))))))
+         (prefix-lines '())
+         (data-lines '()))
     (dotimes (i (page-size session))
       (let ((virtual (+ top i)))
         (cond
+          ;; Scale line (if enabled and this is the scale slot)
+          ((and scale-slot (= i scale-slot))
+           (push "===== " prefix-lines)
+           (push scale-string data-lines))
           ;; Top of Data marker (line number 00000)
           ((= virtual 0)
            (push "00000 " prefix-lines)
@@ -168,11 +185,21 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
     ;; Command prompt
     (setf ed-cmdlabel (layout-command-prompt layout))
     (setf ed-command "")
-    ;; Make marker and past-EOF rows non-writable, set marker colors
-    (let ((bot-virtual (1+ (line-count session))))
+    ;; Set field attributes: markers, current line, scale, past-EOF
+    (let ((bot-virtual (1+ (line-count session)))
+          (cur-line (editor-current-line session))
+          (scale-slot (when (layout-scale-row layout)
+                        (- (layout-scale-row layout) (layout-data-start-row layout)))))
       (dotimes (i (page-size session))
-        (let ((virtual (+ top i)))
+        (let* ((virtual (+ top i))
+               (real (virtual-to-real session virtual)))
           (cond
+            ;; Scale line: non-writable, turquoise
+            ((and scale-slot (= i scale-slot))
+             (lspf:set-field-attribute (format nil "prefix.~D" i)
+                                       :write nil :color cl3270:+turquoise+)
+             (lspf:set-field-attribute (format nil "data.~D" i)
+                                       :write nil :color cl3270:+turquoise+))
             ;; Marker lines: data non-writable, prefix writable for I/A/B, pink color
             ((marker-line-p session virtual)
              (lspf:set-field-attribute (format nil "prefix.~D" i) :color cl3270:+pink+)
@@ -180,7 +207,13 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
             ;; Past end of file: both non-writable so Tab skips them
             ((> virtual bot-virtual)
              (lspf:set-field-attribute (format nil "prefix.~D" i) :write nil)
-             (lspf:set-field-attribute (format nil "data.~D" i) :write nil))))))
+             (lspf:set-field-attribute (format nil "data.~D" i) :write nil))
+            ;; Current line: highlight yellow
+            ((and real (= real cur-line))
+             (lspf:set-field-attribute (format nil "prefix.~D" i)
+                                       :color cl3270:+yellow+)
+             (lspf:set-field-attribute (format nil "data.~D" i)
+                                       :color cl3270:+yellow+))))))
     ;; Position cursor (use override if set, otherwise command field)
     (let ((next (editor-next-cursor session)))
       (if next
@@ -291,19 +324,38 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
           (setf (gethash "errormsg" lspf:*current-field-values*) "No previous CHANGE")
           :stay))))
 
-;;; PF7 - Scroll Up (DATA mode: one-line overlap for context)
+;;; PF7 - Scroll Up (with wrap-around)
 (lspf:define-key-handler edit :pf7 ()
   (process-editor-changes lspf:*session* lspf:*current-field-values*)
-  (setf (editor-top-line lspf:*session*)
-        (max 0 (- (editor-top-line lspf:*session*) (1- (page-size lspf:*session*)))))
+  (let* ((session lspf:*session*)
+         (top (editor-top-line session))
+         (ps (page-size session))
+         (scroll (1- ps)))
+    (if (<= top 0)
+        ;; At top: wrap to show last lines + EOF marker
+        (let ((total (total-virtual-lines session)))
+          (setf (editor-top-line session)
+                (max 0 (- total ps))))
+        ;; Normal scroll up
+        (setf (editor-top-line session)
+              (max 0 (- top scroll)))))
   :stay)
 
-;;; PF8 - Scroll Down (DATA mode: one-line overlap for context)
+;;; PF8 - Scroll Down (with wrap-around)
 (lspf:define-key-handler edit :pf8 ()
   (process-editor-changes lspf:*session* lspf:*current-field-values*)
-  (setf (editor-top-line lspf:*session*)
-        (+ (editor-top-line lspf:*session*) (1- (page-size lspf:*session*))))
-  (clamp-top-line lspf:*session*)
+  (let* ((session lspf:*session*)
+         (top (editor-top-line session))
+         (ps (page-size session))
+         (scroll (1- ps))
+         (total (total-virtual-lines session)))
+    (if (>= (+ top ps) total)
+        ;; At or past EOF: wrap to first file line (skip BOF marker)
+        (setf (editor-top-line session) 1)
+        ;; Normal scroll down
+        (progn
+          (setf (editor-top-line session) (+ top scroll))
+          (clamp-top-line session))))
   :stay)
 
 ;;; PF10 - Scroll Left

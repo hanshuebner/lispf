@@ -1474,9 +1474,11 @@ Returns T if the file was falsely marked as modified."
                  (assert-command-field-clean s
                    (format nil "Command field clean after PF8 #~D" (1+ i)))))
 
-             ;; Scroll back one page so last line and Bottom marker are both visible
-             (press-pf s 7)
-             ;; Should see Bottom-of-Data marker and last file line
+             ;; Use BOTTOM command to ensure we see end of file
+             (move-cursor s 23 6)
+             (type-text s "BOTTOM")
+             (press-enter s)
+             ;; Should see End of File marker and last file line
              (assert-screen-contains s "End of File")
              (assert-screen-contains s (format nil "Line ~D of ~D" n-lines n-lines))
 
@@ -1491,7 +1493,11 @@ Returns T if the file was falsely marked as modified."
                  (assert-command-field-clean s
                    (format nil "Command field clean after PF7 #~D" (1+ i)))))
 
-             ;; Back at top: should see Top-of-Data marker again
+             ;; Use TOP command to get back to start
+             (move-cursor s 23 6)
+             (type-text s "TOP")
+             (press-enter s)
+             ;; Should see Top-of-File marker again
              (assert-row-contains s 2 "Top of File" "Top marker after scroll back")
              (assert-row-contains s 3 "00001" "Line 1 after scroll back")
 
