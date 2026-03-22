@@ -786,7 +786,7 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
     context))
 
 (define-test round-trip-single-dd-enters-pending ()
-  ;; User types "dd" on line 2 (screen row 1, since row 0 is Top of Data marker)
+  ;; User types "dd" on line 2 (screen row 1, since row 0 is Top of File marker)
   ;; This should enter pending mode, not delete the line
   (let ((s (make-session "a" "b" "c" "d" "e")))
     (setf (ed:editor-top-line s) 0) ; top of data marker at row 0
@@ -1256,8 +1256,8 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
       ;; First line should be top marker
       (let ((prefix-lines (split-sequence:split-sequence #\Newline prefix))
             (data-lines (split-sequence:split-sequence #\Newline data)))
-        (assert-equal "******" (first prefix-lines))
-        (assert-string-contains (first data-lines) "Top of Data")))))
+        (assert-equal "00000 " (first prefix-lines))
+        (assert-string-contains (first data-lines) "Top of File")))))
 
 (define-test screen-data-shows-file-lines ()
   (let ((s (make-session "Hello" "World")))
@@ -1277,9 +1277,9 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
     (multiple-value-bind (prefix data) (ed::build-screen-data s)
       (let ((prefix-lines (split-sequence:split-sequence #\Newline prefix))
             (data-lines (split-sequence:split-sequence #\Newline data)))
-        ;; Third line (index 2) should be bottom marker
-        (assert-equal "******" (third prefix-lines))
-        (assert-string-contains (third data-lines) "Bottom of Data")))))
+        ;; Third line (index 2) should be end of file marker
+        (assert-equal "00002 " (third prefix-lines))
+        (assert-string-contains (third data-lines) "End of File")))))
 
 ;;; ============================================================
 ;;; Integration: handle-primary-command with CHANGE/FIND
@@ -1410,16 +1410,16 @@ Returns T if the file was falsely marked as modified."
       (zerop (uiop:wait-process p)))))
 
 (defun assert-no-modify-flag (session description)
-  "Assert that the info line does not show 'Modified'."
-  (let ((info (screen-row session 1)))
-    (when (search "Modified" info)
+  "Assert that the status line shows Alt=0 (no modifications)."
+  (let ((status (screen-row session 0)))
+    (unless (search "Alt=0" status)
       (error 'test-failure :description description
-             :expected "no Modified flag"
-             :actual (string-right-trim '(#\Space) info)))))
+             :expected "Alt=0"
+             :actual (string-right-trim '(#\Space) status)))))
 
 (defun assert-command-field-clean (session description)
-  "Assert the command field area (row 21 cols 14-78) contains no spurious text."
-  (let* ((cmd-area (screen-text-at session 21 14 65))
+  "Assert the command field area (row 23) contains no spurious text."
+  (let* ((cmd-area (screen-text-at session 23 6 73))
          (trimmed (string-right-trim '(#\Space) cmd-area)))
     (when (plusp (length trimmed))
       (error 'test-failure :description description
@@ -1452,13 +1452,13 @@ Returns T if the file was falsely marked as modified."
              (assert-on-screen s "OPEN")
              (type-text s (namestring path))
              (press-enter s)
-             (assert-on-screen s "EDIT")
+             (assert-screen-contains s "Size=")
 
              ;; At top: should see Top-of-Data marker and first lines
              ;; Data fields start at display row 3 (screen row 2 + 1 for title)
-             (assert-row-contains s 3 "Top of Data" "Top marker on initial display")
-             (assert-row-contains s 4 "000001" "Line 1 number on initial display")
-             (assert-row-contains s 4 "Line 1 of" "Line 1 content on initial display")
+             (assert-row-contains s 2 "Top of File" "Top marker on initial display")
+             (assert-row-contains s 3 "000001" "Line 1 number on initial display")
+             (assert-row-contains s 3 "Line 1 of" "Line 1 content on initial display")
              (assert-no-modify-flag s "No modification on initial display")
              (assert-command-field-clean s "Command field clean on initial display")
 
@@ -1477,7 +1477,7 @@ Returns T if the file was falsely marked as modified."
              ;; Scroll back one page so last line and Bottom marker are both visible
              (press-pf s 7)
              ;; Should see Bottom-of-Data marker and last file line
-             (assert-screen-contains s "Bottom of Data")
+             (assert-screen-contains s "End of File")
              (assert-screen-contains s (format nil "Line ~D of ~D" n-lines n-lines))
 
              ;; Scroll backward through entire file
@@ -1492,8 +1492,8 @@ Returns T if the file was falsely marked as modified."
                    (format nil "Command field clean after PF7 #~D" (1+ i)))))
 
              ;; Back at top: should see Top-of-Data marker again
-             (assert-row-contains s 3 "Top of Data" "Top marker after scroll back")
-             (assert-row-contains s 4 "000001" "Line 1 after scroll back")
+             (assert-row-contains s 2 "Top of File" "Top marker after scroll back")
+             (assert-row-contains s 3 "000001" "Line 1 after scroll back")
 
              ;; PF3 should exit without "modified" warning
              (press-pf s 3)
@@ -1510,20 +1510,20 @@ Returns T if the file was falsely marked as modified."
            (with-test-app (s ed::*editor-app* :port 13279)
              (type-text s (namestring path))
              (press-enter s)
-             (assert-on-screen s "EDIT")
+             (assert-screen-contains s "Size=")
              ;; Should show 1 line
              (assert-screen-contains s "Size=1")
              ;; Move cursor to the data area (row 4 = first file line after top marker)
              ;; and press Enter
-             (move-cursor s 4 10)
+             (move-cursor s 3 10)
              (press-enter s)
              ;; Should now have 2 lines
              (assert-screen-contains s "Size=2")
              (assert-screen-contains s "000002")
              ;; Cursor should be on the new line (row 5 = second data line, col 7 = data start)
-             (assert-cursor-at s 5 7)
+             (assert-cursor-at s 4 7)
              ;; Cancel to exit without saving
-             (move-cursor s 21 14)
+             (move-cursor s 23 6)
              (type-text s "CANCEL")
              (press-enter s)
              (assert-on-screen s "OPEN")))
@@ -1541,9 +1541,9 @@ Returns T if the file was falsely marked as modified."
              (type-text s (namestring path))
              (press-enter s)
              ;; Should be on the EDIT screen now
-             (assert-on-screen s "EDIT")
-             ;; Should see the file content (Top of Data marker + lines)
-             (assert-screen-contains s "Top of Data")
+             (assert-screen-contains s "Size=")
+             ;; Should see the file content (Top of File marker + lines)
+             (assert-screen-contains s "Top of File")
              (assert-screen-contains s "Hello World")
              (assert-screen-contains s "Second line")
              ;; Should see line numbers

@@ -19,15 +19,15 @@ suitable for the framework's repeat field split mechanism."
     (dotimes (i (page-size session))
       (let ((virtual (+ top i)))
         (cond
-          ;; Top of Data marker
+          ;; Top of Data marker (line number 00000)
           ((= virtual 0)
-           (push "******" prefix-lines)
-           (push "***************************** Top of Data ******************************"
+           (push "00000 " prefix-lines)
+           (push "* * * Top of File * * *"
                  data-lines))
-          ;; Bottom of Data marker
+          ;; End of File marker (sequential line number)
           ((= virtual (1+ n))
-           (push "******" prefix-lines)
-           (push "**************************** Bottom of Data ****************************"
+           (push (format nil "~5,'0D " (1+ n)) prefix-lines)
+           (push "* * * End of File * * *"
                  data-lines))
           ;; File line
           ((and (> virtual 0) (<= virtual n))
@@ -130,47 +130,53 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
 ;;; Edit screen - screen update (populates repeat fields)
 ;;; ============================================================
 
-(lspf:define-screen-update edit (info status prefix data)
+(lspf:define-screen-update edit (ed-status ed-message ed-cmdlabel ed-command
+                                             prefix data)
   (let* ((session lspf:*session*)
+         (layout (editor-layout session))
          (top (editor-top-line session))
          (total (total-virtual-lines session))
          (col-start (1+ (editor-col-offset session)))
          (col-end (+ (editor-col-offset session) +data-width+))
-         (mod-flag (if (editor-modified session) "Modified" ""))
          (pending (editor-pending-block session)))
     ;; Populate data
     (multiple-value-bind (prefix-str data-str) (build-screen-data session)
       (setf prefix prefix-str)
       (setf data data-str))
-    ;; Info line (use display-name if set, otherwise filename)
-    (setf info (format nil "EDIT  ~A~30TCol ~5,'0D ~5,'0D  Size=~D  Line=~D  ~A"
-                       (or (editor-display-name session)
-                           (editor-filename session)
-                           "(new)")
-                       col-start col-end
-                       (line-count session)
-                       (max 1 (1+ (max 0 (1- top))))
-                       mod-flag))
-    ;; Status line: show pending block command info with start line
-    (setf status
-          (if pending
-              (let* ((cmd-name (string-upcase (symbol-name (first pending))))
-                     (start-line (second pending))
-                     (start-visible (<= top (1+ start-line)
-                                        (+ top (page-size session) -1))))
-                (if start-visible
-                    (format nil "~A pending" cmd-name)
-                    (format nil "~A pending from line ~D" cmd-name (1+ start-line))))
-              ""))
-    ;; Make marker and past-EOF rows non-writable
+    ;; Status line (XEDIT style)
+    (setf ed-status
+          (format nil " ~A~20TCol ~5,'0D ~5,'0D  Size=~D  Line=~D  Alt=~D"
+                  (or (editor-display-name session)
+                      (editor-filename session)
+                      "(new)")
+                  col-start col-end
+                  (line-count session)
+                  (max 1 (1+ (max 0 (1- top))))
+                  (editor-alteration-count session)))
+    ;; Message line: show pending info or error
+    (setf ed-message
+          (or (gethash "errormsg" lspf:*current-field-values*)
+              (if pending
+                  (let* ((cmd-name (string-upcase (symbol-name (first pending))))
+                         (start-line (second pending))
+                         (start-visible (<= top (1+ start-line)
+                                            (+ top (page-size session) -1))))
+                    (if start-visible
+                        (format nil "~A pending" cmd-name)
+                        (format nil "~A pending from line ~D" cmd-name (1+ start-line))))
+                  "")))
+    ;; Command prompt
+    (setf ed-cmdlabel (layout-command-prompt layout))
+    (setf ed-command "")
+    ;; Make marker and past-EOF rows non-writable, set marker colors
     (let ((bot-virtual (1+ (line-count session))))
       (dotimes (i (page-size session))
         (let ((virtual (+ top i)))
           (cond
-            ;; Marker lines: data non-writable, prefix writable for I/A/B
+            ;; Marker lines: data non-writable, prefix writable for I/A/B, pink color
             ((marker-line-p session virtual)
-             (lspf:set-field-attribute (format nil "prefix.~D" i) :color cl3270:+blue+)
-             (lspf:set-field-attribute (format nil "data.~D" i) :write nil :color cl3270:+blue+))
+             (lspf:set-field-attribute (format nil "prefix.~D" i) :color cl3270:+pink+)
+             (lspf:set-field-attribute (format nil "data.~D" i) :write nil :color cl3270:+pink+))
             ;; Past end of file: both non-writable so Tab skips them
             ((> virtual bot-virtual)
              (lspf:set-field-attribute (format nil "prefix.~D" i) :write nil)
@@ -181,7 +187,8 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
           (progn
             (lspf:set-cursor (car next) (cdr next))
             (setf (editor-next-cursor session) nil))
-          (lspf:set-cursor 21 14)))
+          (lspf:set-cursor (layout-command-row layout)
+                           (1+ (length (layout-command-prompt layout))))))
     ;; Show scroll keys
     (when (> top 0)
       (lspf:show-key :pf7 "Up"))
@@ -202,20 +209,34 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
                     (lspf::application-package lspf:*application*))))
     (or help-sym :stay)))
 
-;;; Enter key (no command) - process prefix commands and edits
-;;; If cursor is on a data line and no prefix commands were entered,
-;;; insert a new line after the cursor line (standard text entry behavior).
+;;; Enter key - process prefix commands, edits, and command field
 (lspf:define-key-handler edit :enter ()
   (let* ((session lspf:*session*)
+         (layout (editor-layout session))
+         (data-start (layout-data-start-row layout))
+         (data-col (layout-data-col-start layout))
+         ;; In full-control mode, read the editor's own command field
+         (command (string-trim '(#\Space)
+                               (or (gethash "ed-command" lspf:*current-field-values*) "")))
          (msg (process-editor-changes session lspf:*current-field-values*)))
+    ;; Handle command field input (since framework doesn't process it in full-control)
+    (when (plusp (length command))
+      (let ((cmd-result (or (lspf:process-screen-command
+                             (lspf:session-current-screen session) command)
+                            (lspf:process-command lspf:*application* command))))
+        (cond
+          (cmd-result
+           (return-from lspf:handle-key cmd-result))
+          (t
+           (setf (gethash "errormsg" lspf:*current-field-values*)
+                 (lspf:unknown-command-message lspf:*application* command))
+           (return-from lspf:handle-key :stay)))))
     (when msg
       (setf (gethash "errormsg" lspf:*current-field-values*) msg))
     ;; Auto-insert new line when Enter is pressed on a data line
-    ;; with no prefix commands active
     (unless msg
       (let* ((cursor-row lspf:*cursor-row*)
-             (data-start-row 3)  ; display row where data fields begin
-             (data-row (- cursor-row data-start-row))
+             (data-row (- cursor-row data-start))
              (top (editor-top-line session)))
         (when (and (>= data-row 0) (< data-row (page-size session)))
           (let* ((virtual (+ top data-row))
@@ -223,20 +244,16 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
             (when real
               (save-undo-state session)
               (insert-lines-after session real (list ""))
-              ;; Position cursor on the new line
               (let ((new-display-row (1+ cursor-row)))
                 (if (< (1+ data-row) (page-size session))
-                    ;; New line is on the current page
                     (setf (editor-next-cursor session)
-                          (cons new-display-row 7))
-                    ;; New line would be off-screen; scroll down
+                          (cons new-display-row data-col))
                     (progn
                       (setf (editor-top-line session)
                             (+ top (1- (page-size session))))
                       (clamp-top-line session)
-                      ;; Cursor on first data row of new page
                       (setf (editor-next-cursor session)
-                            (cons data-start-row 7))))))))))
+                            (cons data-start data-col))))))))))
     :stay))
 
 ;;; PF3 - Exit (with save prompt if modified)

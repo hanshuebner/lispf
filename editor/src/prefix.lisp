@@ -351,13 +351,15 @@ batch, they are executed immediately without pending."
                    (setf did-modify t
                          result-message (format nil "~D line~:P inserted" count))
                    ;; Place cursor on the first new line (don't scroll)
-                   (let* ((virtual (1+ first-new-real))
+                   (let* ((layout (editor-layout session))
+                          (virtual (1+ first-new-real))
                           (top (editor-top-line session))
                           (data-row (- virtual top))
-                          (data-start-row 3))
+                          (data-start (layout-data-start-row layout)))
                      (when (and (>= data-row 0) (< data-row (page-size session)))
                        (setf (editor-next-cursor session)
-                             (cons (+ data-start-row data-row) 7))))))
+                             (cons (+ data-start data-row)
+                                   (layout-data-col-start layout)))))))
                 (:d
                  (let ((actual-count (min count (- (line-count session) adjusted))))
                    (when (plusp actual-count)

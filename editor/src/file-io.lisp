@@ -24,7 +24,8 @@
   (let ((path (editor-filepath session)))
     (when path
       (write-file-lines path (editor-lines session))
-      (setf (editor-modified session) nil))))
+      (setf (editor-modified session) nil)
+      (setf (editor-alteration-count session) 0))))
 
 (defun revert (session)
   "Reload the file from disk, discarding all changes and undo history.

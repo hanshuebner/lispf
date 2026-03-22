@@ -87,10 +87,11 @@ Always adds title (row 0), error (row 22), and keys (row 23) unless FULL-CONTROL
       (if full-control
           (progn
             ;; Full control: all 24 rows are app content
-            (dolist (row app-rows)
-              (write-string row s) (terpri s))
-            (dotimes (i (- max-rows n))
-              (terpri s)))
+            ;; Write rows with newlines between them (not trailing)
+            (dotimes (i max-rows)
+              (when (plusp i) (terpri s))
+              (when (< i n)
+                (write-string (nth i app-rows) s))))
           (progn
             (terpri s)                          ; row 0: blank (title)
             (dolist (row app-rows)

@@ -1,12 +1,18 @@
 (:name "edit"
  :handler-package "LISPF-EDITOR"
- :command t
+ :full-control t
  :screen "
+
+
+
+
 "
- :fields ((:from (1 0) :len 79 :name info :color turquoise)
-          (:from (2 0) :len 6 :name prefix :write t :color green :repeat 17)
-          (:from (2 7) :len 72 :name data :write t :repeat 17)
-          (:from (19 1) :len 78 :name status :color blue))
+ :fields ((:from (0 0) :len 79 :name ed-status :intense t)
+          (:from (1 0) :len 79 :name ed-message :color red)
+          (:from (2 0) :len 6 :name prefix :write t :color green :repeat 21)
+          (:from (2 7) :len 72 :name data :write t :color green :repeat 21)
+          (:from (23 0) :len 5 :name ed-cmdlabel :color turquoise)
+          (:from (23 6) :len 73 :name ed-command :write t :highlighting underscore))
  :keys ((:enter "")
         (:pf1 "Help" :hidden t)
         (:pf3 "Exit")
