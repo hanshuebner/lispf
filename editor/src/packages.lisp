@@ -12,12 +12,28 @@
            #:edit-file
 
            ;; Constants
-           #:+page-size+
            #:+data-width+
            #:+max-undo+
 
+           ;; Layout
+           #:editor-layout
+           #:make-default-layout
+           #:validate-layout
+           #:page-size
+           #:layout-status-row
+           #:layout-message-row
+           #:layout-data-start-row
+           #:layout-data-end-row
+           #:layout-command-row
+           #:layout-command-prompt
+           #:layout-scale-row
+           #:layout-key-labels-row
+           #:layout-data-col-start
+           #:layout-prefix-width
+
            ;; Session
            #:editor-session
+           #:editor-layout
            #:editor-lines
            #:editor-filename
            #:editor-filepath
@@ -31,6 +47,8 @@
            #:editor-undo-stack
            #:editor-display-name
            #:editor-restricted-p
+           #:editor-current-line
+           #:editor-alteration-count
            #:make-test-session
 
            ;; Buffer operations

@@ -115,6 +115,55 @@
     (assert-nil (ed:line-at s -1))
     (assert-nil (ed:line-at s 5))))
 
+;;; ============================================================
+;;; Layout tests
+;;; ============================================================
+
+(define-test layout-default-page-size ()
+  (let ((layout (ed:make-default-layout)))
+    ;; Default: rows 2-22 = 21 data lines
+    (assert-equal 21 (ed:page-size layout))))
+
+(define-test layout-session-page-size ()
+  (let ((s (make-session "a")))
+    (assert-equal 21 (ed:page-size s))))
+
+(define-test layout-validation-overlap ()
+  ;; Message row inside data area should error
+  (let ((layout (make-instance 'ed:editor-layout
+                               :message-row 5
+                               :data-start-row 2
+                               :data-end-row 22)))
+    (handler-case
+        (progn (ed:validate-layout layout) (error "should have errored"))
+      (error (c) (assert-true (search "overlaps" (format nil "~A" c)))))))
+
+(define-test layout-validation-data-range ()
+  ;; Start > end should error
+  (let ((layout (make-instance 'ed:editor-layout
+                               :data-start-row 15
+                               :data-end-row 5)))
+    (handler-case
+        (progn (ed:validate-layout layout) (error "should have errored"))
+      (error (c) (assert-true (search "less than" (format nil "~A" c)))))))
+
+(define-test layout-validation-out-of-range ()
+  (let ((layout (make-instance 'ed:editor-layout :status-row 25)))
+    (handler-case
+        (progn (ed:validate-layout layout) (error "should have errored"))
+      (error (c) (assert-true (search "out of range" (format nil "~A" c)))))))
+
+(define-test layout-custom-page-size ()
+  ;; Smaller data area
+  (let ((layout (make-instance 'ed:editor-layout
+                               :data-start-row 3
+                               :data-end-row 20)))
+    (assert-equal 18 (ed:page-size layout))))
+
+;;; ============================================================
+;;; Line buffer tests
+;;; ============================================================
+
 (define-test insert-lines-after-beginning ()
   (let ((s (make-session "c")))
     (ed:insert-lines-after s -1 (list "a" "b"))
@@ -667,9 +716,9 @@
         (ed::build-screen-data s)
       (let ((prefix-lines (split-sequence:split-sequence #\Newline prefix))
             (data-lines (split-sequence:split-sequence #\Newline data)))
-        (assert-equal ed:+page-size+ (length prefix-lines)
+        (assert-equal (ed:page-size s) (length prefix-lines)
                       "Prefix should have exactly page-size lines")
-        (assert-equal ed:+page-size+ (length data-lines)
+        (assert-equal (ed:page-size s) (length data-lines)
                       "Data should have exactly page-size lines")))
     ;; Scrolling to middle and end must also work
     (setf (ed:editor-top-line s) 10)
@@ -1299,8 +1348,8 @@ Returns T if the file was falsely marked as modified."
   (multiple-value-bind (prefix-str data-str) (ed::build-screen-data session)
     ;; Simulate the framework join round-trip (what happens to field values
     ;; between display and response when the user doesn't edit anything)
-    (let* ((joined-prefix (simulate-join prefix-str ed:+page-size+))
-           (joined-data (simulate-join data-str ed:+page-size+))
+    (let* ((joined-prefix (simulate-join prefix-str (ed:page-size session)))
+           (joined-data (simulate-join data-str (ed:page-size session)))
            (prefix-lines (split-sequence:split-sequence #\Newline joined-prefix))
            (data-lines (split-sequence:split-sequence #\Newline joined-data)))
       (ed::process-data-edits session prefix-lines data-lines)))
@@ -1315,7 +1364,7 @@ Returns T if the file was falsely marked as modified."
     (assert-nil (simulate-display-and-response s)
                 "First display should not set modified")
     ;; Scroll down
-    (setf (ed:editor-top-line s) (+ (ed:editor-top-line s) ed:+page-size+))
+    (setf (ed:editor-top-line s) (+ (ed:editor-top-line s) (ed:page-size s)))
     (assert-nil (simulate-display-and-response s)
                 "Scroll down should not set modified")
     ;; Scroll back up
@@ -1390,7 +1439,7 @@ Returns T if the file was falsely marked as modified."
   ;; verifying markers, no false modification, no command field contamination.
   (let ((path #P"/tmp/lispf-e2e-scroll.txt")
         (n-lines 67)
-        (page ed:+page-size+))
+        (page (ed:page-size (ed:make-default-layout))))
     (unwind-protect
          (progn
            ;; Create file with identifiable lines (some with leading spaces)

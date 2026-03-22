@@ -355,7 +355,7 @@ batch, they are executed immediately without pending."
                           (top (editor-top-line session))
                           (data-row (- virtual top))
                           (data-start-row 3))
-                     (when (and (>= data-row 0) (< data-row +page-size+))
+                     (when (and (>= data-row 0) (< data-row (page-size session)))
                        (setf (editor-next-cursor session)
                              (cons (+ data-start-row data-row) 7))))))
                 (:d

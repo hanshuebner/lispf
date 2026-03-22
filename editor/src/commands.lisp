@@ -151,18 +151,18 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
 
         ((:BOTTOM :BOT)
          (setf (editor-top-line session)
-               (max 0 (- (total-virtual-lines session) +page-size+)))
+               (max 0 (- (total-virtual-lines session) (page-size session))))
          (clamp-top-line session)
          :stay)
 
         (:UP
-         (let ((n (or (parse-command-arg-n parts) +page-size+)))
+         (let ((n (or (parse-command-arg-n parts) (page-size session))))
            (setf (editor-top-line session)
                  (max 0 (- (editor-top-line session) n)))
            :stay))
 
         (:DOWN
-         (let ((n (or (parse-command-arg-n parts) +page-size+)))
+         (let ((n (or (parse-command-arg-n parts) (page-size session))))
            (setf (editor-top-line session)
                  (+ (editor-top-line session) n))
            (clamp-top-line session)

@@ -16,7 +16,7 @@ suitable for the framework's repeat field split mechanism."
         (pending (editor-pending-block session))
         (prefix-lines '())
         (data-lines '()))
-    (dotimes (i +page-size+)
+    (dotimes (i (page-size session))
       (let ((virtual (+ top i)))
         (cond
           ;; Top of Data marker
@@ -70,7 +70,7 @@ Returns a list of (real-index cmd count row)."
         (col-offset (editor-col-offset session))
         (response lspf:*current-response*)
         (commands '()))
-    (dotimes (i +page-size+)
+    (dotimes (i (page-size session))
       (let* ((virtual (+ top i))
              (real (virtual-to-real session virtual))
              (is-marker (marker-line-p session virtual))
@@ -157,14 +157,14 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
               (let* ((cmd-name (string-upcase (symbol-name (first pending))))
                      (start-line (second pending))
                      (start-visible (<= top (1+ start-line)
-                                        (+ top +page-size+ -1))))
+                                        (+ top (page-size session) -1))))
                 (if start-visible
                     (format nil "~A pending" cmd-name)
                     (format nil "~A pending from line ~D" cmd-name (1+ start-line))))
               ""))
     ;; Make marker and past-EOF rows non-writable
     (let ((bot-virtual (1+ (line-count session))))
-      (dotimes (i +page-size+)
+      (dotimes (i (page-size session))
         (let ((virtual (+ top i)))
           (cond
             ;; Marker lines: data non-writable, prefix writable for I/A/B
@@ -185,7 +185,7 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
     ;; Show scroll keys
     (when (> top 0)
       (lspf:show-key :pf7 "Up"))
-    (when (< (+ top +page-size+) total)
+    (when (< (+ top (page-size session)) total)
       (lspf:show-key :pf8 "Down"))
     (when (> (editor-col-offset session) 0)
       (lspf:show-key :pf10 "Left"))
@@ -217,7 +217,7 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
              (data-start-row 3)  ; display row where data fields begin
              (data-row (- cursor-row data-start-row))
              (top (editor-top-line session)))
-        (when (and (>= data-row 0) (< data-row +page-size+))
+        (when (and (>= data-row 0) (< data-row (page-size session)))
           (let* ((virtual (+ top data-row))
                  (real (virtual-to-real session virtual)))
             (when real
@@ -225,14 +225,14 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
               (insert-lines-after session real (list ""))
               ;; Position cursor on the new line
               (let ((new-display-row (1+ cursor-row)))
-                (if (< (1+ data-row) +page-size+)
+                (if (< (1+ data-row) (page-size session))
                     ;; New line is on the current page
                     (setf (editor-next-cursor session)
                           (cons new-display-row 7))
                     ;; New line would be off-screen; scroll down
                     (progn
                       (setf (editor-top-line session)
-                            (+ top (1- +page-size+)))
+                            (+ top (1- (page-size session))))
                       (clamp-top-line session)
                       ;; Cursor on first data row of new page
                       (setf (editor-next-cursor session)
@@ -278,14 +278,14 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
 (lspf:define-key-handler edit :pf7 ()
   (process-editor-changes lspf:*session* lspf:*current-field-values*)
   (setf (editor-top-line lspf:*session*)
-        (max 0 (- (editor-top-line lspf:*session*) (1- +page-size+))))
+        (max 0 (- (editor-top-line lspf:*session*) (1- (page-size lspf:*session*)))))
   :stay)
 
 ;;; PF8 - Scroll Down (DATA mode: one-line overlap for context)
 (lspf:define-key-handler edit :pf8 ()
   (process-editor-changes lspf:*session* lspf:*current-field-values*)
   (setf (editor-top-line lspf:*session*)
-        (+ (editor-top-line lspf:*session*) (1- +page-size+)))
+        (+ (editor-top-line lspf:*session*) (1- (page-size lspf:*session*))))
   (clamp-top-line lspf:*session*)
   :stay)
 
