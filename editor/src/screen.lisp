@@ -15,51 +15,59 @@ suitable for the framework's repeat field split mechanism."
          (col-offset (editor-col-offset session))
          (n (line-count session))
          (pending (editor-pending-block session))
-         (scale-row (layout-scale-row layout))
-         (scale-slot (when scale-row
-                       (- scale-row (layout-data-start-row layout))))
-         (scale-string (when scale-row
+         (scale-enabled (layout-scale-row layout))
+         (cur-line (editor-current-line session))
+         (cur-virtual (1+ cur-line))  ; virtual index of current line
+         ;; Scale appears after the current line. Compute which data slot that is.
+         (scale-after-slot (when scale-enabled
+                             (let ((slot (- cur-virtual top)))
+                               (when (and (>= slot 0) (< slot (page-size session)))
+                                 (1+ slot)))))
+         (scale-string (when scale-enabled
+                         ;; Pattern: ....+....1....+....2....+....3...
+                         ;; 1-based column positions: +5, 1=10, +15, 2=20, +25, 3=30...
                          (with-output-to-string (s)
-                           (write-string "..." s)
-                           (loop for c from 4 to +data-width+
+                           (loop for c from 1 to +data-width+
                                  do (cond ((zerop (mod c 10))
                                            (write-char (digit-char (mod (floor c 10) 10)) s))
                                           ((zerop (mod c 5))
                                            (write-char #\+ s))
-                                          (t (write-char #\- s)))))))
+                                          (t (write-char #\. s)))))))
          (prefix-lines '())
-         (data-lines '()))
-    (dotimes (i (page-size session))
-      (let ((virtual (+ top i)))
-        (cond
-          ;; Scale line (if enabled and this is the scale slot)
-          ((and scale-slot (= i scale-slot))
-           (push "===== " prefix-lines)
-           (push scale-string data-lines))
-          ;; Top of Data marker (line number 00000)
-          ((= virtual 0)
-           (push "00000 " prefix-lines)
-           (push "* * * Top of File * * *"
-                 data-lines))
-          ;; End of File marker (sequential line number)
-          ((= virtual (1+ n))
-           (push (format nil "~5,'0D " (1+ n)) prefix-lines)
-           (push "* * * End of File * * *"
-                 data-lines))
-          ;; File line
-          ((and (> virtual 0) (<= virtual n))
-           (let* ((real (1- virtual))
-                  (line (or (nth real (editor-lines session)) ""))
-                  (pending-start-p (and pending (= real (second pending)))))
-             (push (if pending-start-p
-                       (format nil "~5A " (string-upcase (symbol-name (first pending))))
-                       (format nil "~5,'0D " (1+ real)))
-                   prefix-lines)
-             (push (visible-portion line col-offset) data-lines)))
-          ;; Past end
-          (t
-           (push "" prefix-lines)
-           (push "" data-lines)))))
+         (data-lines '())
+         (data-slot 0)    ; tracks which data slot we're filling
+         (virtual-idx 0)) ; tracks which virtual line we're showing
+    ;; Fill page-size data slots, inserting scale line between data lines
+    (loop while (< data-slot (page-size session))
+          do (let ((virtual (+ top virtual-idx)))
+               ;; Insert scale line after current line if enabled
+               (when (and scale-after-slot (= data-slot scale-after-slot))
+                 (push "      " prefix-lines)
+                 (push scale-string data-lines)
+                 (incf data-slot)
+                 (when (>= data-slot (page-size session))
+                   (return)))
+               (cond
+                 ((= virtual 0)
+                  (push "00000 " prefix-lines)
+                  (push "* * * Top of File * * *" data-lines))
+                 ((= virtual (1+ n))
+                  (push (format nil "~5,'0D " (1+ n)) prefix-lines)
+                  (push "* * * End of File * * *" data-lines))
+                 ((and (> virtual 0) (<= virtual n))
+                  (let* ((real (1- virtual))
+                         (line (or (nth real (editor-lines session)) ""))
+                         (pending-start-p (and pending (= real (second pending)))))
+                    (push (if pending-start-p
+                              (format nil "~5A " (string-upcase (symbol-name (first pending))))
+                              (format nil "~5,'0D " (1+ real)))
+                          prefix-lines)
+                    (push (visible-portion line col-offset) data-lines)))
+                 (t
+                  (push "" prefix-lines)
+                  (push "" data-lines)))
+               (incf data-slot)
+               (incf virtual-idx)))
     (values (format nil "~{~A~^~%~}" (nreverse prefix-lines))
             (format nil "~{~A~^~%~}" (nreverse data-lines)))))
 
@@ -186,16 +194,23 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
     (setf ed-cmdlabel (layout-command-prompt layout))
     (setf ed-command "")
     ;; Set field attributes: markers, current line, scale, past-EOF
-    (let ((bot-virtual (1+ (line-count session)))
-          (cur-line (editor-current-line session))
-          (scale-slot (when (layout-scale-row layout)
-                        (- (layout-scale-row layout) (layout-data-start-row layout)))))
+    ;; Note: build-screen-data inserts scale line as data, so we need to track
+    ;; which data slots have scale vs file content.
+    (let* ((bot-virtual (1+ (line-count session)))
+           (cur-line (editor-current-line session))
+           (cur-virtual (1+ cur-line))
+           (scale-after (when scale-enabled
+                          (let ((slot (- cur-virtual top)))
+                            (when (and (>= slot 0) (< slot (page-size session)))
+                              (1+ slot))))))
       (dotimes (i (page-size session))
         (let* ((virtual (+ top i))
                (real (virtual-to-real session virtual)))
+          ;; Skip virtual-idx adjustment for scale slot
+          ;; (the build-screen-data already handled the insertion)
           (cond
-            ;; Scale line: non-writable, turquoise
-            ((and scale-slot (= i scale-slot))
+            ;; Scale line slot: non-writable, turquoise
+            ((and scale-after (= i scale-after))
              (lspf:set-field-attribute (format nil "prefix.~D" i)
                                        :write nil :color cl3270:+turquoise+)
              (lspf:set-field-attribute (format nil "data.~D" i)
