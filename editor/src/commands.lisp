@@ -77,12 +77,11 @@ Returns (values from-string to-string remainder)."
                         "")))
     (multiple-value-bind (str end) (parse-delimited-string search-str 0)
       (declare (ignore end))
-      (if (plusp (length str))
-          (progn
-            (setf (editor-last-find session) str
-                  (editor-last-find-line session) (editor-top-line session))
-            (do-find session str nil))
-          "FIND requires a search string"))))
+      (unless (plusp (length str))
+        (return-from handle-find-command "FIND requires a search string"))
+      (setf (editor-last-find session) str
+            (editor-last-find-line session) (editor-top-line session))
+      (do-find session str nil))))
 
 (defun handle-change-command (session trimmed cmd-str)
   "Handle the CHANGE/CHG command. Returns a message string."
@@ -91,12 +90,11 @@ Returns (values from-string to-string remainder)."
                   "")))
     (multiple-value-bind (from to remainder)
         (parse-change-args rest)
+      (unless (plusp (length from))
+        (return-from handle-change-command "CHANGE requires search and replace strings"))
       (let ((all-p (string-equal (string-trim '(#\Space) remainder) "ALL")))
-        (if (plusp (length from))
-            (progn
-              (setf (editor-last-change session) (list from to all-p))
-              (do-change session from to all-p))
-            "CHANGE requires search and replace strings")))))
+        (setf (editor-last-change session) (list from to all-p))
+        (do-change session from to all-p)))))
 
 (defun handle-justify-command (session parts)
   "Handle the JUSTIFY/JUS command. Returns a message string."
@@ -129,13 +127,13 @@ Returns a message string or :stay."
     (case sub
       (:CURLINE
        (let ((n (when arg (parse-integer arg :junk-allowed t))))
-         (if (and n (>= n (layout-data-start-row layout))
-                    (<= n (layout-data-end-row layout)))
-             (progn
-               (setf (layout-scale-row layout) n)  ; curline position for scale
-               (format nil "CURLINE set to ~D" n))
+         (unless (and n (>= n (layout-data-start-row layout))
+                        (<= n (layout-data-end-row layout)))
+           (return-from handle-set-command
              (format nil "CURLINE must be between ~D and ~D"
-                     (layout-data-start-row layout) (layout-data-end-row layout)))))
+                     (layout-data-start-row layout) (layout-data-end-row layout))))
+         (setf (layout-scale-row layout) n)
+         (format nil "CURLINE set to ~D" n)))
       ((:SCALE :SCA)
        (cond
          ((null arg) "SET SCALE ON/OFF or SET SCALE n")
@@ -149,14 +147,14 @@ Returns a message string or :stay."
           (setf (layout-scale-row layout) nil)
           "Scale line disabled")
          (t (let ((n (parse-integer arg :junk-allowed t)))
-              (if (and n (>= n (layout-data-start-row layout))
-                         (<= n (layout-data-end-row layout)))
-                  (progn
-                    (setf (layout-scale-row layout) n)
-                    (format nil "Scale line set to row ~D" n))
+              (unless (and n (>= n (layout-data-start-row layout))
+                             (<= n (layout-data-end-row layout)))
+                (return-from handle-set-command
                   (format nil "Scale row must be between ~D and ~D"
                           (layout-data-start-row layout)
-                          (layout-data-end-row layout)))))))
+                          (layout-data-end-row layout))))
+              (setf (layout-scale-row layout) n)
+              (format nil "Scale line set to row ~D" n)))))
       (:TRUNC
        (let ((n (when arg (parse-integer arg :junk-allowed t))))
          (if (and n (> n 0))
@@ -218,12 +216,11 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
 
         ((:LOCATE :L)
          (let ((n (parse-command-arg-n parts)))
-           (if n
-               (progn
-                 (setf (editor-top-line session) (max 0 n))
-                 (clamp-top-line session)
-                 :stay)
-               "LOCATE requires a line number")))
+           (unless n
+             (return-from handle-primary-command "LOCATE requires a line number"))
+           (setf (editor-top-line session) (max 0 n))
+           (clamp-top-line session)
+           :stay))
 
         ((:FIND :F)
          (handle-find-command session trimmed (first parts)))

@@ -338,37 +338,34 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
 ;;; PF3 - Exit (with save prompt if modified)
 (lspf:define-key-handler edit :pf3 ()
   (process-editor-changes lspf:*session* lspf:*current-field-values*)
-  (if (editor-modified lspf:*session*)
-      (progn
-        (setf (gethash "errormsg" lspf:*current-field-values*)
-              "File modified - use SAVE, SUBMIT, or CANCEL")
-        :stay)
-      :back))
+  (when (editor-modified lspf:*session*)
+    (setf (gethash "errormsg" lspf:*current-field-values*)
+          "File modified - use SAVE, SUBMIT, or CANCEL")
+    (return-from lspf:handle-key :stay))
+  :back)
 
 ;;; PF5 - Repeat Find
 (lspf:define-key-handler edit :pf5 ()
   (process-editor-changes lspf:*session* lspf:*current-field-values*)
   (let ((search-str (editor-last-find lspf:*session*)))
-    (if search-str
-        (let ((msg (do-find lspf:*session* search-str t)))
-          (setf (gethash "errormsg" lspf:*current-field-values*) msg)
-          :stay)
-        (progn
-          (setf (gethash "errormsg" lspf:*current-field-values*) "No previous FIND")
-          :stay))))
+    (unless search-str
+      (setf (gethash "errormsg" lspf:*current-field-values*) "No previous FIND")
+      (return-from lspf:handle-key :stay))
+    (setf (gethash "errormsg" lspf:*current-field-values*)
+          (do-find lspf:*session* search-str t))
+    :stay))
 
 ;;; PF6 - Repeat Change
 (lspf:define-key-handler edit :pf6 ()
   (process-editor-changes lspf:*session* lspf:*current-field-values*)
   (let ((last (editor-last-change lspf:*session*)))
-    (if last
-        (destructuring-bind (from to all-p) last
-          (let ((msg (do-change lspf:*session* from to all-p)))
-            (setf (gethash "errormsg" lspf:*current-field-values*) msg)
-            :stay))
-        (progn
-          (setf (gethash "errormsg" lspf:*current-field-values*) "No previous CHANGE")
-          :stay))))
+    (unless last
+      (setf (gethash "errormsg" lspf:*current-field-values*) "No previous CHANGE")
+      (return-from lspf:handle-key :stay))
+    (destructuring-bind (from to all-p) last
+      (setf (gethash "errormsg" lspf:*current-field-values*)
+            (do-change lspf:*session* from to all-p))
+      :stay)))
 
 ;;; PF7 - Scroll Up (with wrap-around)
 (lspf:define-key-handler edit :pf7 ()
@@ -395,13 +392,13 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
          (ps (page-size session))
          (scroll (1- ps))
          (total (total-virtual-lines session)))
-    (if (>= (+ top ps) total)
-        ;; At or past EOF: wrap to first file line (skip BOF marker)
-        (setf (editor-top-line session) 1)
-        ;; Normal scroll down
-        (progn
-          (setf (editor-top-line session) (+ top scroll))
-          (clamp-top-line session))))
+    (when (>= (+ top ps) total)
+      ;; At or past EOF: wrap to first file line (skip BOF marker)
+      (setf (editor-top-line session) 1)
+      (return-from lspf:handle-key :stay))
+    ;; Normal scroll down
+    (setf (editor-top-line session) (+ top scroll))
+    (clamp-top-line session))
   :stay)
 
 ;;; PF10 - Scroll Left
