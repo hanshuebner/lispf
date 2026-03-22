@@ -25,6 +25,9 @@
                       :documentation "Screens whose key handlers have been validated.")
    (menus :initform (make-hash-table :test 'equal) :accessor application-menus
           :documentation "Menu data: name-string -> menu plist from .menu files.")
+   (menu-timestamps :initform (make-hash-table :test 'equal)
+                     :accessor application-menu-timestamps
+                     :documentation "Menu file timestamps: name-string -> (path . write-date).")
    (menu-entries :initform nil :accessor application-menu-entries
                  :documentation "Alist of (key-string . screen-symbol) from all loaded menus.")
    (sessions :initform '() :accessor application-sessions
@@ -206,15 +209,55 @@ PREFIX is prepended with a dot for nested items (e.g. \"5.1\")."
     (nreverse entries)))
 
 (defun load-application-menus (app)
-  "Load the .menu file from the application's screen directories."
-  (let ((pkg (application-package app)))
-    (dolist (dir (application-screen-directories app))
-      (dolist (path (directory (merge-pathnames "*.menu" dir)))
-        (let* ((data (load-menu-file path))
-               (name (getf data :name)))
-          (setf (gethash name (application-menus app)) data)
-          (setf (application-menu-entries app)
-                (collect-menu-entries (getf data :items) pkg)))))))
+  "Load all .menu files from the application's screen directories."
+  (dolist (dir (application-screen-directories app))
+    (dolist (path (directory (merge-pathnames "*.menu" dir)))
+      (let* ((data (load-menu-file path))
+             (name (getf data :name)))
+        (setf (gethash name (application-menus app)) data)
+        (setf (gethash name (application-menu-timestamps app))
+              (cons path (file-write-date path))))))
+  (rebuild-menu-entries app))
+
+(defun rebuild-menu-entries (app)
+  "Rebuild the flattened menu-entries alist from all loaded menus."
+  (let ((pkg (application-package app))
+        (entries nil))
+    (maphash (lambda (name data)
+               (declare (ignore name))
+               (setf entries
+                     (nconc (collect-menu-entries (getf data :items) pkg)
+                            entries)))
+             (application-menus app))
+    (setf (application-menu-entries app) entries)))
+
+(defun find-menu-file (name-string)
+  "Search the current application's directories for NAME-STRING.menu."
+  (loop for dir in (application-screen-directories *application*)
+        for path = (merge-pathnames (make-pathname :name name-string :type "menu") dir)
+        when (probe-file path) return path))
+
+(defun menu-file-changed-p (name-string)
+  "Check if the .menu file on disk is newer than the cached version."
+  (let ((cached (when *application*
+                  (gethash name-string (application-menu-timestamps *application*)))))
+    (when cached
+      (let ((disk-time (file-write-date (car cached))))
+        (and disk-time (> disk-time (cdr cached)))))))
+
+(defun ensure-menu-loaded (name-string)
+  "Check if a menu file has changed on disk and reload it if so."
+  (when (and *application* (menu-file-changed-p name-string))
+    (let* ((cached (gethash name-string (application-menu-timestamps *application*)))
+           (path (car cached))
+           (data (load-menu-file path)))
+      (setf (gethash name-string (application-menus *application*)) data)
+      (setf (gethash name-string (application-menu-timestamps *application*))
+            (cons path (file-write-date path)))
+      (rebuild-menu-entries *application*)
+      ;; Clear the cached generated screen so it gets regenerated
+      (remhash name-string (app-screens))
+      t)))
 
 (defun find-menu-entry (app key)
   "Look up KEY in the application's menu entries. Returns a screen symbol or NIL."
@@ -1195,6 +1238,7 @@ Returns the 3270 response."
   (let ((restored-cursor-row nil)
         (restored-cursor-col nil))
   (loop
+    (block next-screen
     (let* ((screen-sym (session-current-screen *session*))
            (name-string (screen-name-string screen-sym))
            (screen-info (ensure-screen-loaded screen-sym))
@@ -1226,7 +1270,17 @@ Returns the 3270 response."
             (*next-cursor-col* (prog1 restored-cursor-col
                                   (setf restored-cursor-col nil)))
             (*field-attribute-overrides* nil))
-        (prepare-screen dispatch-sym)
+        (let ((prep-result (prepare-screen dispatch-sym)))
+          (when (and prep-result (symbolp prep-result))
+            (let ((transition (apply-screen-transition
+                               prep-result screen-sym dispatch-sym)))
+              (when (eq transition :exit)
+                (return-from run-screen-loop))
+              (when transition
+                (multiple-value-bind (tr r c) transition
+                  (declare (ignore tr))
+                  (when r (setf restored-cursor-row r restored-cursor-col c)))))
+            (return-from next-screen)))
         ;; Menu screens: auto-set cursor to command field
         (when (and is-menu (not *next-cursor-row*))
           (setf *next-cursor-row* 21
@@ -1302,7 +1356,7 @@ Returns the 3270 response."
                   (setf restored-cursor-row saved-row
                         restored-cursor-col saved-col))
                 (when (eq transition-result :exit)
-                  (return))))))))))))
+                  (return)))))))))))))
 
 (defun run-application (application conn devinfo)
   "Run an application's main loop for a single connection.

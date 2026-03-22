@@ -422,8 +422,11 @@ Creates a simple screen with repeat fields for menu items."
 
 (defun ensure-screen-loaded (screen-name)
   "Ensure SCREEN-NAME is loaded and up-to-date. Returns the screen-info.
-For menu screens without a .screen file, generates one automatically."
+For menu screens without a .screen file, generates one automatically.
+Menu files are checked for changes on disk and reloaded if newer."
   (let ((name-string (screen-name-string screen-name)))
+    ;; Check for menu file changes (clears cached screen if changed)
+    (ensure-menu-loaded name-string)
     (when (screen-file-changed-p name-string)
       (load-and-register-screen name-string))
     (or (gethash name-string (app-screens))
