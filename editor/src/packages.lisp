@@ -64,6 +64,7 @@
            #:apply-edit
 
            ;; File I/O
+           #:open-file
            #:read-file-lines
            #:write-file-lines
 

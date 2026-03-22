@@ -42,8 +42,7 @@ Virtual 0 = Top-of-Data, 1..N = file lines, N+1 = Bottom-of-Data."
         (setf (editor-lines session) (append new-lines lines))
         (let ((tail (nthcdr real-index lines)))
           (setf (cdr tail) (append new-lines (cdr tail))))))
-  (setf (editor-modified session) t)
-  (incf (editor-alteration-count session)))
+)
 
 (defun insert-lines-before (session real-index new-lines)
   "Insert NEW-LINES before REAL-INDEX."
@@ -55,8 +54,7 @@ Virtual 0 = Top-of-Data, 1..N = file lines, N+1 = Bottom-of-Data."
     (setf (editor-lines session)
           (append (subseq lines 0 (min start-index (length lines)))
                   (subseq lines (min (+ start-index count) (length lines))))))
-  (setf (editor-modified session) t)
-  (incf (editor-alteration-count session)))
+)
 
 (defun extract-line-range (session start-index count)
   "Extract COUNT lines starting at START-INDEX without removing them."
@@ -106,9 +104,7 @@ the visible window."
                       '(#\Space)
                       (concatenate 'string before middle after))))
       (unless (string= new-line line)
-        (setf (nth real-index (editor-lines session)) new-line)
-        (setf (editor-modified session) t)
-        (incf (editor-alteration-count session))))))
+        (setf (nth real-index (editor-lines session)) new-line)))))
 
 (defun clamp-top-line (session)
   "Clamp top-line to valid range.

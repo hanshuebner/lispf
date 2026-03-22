@@ -213,8 +213,8 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
                         (format nil "~A pending from line ~D" cmd-name (1+ start-line))))
                   "")))
     ;; Command prompt
-    (setf ed-cmdlabel (layout-command-prompt layout))
-    (setf ed-command "")
+    (setf ed-cmdlabel (layout-command-prompt layout)
+          ed-command "")
     ;; Set field attributes: markers, current line, scale, past-EOF
     ;; Note: build-screen-data inserts scale line as data, so we need to track
     ;; which data slots have scale vs file content.

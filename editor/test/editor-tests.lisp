@@ -226,6 +226,7 @@
 
 (define-test apply-edit-simple ()
   (let ((s (make-session "Hello")))
+    (ed:save-undo-state s)
     (ed:apply-edit s 0 "World")
     (assert-lines s '("World"))
     (assert-true (ed:editor-modified s))))
@@ -785,13 +786,18 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
               (format nil "~{~A~^~%~}" data-lines))))
     context))
 
+(defun test-process-editor-changes (session context)
+  "Call process-editor-changes with *current-response* bound to nil so that
+MDT-based detection treats all fields as modified (the test default)."
+  (let ((lispf:*current-response* nil))
+    (ed::process-editor-changes session context)))
 (define-test round-trip-single-dd-enters-pending ()
   ;; User types "dd" on line 2 (screen row 1, since row 0 is Top of File marker)
   ;; This should enter pending mode, not delete the line
   (let ((s (make-session "a" "b" "c" "d" "e")))
     (setf (ed:editor-top-line s) 0) ; top of data marker at row 0
     (let* ((context (make-context-with-prefix s '((1 . "dd"))))
-           (msg (ed::process-editor-changes s context)))
+           (msg (test-process-editor-changes s context)))
       (assert-true (ed:editor-pending-block s)
                    "Single DD should set pending")
       (assert-string-contains msg "pending"
@@ -808,13 +814,13 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
     (setf (ed:editor-top-line s) 0)
     ;; User types DD on row 1 (line "a")
     (let* ((context (make-context-with-prefix s '((1 . "dd"))))
-           (msg (ed::process-editor-changes s context)))
+           (msg (test-process-editor-changes s context)))
       (assert-true (ed:editor-pending-block s) "DD should be pending")
       (assert-string-contains msg "pending"))
     ;; Scroll down: process-editor-changes with no user edits
     (setf (ed:editor-top-line s) 16) ; scroll down
     (let* ((context (make-context-with-prefix s nil)) ; no user prefix edits
-           (msg (ed::process-editor-changes s context)))
+           (msg (test-process-editor-changes s context)))
       (declare (ignore msg))
       (assert-true (ed:editor-pending-block s)
                    "Pending should survive scroll down"))
@@ -822,7 +828,7 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
     ;; This must NOT be treated as a new DD command
     (setf (ed:editor-top-line s) 0)
     (let* ((context (make-context-with-prefix s nil))
-           (msg (ed::process-editor-changes s context)))
+           (msg (test-process-editor-changes s context)))
       (declare (ignore msg))
       (assert-true (ed:editor-pending-block s)
                    "Pending should survive scroll back up")
@@ -836,7 +842,7 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
   (let ((s (make-session "a" "b" "c" "d" "e")))
     (setf (ed:editor-top-line s) 0)
     (let* ((context (make-context-with-prefix s '((2 . "dd") (3 . "dd"))))
-           (msg (ed::process-editor-changes s context)))
+           (msg (test-process-editor-changes s context)))
       (assert-string-contains msg "deleted" "Should report deletion")
       (assert-nil (ed:editor-pending-block s)
                   "DD pair should not leave pending")
@@ -849,7 +855,7 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
   (let ((s (make-session "a" "b" "c" "d" "e")))
     (setf (ed:editor-top-line s) 0)
     (let* ((context (make-context-with-prefix s '((2 . "cc") (3 . "cc") (5 . "a"))))
-           (msg (ed::process-editor-changes s context)))
+           (msg (test-process-editor-changes s context)))
       (assert-string-contains msg "copied")
       (assert-lines s '("a" "b" "c" "d" "e" "b" "c")))))
 
@@ -1099,8 +1105,10 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
 (define-test undo-restores-modified-flag ()
   (let ((s (make-session "a" "b")))
     (assert-nil (ed:editor-modified s))
+    ;; Pushing undo state makes modified true (stack depth > 0)
     (ed:save-undo-state s)
-    (setf (ed:editor-modified s) t)
+    (assert-true (ed:editor-modified s))
+    ;; Undo pops the stack, making modified nil again
     (ed:undo s)
     (assert-nil (ed:editor-modified s))))
 
@@ -1157,12 +1165,11 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
 ;;; Restricted mode tests
 ;;; ============================================================
 
-(define-test restricted-blocks-cancel ()
+(define-test restricted-cancel-works ()
   (let ((s (make-session "hello")))
     (setf (ed:editor-restricted-p s) t)
     (let ((result (ed:handle-primary-command s "CANCEL")))
-      (assert-true (stringp result) "CANCEL should return error in restricted mode")
-      (assert-string-contains result "restricted"))))
+      (assert-equal :back result "CANCEL should work in restricted mode"))))
 
 (define-test restricted-blocks-revert ()
   (let ((s (make-session "hello")))
@@ -1228,9 +1235,8 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
            (let ((s (make-session "original" "content")))
              (setf (ed:editor-filepath s) path)
              ;; Modify the buffer
-             (setf (nth 0 (ed:editor-lines s)) "changed")
-             (setf (ed:editor-modified s) t)
              (ed:save-undo-state s)
+             (setf (nth 0 (ed:editor-lines s)) "changed")
              ;; Revert
              (let ((msg (ed:revert s)))
                (assert-string-contains msg "Reverted")
@@ -1343,7 +1349,7 @@ then re-joins with newlines."
   "Simulate one display cycle: build screen data, apply the join round-trip
 that the framework performs, then call process-data-edits.
 Returns T if the file was falsely marked as modified."
-  (setf (ed:editor-modified session) nil)
+  (setf (ed:editor-undo-stack session) nil)
   ;; Build what the screen would show
   (multiple-value-bind (prefix-str data-str) (ed::build-screen-data session)
     ;; Simulate the framework join round-trip (what happens to field values
@@ -1710,7 +1716,7 @@ Returns T if the file was falsely marked as modified."
    'undo-from-prefix-commands
    'undo-no-state-saved-when-no-changes
    ;; Restricted mode
-   'restricted-blocks-cancel
+   'restricted-cancel-works
    'restricted-blocks-revert
    'restricted-allows-save
    'restricted-allows-submit

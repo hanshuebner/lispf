@@ -79,8 +79,8 @@ Returns (values from-string to-string remainder)."
       (declare (ignore end))
       (if (plusp (length str))
           (progn
-            (setf (editor-last-find session) str)
-            (setf (editor-last-find-line session) (editor-top-line session))
+            (setf (editor-last-find session) str
+                  (editor-last-find-line session) (editor-top-line session))
             (do-find session str nil))
           "FIND requires a search string"))))
 
@@ -157,13 +157,6 @@ Returns a message string or :stay."
                   (format nil "Scale row must be between ~D and ~D"
                           (layout-data-start-row layout)
                           (layout-data-end-row layout)))))))
-      (:ALT
-       (let ((n (when arg (parse-integer arg :junk-allowed t))))
-         (if n
-             (progn
-               (setf (editor-alteration-count session) n)
-               (format nil "Alt set to ~D" n))
-             "SET ALT requires a number")))
       (:TRUNC
        (let ((n (when arg (parse-integer arg :junk-allowed t))))
          (if (and n (> n 0))
@@ -193,14 +186,12 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
          (save-editor-file session)
          :stay)
 
-        ((:CANCEL :CAN)
-         (if (editor-restricted-p session)
-             "CANCEL not available in restricted mode"
-             (progn (setf (editor-modified session) nil) :back)))
-
         ((:SUBMIT :FILE)
          (save-editor-file session)
          :back)
+
+        ((:CANCEL :CAN)
+         (setf (editor-undo-stack session) nil) :back)
 
         (:TOP
          (setf (editor-top-line session) 0)
@@ -253,8 +244,8 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
            :stay))
 
         ((:RESET :RES)
-         (setf (editor-pending-block session) nil)
-         (setf (editor-justify-range session) nil)
+         (setf (editor-pending-block session) nil
+               (editor-justify-range session) nil)
          :stay)
 
         (:UNDO
@@ -299,24 +290,17 @@ Returns a message string."
          (lines (editor-lines session))
          (n (length lines))
          (upper-search (string-upcase search-str)))
-    ;; Search from start-line to end
-    (loop for i from start-line below n
-          when (search upper-search (string-upcase (nth i lines)))
-            do (setf (editor-top-line session) (1+ i))  ; virtual = real + 1
-               (setf (editor-last-find-line session) i)
-               (setf (editor-current-line session) i)
+    (flet ((check-line (i wrapped)
+             (when (search upper-search (string-upcase (nth i lines)))
+               (setf (editor-top-line session) (1+ i)
+                     (editor-last-find-line session) i
+                     (editor-current-line session) i)
                (clamp-top-line session)
                (return-from do-find
-                 (format nil "CHARS '~A' found on line ~D" search-str (1+ i))))
-    ;; Wrap around from top
-    (loop for i from 0 below (min start-line n)
-          when (search upper-search (string-upcase (nth i lines)))
-            do (setf (editor-top-line session) (1+ i))
-               (setf (editor-last-find-line session) i)
-               (setf (editor-current-line session) i)
-               (clamp-top-line session)
-               (return-from do-find
-                 (format nil "CHARS '~A' found on line ~D (wrapped)" search-str (1+ i))))
+                 (format nil "CHARS '~A' found on line ~D~@[ (wrapped)~]"
+                         search-str (1+ i) wrapped)))))
+      (loop for i from start-line below n do (check-line i nil))
+      (loop for i from 0 below (min start-line n) do (check-line i t)))
     (format nil "CHARS '~A' not found" search-str)))
 
 (defun do-change (session from to all-p)
@@ -327,34 +311,33 @@ Returns a message string."
   (save-undo-state session)
   (handler-case
       (let ((scanner (cl-ppcre:create-scanner from :case-insensitive-mode t))
-            (count 0)
-            (start-line (max 0 (1- (editor-top-line session)))))
-        (if all-p
-            ;; Change all occurrences in all lines
-            (loop for i from 0 below (line-count session)
-                  do (let* ((line (nth i (editor-lines session)))
-                            (matches (cl-ppcre:all-matches scanner line))
-                            (new-line (cl-ppcre:regex-replace-all scanner line to)))
-                       (incf count (/ (length matches) 2))
-                       (unless (string= line new-line)
-                         (setf (nth i (editor-lines session)) new-line))))
-            ;; Change first occurrence from current position
-            (loop for i from start-line below (line-count session)
-                  do (multiple-value-bind (new-line match-p)
-                         (cl-ppcre:regex-replace scanner (nth i (editor-lines session)) to)
-                       (when match-p
-                         (setf (nth i (editor-lines session)) new-line)
-                         (setf (editor-top-line session) (1+ i))
-                         (clamp-top-line session)
-                         (incf count)
-                         (return)))))
-        (if (plusp count)
-            (progn
-              (incf (editor-alteration-count session) count)
-              (format nil "CHANGED ~D occurrence~:P" count))
-            (progn
-              (pop (editor-undo-stack session))
-              (format nil "'~A' not found" from))))
+            (count 0))
+        (flet ((replace-in-line (i)
+                 (let* ((line (nth i (editor-lines session)))
+                        (new-line (if all-p
+                                      (cl-ppcre:regex-replace-all scanner line to)
+                                      (cl-ppcre:regex-replace scanner line to))))
+                   (unless (string= line new-line)
+                     (setf (nth i (editor-lines session)) new-line)
+                     (when all-p
+                       (incf count (/ (length (cl-ppcre:all-matches scanner line)) 2)))
+                     (unless all-p
+                       (incf count)
+                       (setf (editor-top-line session) (1+ i))
+                       (clamp-top-line session))
+                     t))))
+          (if all-p
+              (dotimes (i (line-count session))
+                (replace-in-line i))
+              (loop for i from (max 0 (1- (editor-top-line session)))
+                      below (line-count session)
+                    when (replace-in-line i) do (return))))
+        (cond
+          ((plusp count)
+           (format nil "CHANGED ~D occurrence~:P" count))
+          (t
+           (pop (editor-undo-stack session))
+           (format nil "'~A' not found" from))))
     (cl-ppcre:ppcre-syntax-error (c)
       (pop (editor-undo-stack session))
       (format nil "Invalid regex: ~A" c))))

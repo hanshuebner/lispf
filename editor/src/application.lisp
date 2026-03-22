@@ -34,18 +34,8 @@
          (path (parse-namestring trimmed)))
     (unless path
       (lspf:application-error "Invalid file path"))
-    (let ((lines (read-file-lines path)))
-      (setf (editor-filepath lspf:*session*) path)
-      (setf (editor-filename lspf:*session*)
-            (file-namestring path))
-      (if lines
-          (setf (editor-lines lspf:*session*) lines)
-          ;; New file
-          (setf (editor-lines lspf:*session*) (list "")))
-      (setf (editor-modified lspf:*session*) nil)
-      (setf (editor-top-line lspf:*session*) 0)
-      (setf (editor-col-offset lspf:*session*) 0)
-      'edit)))
+    (open-file lspf:*session* path)
+    'edit))
 
 ;;; ============================================================
 ;;; Command processing (for primary commands on edit screen)
@@ -93,21 +83,10 @@ The calling application must register the editor screens at startup:
   (lspf:register-screen-directory
     (merge-pathnames #P\"editor/screens/\"
                      (asdf:system-source-directory :lispf)))"
-  (let ((session lspf:*session*))
-    (let ((lines (read-file-lines path)))
-      (setf (editor-filepath session) path)
-      (setf (editor-filename session) (file-namestring path))
-      (setf (editor-display-name session) display-name)
-      (setf (editor-restricted-p session) restricted)
-      (setf (editor-lines session) (or lines (list "")))
-      (setf (editor-modified session) nil)
-      (setf (editor-top-line session) 0)
-      (setf (editor-col-offset session) 0)
-      (setf (editor-undo-stack session) nil)
-      (setf (editor-pending-block session) nil))
-    ;; Return the screen symbol in lispf-editor package
-    ;; (the edit.screen has :handler-package "LISPF-EDITOR")
-    'edit))
+  (open-file lspf:*session* path
+             :display-name display-name
+             :restricted restricted)
+  'edit)
 
 ;;; ============================================================
 ;;; Server entry point

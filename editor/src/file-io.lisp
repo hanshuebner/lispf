@@ -19,13 +19,29 @@
     (dolist (line lines)
       (write-line line s))))
 
+(defun open-file (session path &key display-name restricted)
+  "Open PATH into SESSION, resetting all editor state.
+Reads the file (or starts with one empty line if new), clears undo, scroll,
+pending block, and sets display-name/restricted as given."
+  (let ((lines (read-file-lines path)))
+    (setf (editor-filepath session) path
+          (editor-filename session) (file-namestring path)
+          (editor-display-name session) display-name
+          (editor-restricted-p session) restricted
+          (editor-lines session) (or lines (list ""))
+          (editor-undo-stack session) nil
+          (editor-pending-block session) nil
+          (editor-justify-range session) nil
+          (editor-top-line session) 0
+          (editor-col-offset session) 0
+          (editor-current-line session) 0)))
+
 (defun save-editor-file (session)
   "Save the editor buffer to disk."
   (let ((path (editor-filepath session)))
     (when path
       (write-file-lines path (editor-lines session))
-      (setf (editor-modified session) nil)
-      (setf (editor-alteration-count session) 0))))
+      (setf (editor-undo-stack session) nil))))
 
 (defun revert (session)
   "Reload the file from disk, discarding all changes and undo history.
@@ -33,9 +49,8 @@ Returns a message string."
   (let ((path (editor-filepath session)))
     (if (and path (probe-file path))
         (let ((lines (read-file-lines path)))
-          (setf (editor-lines session) (or lines (list "")))
-          (setf (editor-modified session) nil)
-          (setf (editor-undo-stack session) nil)
-          (setf (editor-pending-block session) nil)
+          (setf (editor-lines session) (or lines (list ""))
+                (editor-undo-stack session) nil
+                (editor-pending-block session) nil)
           (format nil "Reverted to ~A" (file-namestring path)))
         "No file to revert to")))

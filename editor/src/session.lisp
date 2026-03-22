@@ -124,21 +124,18 @@ Virtual 0 = Top-of-Data marker, 1..N = file lines, N+1 = Bottom-of-Data marker."
    (justify-range :initform nil :accessor editor-justify-range
                   :documentation "When set to (start . count), the JJ-marked range for JUSTIFY command.")
    (current-line :initform 0 :accessor editor-current-line
-                 :documentation "0-based real line index of the current (focus) line.")
-   (alteration-count :initform 0 :accessor editor-alteration-count
-                     :documentation "Number of modifications since last save.")))
+                 :documentation "0-based real line index of the current (focus) line.")))
 
 (defmethod page-size ((session editor-session))
   (page-size (editor-layout session)))
 
-(defmethod editor-modified ((session editor-session))
-  "File is modified when alteration count is non-zero."
-  (plusp (editor-alteration-count session)))
+(defmethod editor-alteration-count ((session editor-session))
+  "Alteration count is the undo stack depth."
+  (length (editor-undo-stack session)))
 
-(defmethod (setf editor-modified) (value (session editor-session))
-  "Setting modified to NIL resets alteration count to 0."
-  (unless value
-    (setf (editor-alteration-count session) 0)))
+(defmethod editor-modified ((session editor-session))
+  "File is modified when undo stack is non-empty."
+  (plusp (editor-alteration-count session)))
 
 (defun make-test-session (lines &key layout)
   "Create an editor session for testing (no application binding needed)."
