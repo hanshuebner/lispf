@@ -27,6 +27,11 @@ Available in key handler bodies.")
 Field values from user input are automatically merged here (except transient fields).
 Handlers can read and modify values; changes persist across screen transitions.")
 
+
+(defvar *current-response* nil
+  "The raw 3270 response object from the last key press.
+Available in key handler bodies. Use cl3270:field-modified-p to check
+if a specific field was modified by the user (MDT-based detection).")
 (defvar *attribute-intro-char* #\^
   "The character that introduces inline attribute codes in dynamic area strings.
 Default is #\\^. Applications may rebind this to a different character.")

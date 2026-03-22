@@ -1180,7 +1180,8 @@ Returns the 3270 response."
     (join-repeat-field-values repeat-groups context))
   (remhash "errormsg" context)
   (setf *cursor-row* (cl3270:response-row response)
-        *cursor-col* (cl3270:response-col response))
+        *cursor-col* (cl3270:response-col response)
+        *current-response* response)
   (when has-list-data
     (setf (list-state-value *session* dispatch-sym :cursor-row) *cursor-row*)
     (setf (list-state-value *session* dispatch-sym :cursor-col) *cursor-col*)))

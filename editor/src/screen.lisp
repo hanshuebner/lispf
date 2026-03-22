@@ -63,46 +63,56 @@ did not type a new command - the prefix is just our own marker echoed back."
         (string-equal trimmed expected-trimmed)))))
 
 (defun process-data-edits (session prefix-lines data-lines)
-  "Compare data fields with current buffer and apply edits.
-Also collects prefix commands. Returns a list of (real-index cmd count row)."
+  "Process data edits and prefix commands using MDT-based detection.
+Only processes fields that were modified by the user (present in the response).
+Returns a list of (real-index cmd count row)."
   (let ((top (editor-top-line session))
         (col-offset (editor-col-offset session))
+        (response lspf:*current-response*)
         (commands '()))
     (dotimes (i +page-size+)
       (let* ((virtual (+ top i))
              (real (virtual-to-real session virtual))
              (is-marker (marker-line-p session virtual))
+             (prefix-key (format nil "prefix.~D" i))
+             (data-key (format nil "data.~D" i))
+             ;; MDT-based: only process fields the user modified.
+             ;; When no response available (unit tests), process all fields.
+             (prefix-modified (or (null response)
+                                  (cl3270:field-modified-p response prefix-key)))
+             (data-modified (or (null response)
+                                (cl3270:field-modified-p response data-key)))
              (prefix-val (if (< i (length prefix-lines))
                              (nth i prefix-lines) ""))
              (data-val (if (< i (length data-lines))
                            (nth i data-lines) "")))
-        ;; Apply data edits for real file lines
-        (when (and real (not is-marker))
+        ;; Apply data edits only for fields the user actually modified
+        (when (and data-modified real (not is-marker))
           (let ((original (visible-portion (line-at session real) col-offset)))
             (unless (string= (string-right-trim '(#\Space) data-val)
                              (string-right-trim '(#\Space) original))
               (apply-edit session real data-val))))
-        ;; Parse prefix commands (skip if it's our own pending marker echoed back)
-        (unless (pending-prefix-for-line-p session real prefix-val)
-        (multiple-value-bind (cmd count) (parse-prefix-command prefix-val)
-          (when cmd
-            (cond
-              ;; Top-of-Data marker: allow I (insert at top), A/B targets
-              ((and is-marker (= virtual 0))
-               (when (member cmd '(:i :a :b))
-                 ;; Use real-index -1 to signal "before first line"
-                 (push (list -1 cmd count i) commands)))
-              ;; Bottom-of-Data marker: allow I (append), A/B targets
-              ((and is-marker (= virtual (1+ (line-count session))))
-               (when (member cmd '(:i :a :b))
-                 (push (list (1- (line-count session)) cmd count i) commands)))
-              ;; Regular file line
-              (real
-               (push (list real cmd count i) commands))
-              ;; Empty row past EOF
-              (t
-               (when (member cmd '(:a :b))
-                 (push (list (line-count session) cmd count i) commands)))))))))
+        ;; Parse prefix commands only from modified prefix fields
+        (when prefix-modified
+          (unless (pending-prefix-for-line-p session real prefix-val)
+            (multiple-value-bind (cmd count) (parse-prefix-command prefix-val)
+              (when cmd
+                (cond
+                  ;; Top-of-Data marker: allow I (insert at top), A/B targets
+                  ((and is-marker (= virtual 0))
+                   (when (member cmd '(:i :a :b))
+                     (push (list -1 cmd count i) commands)))
+                  ;; Bottom-of-Data marker: allow I (append), A/B targets
+                  ((and is-marker (= virtual (1+ (line-count session))))
+                   (when (member cmd '(:i :a :b))
+                     (push (list (1- (line-count session)) cmd count i) commands)))
+                  ;; Regular file line
+                  (real
+                   (push (list real cmd count i) commands))
+                  ;; Empty row past EOF
+                  (t
+                   (when (member cmd '(:a :b))
+                     (push (list (line-count session) cmd count i) commands))))))))))
     (nreverse commands)))
 
 (defun process-editor-changes (session context)

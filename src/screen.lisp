@@ -67,6 +67,7 @@
            #:*cursor-row*
            #:*cursor-col*
            #:*current-field-values*
+           #:*current-response*
            #:define-application
            #:run-application
            #:start-application
