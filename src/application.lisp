@@ -740,17 +740,26 @@ Each element of CONTENT may be:
   - A string, optionally containing inline attribute codes (^r, ^b, ^_, etc.)
   - A plist (:content STRING :color C :highlighting H :intense T)
   - NIL for a blank row.
+When the area starts at column 0, the attribute byte is placed at the end of
+the previous row so content fills the full row width.
 Returns (values screen vals)."
   (let* ((from-row (1+ (dynamic-area-from-row area)))
-         (from-col (dynamic-area-from-col area))
+         (raw-from-col (dynamic-area-from-col area))
+         (full-width-p (zerop raw-from-col))
+         (attr-col (if full-width-p (1- +screen-columns+) raw-from-col))
+         (content-col (if full-width-p 0 (1+ raw-from-col)))
          (to-row (1+ (dynamic-area-to-row area)))
-         (content-width (- (dynamic-area-to-col area) from-col))
+         (content-width (if full-width-p
+                            +screen-columns+
+                            (- (dynamic-area-to-col area) raw-from-col)))
          (fields '())
          (vals (cl3270:make-dict :test #'equal))
          (field-idx 0))
     (flet ((add-field (row col name attrs text width)
              (push (apply #'cl3270:make-field :row row :col col :name name attrs) fields)
-             (setf (gethash name vals) (pad-or-truncate text width))))
+             (setf (gethash name vals) (pad-or-truncate text width)))
+           (attr-row (row)
+             (if full-width-p (1- row) row)))
       (loop for row from from-row to to-row
             for i from 0
             for entry = (if (< i (length content)) (nth i content) nil)
@@ -760,20 +769,24 @@ Returns (values screen vals)."
                   (let ((name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx)))
                         (line (or (getf entry :content) ""))
                         (attrs (remove-from-plist entry :content)))
-                    (add-field row from-col name attrs line content-width)))
+                    (add-field (attr-row row) attr-col name attrs line content-width)))
                  ;; String entry: parse for inline attribute codes
                  ((stringp entry)
                   (let ((segments (parse-attributed-string entry))
-                        (col from-col)
-                        (remaining content-width))
+                        (col content-col)
+                        (remaining content-width)
+                        (first-seg t))
                     (dolist (seg segments)
                       (when (plusp remaining)
                         (let* ((text (car seg))
                                (attrs (cdr seg))
                                (name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx)))
-                               (seg-width (min (length text) remaining)))
-                          (add-field row col name attrs
+                               (seg-width (min (length text) remaining))
+                               (field-row (if first-seg (attr-row row) row))
+                               (field-col (if first-seg attr-col col)))
+                          (add-field field-row field-col name attrs
                                      (subseq text 0 seg-width) seg-width)
+                          (setf first-seg nil)
                           (incf col seg-width)
                           (decf remaining seg-width))))
                     ;; Pad remainder of the row if segments didn't fill it
@@ -783,7 +796,7 @@ Returns (values screen vals)."
                  ;; NIL: blank row
                  (t
                   (let ((name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx))))
-                    (add-field row from-col name nil "" content-width))))))
+                    (add-field (attr-row row) attr-col name nil "" content-width))))))
     (values (apply #'cl3270:make-screen "dynamic-overlay" (nreverse fields))
             vals)))
 
@@ -883,7 +896,7 @@ unlock the 3270 keyboard)."
 
 (defun display-and-read (screen rules vals pf-keys exit-keys error-field
                           cursor-row cursor-col conn
-                          &key screen-sym devinfo codepage)
+                          &key screen-sym devinfo codepage no-clear)
   "Display a screen and read response with field validation.
 Reimplements cl3270:handle-screen-alt's validation loop using only exported
 cl3270 symbols, adding background update thread support via post-send-callback."
@@ -920,6 +933,7 @@ cl3270 symbols, adding background update thread support via post-send-callback."
               (cl3270:make-screen-opts
                :cursor-row cursor-row :cursor-col cursor-col
                :altscreen devinfo :codepage codepage
+               :no-clear no-clear
                :post-send-callback (when update-ctx
                                      (lambda (data)
                                        (declare (ignore data))
@@ -1203,8 +1217,9 @@ Screen stack entries are (symbol cursor-row . cursor-col) to restore cursor on :
 (defun show-screen-and-read (screen display-screen screen-rules key-specs
                              field-values dispatch-sym repeat-groups
                              has-list-data list-data-count
-                             &key no-command full-control)
+                             &key no-command full-control no-clear)
   "Prepare the display screen, compute cursor, and read user input.
+When NO-CLEAR is true, the screen is rewritten without erasing first.
 Returns the 3270 response."
   (multiple-value-bind (cursor-row cursor-col)
       (compute-cursor-position screen display-screen dispatch-sym
@@ -1221,7 +1236,8 @@ Returns the 3270 response."
           (display-and-read display-screen screen-rules field-values
                             pf-keys exit-keys "errormsg"
                             cursor-row cursor-col *connection*
-                            :screen-sym (unless full-control dispatch-sym))
+                            :screen-sym (unless full-control dispatch-sym)
+                            :no-clear no-clear)
         (when err (error err))
         response))))
 
@@ -1242,7 +1258,8 @@ Returns the 3270 response."
 (defun run-screen-loop (app-package)
   "Execute the main screen loop. Returns when the session ends."
   (let ((restored-cursor-row nil)
-        (restored-cursor-col nil))
+        (restored-cursor-col nil)
+        (no-clear nil))
   (loop
     (block next-screen
     (let* ((screen-sym (session-current-screen *session*))
@@ -1302,13 +1319,16 @@ Returns the 3270 response."
                                      (filter-screen-fields screen repeat-groups
                                                            list-data-count)
                                      screen)))
-                 (response (show-screen-and-read screen display-screen
+                 (response (prog1
+                               (show-screen-and-read screen display-screen
                                                  screen-rules key-specs
                                                  field-values dispatch-sym
                                                  repeat-groups has-list-data
                                                  list-data-count
                                                  :no-command no-command
-                                                :full-control full-control)))
+                                                 :full-control full-control
+                                                 :no-clear no-clear)
+                             (setf no-clear nil))))
             (process-response response context dispatch-sym transient-fields
                               repeat-groups has-list-data)
             ;; Temporarily inject transient field values so key handlers can
@@ -1356,6 +1376,8 @@ Returns the 3270 response."
                                   :stay)
                                 result))
                           result)))
+              (setf no-clear (or (eq checked-result :stay)
+                                  (null checked-result)))
               (multiple-value-bind (transition-result saved-row saved-col)
                   (apply-screen-transition checked-result screen-sym dispatch-sym)
                 (when saved-row

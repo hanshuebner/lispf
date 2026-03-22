@@ -213,7 +213,9 @@
       (destructuring-bind (row col) from
         (let ((attributes (remove-from-plist keys :from :len)))
           (dotimes (i len)
-            (setf (cdr (aref (aref cell-map row) (+ col i))) attributes)))))))
+            (multiple-value-bind (r c) (floor (+ col i) +screen-columns+)
+              (let ((actual-row (mod (+ row r) +screen-rows+)))
+                (setf (cdr (aref (aref cell-map actual-row) c)) attributes)))))))))
 
 (defun parse-screen (screen-image field-definitions)
   (make-fields (set-attributes-in-cell-map (screen-image-to-cell-map screen-image)
