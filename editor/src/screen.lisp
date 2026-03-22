@@ -199,7 +199,7 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
     (let* ((bot-virtual (1+ (line-count session)))
            (cur-line (editor-current-line session))
            (cur-virtual (1+ cur-line))
-           (scale-after (when scale-enabled
+           (scale-after (when (layout-scale-row layout)
                           (let ((slot (- cur-virtual top)))
                             (when (and (>= slot 0) (< slot (page-size session)))
                               (1+ slot))))))
