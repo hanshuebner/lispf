@@ -272,6 +272,50 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
 ;;; ============================================================
 
 ;;; PF1 - Help (process edits first, then navigate to help)
+
+(defun dispatch-command (session command)
+  "Dispatch a command entered in the editor's command field.
+Returns a navigation result (:stay, :back, screen symbol), or nil if no command."
+  (when (plusp (length command))
+    (when-let ((result (or (lspf:process-screen-command
+                       (lspf:session-current-screen session) command)
+                      (lspf:process-command lspf:*application* command))))
+      (return-from dispatch-command result))
+    (setf (gethash "errormsg" lspf:*current-field-values*)
+          (lspf:unknown-command-message lspf:*application* command))
+    :stay))
+
+(defun cursor-data-row (cursor-row layout)
+  "Convert a screen cursor row to a data slot index, accounting for scale line."
+  (let ((raw (- cursor-row (layout-data-start-row layout)))
+        (scale-row (layout-scale-row layout)))
+    (if (and scale-row (>= cursor-row scale-row))
+        (1- raw)
+        raw)))
+
+(defun auto-insert-line (session layout)
+  "Insert a blank line after the cursor position and set up cursor for next display."
+  (let* ((data-row (cursor-data-row lspf:*cursor-row* layout))
+         (top (editor-top-line session)))
+    (unless (and (>= data-row 0) (< data-row (page-size session)))
+      (return-from auto-insert-line))
+    (let ((real (virtual-to-real session (+ top data-row))))
+      (unless real (return-from auto-insert-line))
+      (save-undo-state session)
+      (insert-lines-after session real (list ""))
+      (let* ((scale-row (layout-scale-row layout))
+             (new-row (1+ lspf:*cursor-row*))
+             (new-row (if (and scale-row (= new-row scale-row))
+                          (1+ new-row)
+                          new-row))
+             (data-col (layout-data-col-start layout)))
+        (if (< (1+ data-row) (page-size session))
+            (setf (editor-next-cursor session) (cons new-row data-col))
+            (progn
+              (setf (editor-top-line session) (+ top (1- (page-size session))))
+              (clamp-top-line session)
+              (setf (editor-next-cursor session)
+                    (cons (layout-data-start-row layout) data-col))))))))
 (lspf:define-key-handler edit :pf1 ()
   (process-editor-changes lspf:*session* lspf:*current-field-values*)
   (let ((help-sym (lspf:navigate-to-help 'edit
@@ -282,57 +326,18 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
 (lspf:define-key-handler edit :enter ()
   (let* ((session lspf:*session*)
          (layout (editor-layout session))
-         (data-start (layout-data-start-row layout))
-         (data-col (layout-data-col-start layout))
-         ;; In full-control mode, read the editor's own command field
          (command (string-trim '(#\Space)
                                (or (gethash "ed-command" lspf:*current-field-values*) "")))
          (msg (process-editor-changes session lspf:*current-field-values*)))
     ;; Handle command field input (since framework doesn't process it in full-control)
-    (when (plusp (length command))
-      (let ((cmd-result (or (lspf:process-screen-command
-                             (lspf:session-current-screen session) command)
-                            (lspf:process-command lspf:*application* command))))
-        (cond
-          (cmd-result
-           (return-from lspf:handle-key cmd-result))
-          (t
-           (setf (gethash "errormsg" lspf:*current-field-values*)
-                 (lspf:unknown-command-message lspf:*application* command))
-           (return-from lspf:handle-key :stay)))))
+    (let ((cmd-result (dispatch-command session command)))
+      (when cmd-result
+        (return-from lspf:handle-key cmd-result)))
     (when msg
       (setf (gethash "errormsg" lspf:*current-field-values*) msg))
     ;; Auto-insert new line when Enter is pressed on a data line
     (unless msg
-      (let* ((cursor-row lspf:*cursor-row*)
-             (scale-row-pos (layout-scale-row layout))
-             ;; Adjust data-row if cursor is at or after the scale row
-             (data-row (let ((raw (- cursor-row data-start)))
-                         (if (and scale-row-pos (>= cursor-row scale-row-pos))
-                             (1- raw)  ; scale consumed one slot
-                             raw)))
-             (top (editor-top-line session)))
-        (when (and (>= data-row 0) (< data-row (page-size session)))
-          (let* ((virtual (+ top data-row))
-                 (real (virtual-to-real session virtual)))
-            (when real
-              (save-undo-state session)
-              (insert-lines-after session real (list ""))
-              (let* ((scale-row (layout-scale-row layout))
-                     (new-display-row (1+ cursor-row))
-                     ;; Skip scale row if the new line would land on it
-                     (new-display-row (if (and scale-row (= new-display-row scale-row))
-                                          (1+ new-display-row)
-                                          new-display-row)))
-                (if (< (1+ data-row) (page-size session))
-                    (setf (editor-next-cursor session)
-                          (cons new-display-row data-col))
-                    (progn
-                      (setf (editor-top-line session)
-                            (+ top (1- (page-size session))))
-                      (clamp-top-line session)
-                      (setf (editor-next-cursor session)
-                            (cons data-start data-col))))))))))
+      (auto-insert-line session layout))
     :stay))
 
 ;;; PF3 - Exit (with save prompt if modified)
@@ -390,14 +395,11 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
   (let* ((session lspf:*session*)
          (top (editor-top-line session))
          (ps (page-size session))
-         (scroll (1- ps))
          (total (total-virtual-lines session)))
-    (when (>= (+ top ps) total)
-      ;; At or past EOF: wrap to first file line (skip BOF marker)
-      (setf (editor-top-line session) 1)
-      (return-from lspf:handle-key :stay))
-    ;; Normal scroll down
-    (setf (editor-top-line session) (+ top scroll))
+    (setf (editor-top-line session)
+          (if (>= (+ top ps) total)
+              1
+              (+ top (1- ps))))
     (clamp-top-line session))
   :stay)
 

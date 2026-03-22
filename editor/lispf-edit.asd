@@ -14,5 +14,6 @@
                (:file "screen")
                (:file "application"))
   :depends-on (#:lispf
+               #:alexandria
                #:split-sequence
                #:cl-ppcre))

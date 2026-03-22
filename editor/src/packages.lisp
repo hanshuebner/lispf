@@ -4,6 +4,7 @@
 
 (defpackage #:lispf-editor
   (:use #:cl)
+  (:import-from #:alexandria #:when-let)
   (:local-nicknames (#:bt #:bordeaux-threads)
                     (#:lspf #:lispf)
                     (#:cl3270 #:cl3270))

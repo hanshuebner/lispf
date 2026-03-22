@@ -17,8 +17,7 @@
 
 (defun undo (session)
   "Restore the previous state. Returns a message string."
-  (let ((state (pop (editor-undo-stack session))))
-    (unless state
-      (return-from undo "Nothing to undo"))
-    (setf (editor-lines session) state)
-    "UNDO completed"))
+  (unless (editor-undo-stack session)
+    (return-from undo "Nothing to undo"))
+  (setf (editor-lines session) (pop (editor-undo-stack session)))
+  "UNDO completed")
