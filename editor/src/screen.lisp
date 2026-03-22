@@ -217,32 +217,31 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
                           (let ((slot (- cur-virtual top)))
                             (when (and (>= slot 0) (< slot (page-size session)))
                               (1+ slot))))))
+      (let ((virtual-offset 0))
       (dotimes (i (page-size session))
-        (let* ((virtual (+ top i))
-               (real (virtual-to-real session virtual)))
-          ;; Skip virtual-idx adjustment for scale slot
-          ;; (the build-screen-data already handled the insertion)
-          (cond
-            ;; Scale line slot: non-writable, turquoise
-            ((and scale-after (= i scale-after))
-             (lspf:set-field-attribute (format nil "prefix.~D" i)
-                                       :write nil :color cl3270:+turquoise+)
-             (lspf:set-field-attribute (format nil "data.~D" i)
-                                       :write nil :color cl3270:+turquoise+))
-            ;; Marker lines: data non-writable, prefix writable for I/A/B, pink color
-            ((marker-line-p session virtual)
-             (lspf:set-field-attribute (format nil "prefix.~D" i) :color cl3270:+pink+)
-             (lspf:set-field-attribute (format nil "data.~D" i) :write nil :color cl3270:+pink+))
-            ;; Past end of file: both non-writable so Tab skips them
-            ((> virtual bot-virtual)
-             (lspf:set-field-attribute (format nil "prefix.~D" i) :write nil)
-             (lspf:set-field-attribute (format nil "data.~D" i) :write nil))
-            ;; Current line: highlight yellow
-            ((and real (= real cur-line))
-             (lspf:set-field-attribute (format nil "prefix.~D" i)
-                                       :color cl3270:+yellow+)
-             (lspf:set-field-attribute (format nil "data.~D" i)
-                                       :color cl3270:+yellow+))))))
+        (cond
+          ;; Scale line slot: non-writable, turquoise
+          ((and scale-after (= i scale-after))
+           (decf virtual-offset)
+           (lspf:set-field-attribute (format nil "prefix.~D" i)
+                                     :write nil :color cl3270:+turquoise+)
+           (lspf:set-field-attribute (format nil "data.~D" i)
+                                     :write nil :color cl3270:+turquoise+))
+          (t
+           (let* ((virtual (+ top i virtual-offset))
+                  (real (virtual-to-real session virtual)))
+             (cond
+               ((marker-line-p session virtual)
+                (lspf:set-field-attribute (format nil "prefix.~D" i) :color cl3270:+pink+)
+                (lspf:set-field-attribute (format nil "data.~D" i) :write nil :color cl3270:+pink+))
+               ((> virtual bot-virtual)
+                (lspf:set-field-attribute (format nil "prefix.~D" i) :write nil)
+                (lspf:set-field-attribute (format nil "data.~D" i) :write nil))
+               ((and real (= real cur-line))
+                (lspf:set-field-attribute (format nil "prefix.~D" i)
+                                          :color cl3270:+yellow+)
+                (lspf:set-field-attribute (format nil "data.~D" i)
+                                          :color cl3270:+yellow+)))))))))
     ;; Position cursor (use override if set, otherwise command field)
     (let ((next (editor-next-cursor session)))
       (if next
