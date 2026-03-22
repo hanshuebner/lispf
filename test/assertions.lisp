@@ -116,24 +116,35 @@ Accounts for the 3270 field attribute byte at column 0 by checking from column 1
 
 ;;; Test runner
 
-(defvar *tests* (make-hash-table :test 'equal)
-  "Registry of defined tests: name -> function.")
+(defvar *test-registry* (make-hash-table :test 'eq)
+  "Per-package test registry: package -> (tests-hash . test-order-list).")
+
+(defun package-tests (&optional (pkg *package*))
+  "Return (tests-hash . test-order) for PKG, creating if needed."
+  (or (gethash pkg *test-registry*)
+      (setf (gethash pkg *test-registry*)
+            (cons (make-hash-table :test 'equal) nil))))
 
 (defmacro define-test (name () &body body)
-  "Define a named test. The body is wrapped in error handling."
-  `(setf (gethash ',name *tests*)
-         (lambda ()
-           ,@body)))
+  "Define a named test, registered in the current package's test suite.
+Tests are automatically available to run-tests."
+  `(let ((entry (package-tests)))
+     (setf (gethash ',name (car entry))
+           (lambda ()
+             ,@body))
+     (pushnew ',name (cdr entry))
+     ',name))
 
 (defun run-tests (&rest names)
-  "Run the named tests (or all tests if none specified). Print results."
-  (let* ((test-names (or names
-                         (loop for k being the hash-keys of *tests* collect k)))
+  "Run the named tests, or all tests in the calling package in definition order."
+  (let* ((entry (package-tests))
+         (tests (car entry))
+         (test-names (or names (reverse (cdr entry))))
          (pass 0)
          (fail-count 0)
          (errors '()))
     (dolist (name test-names)
-      (let ((fn (gethash name *tests*)))
+      (let ((fn (gethash name tests)))
         (if (not fn)
             (progn
               (format t "~&  SKIP ~A (not defined)~%" name)

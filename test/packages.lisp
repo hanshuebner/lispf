@@ -41,6 +41,8 @@
            #:assert-on-screen
            #:load-test-screen-data
            ;; Test runner
+           #:*test-registry*
+           #:package-tests
            #:define-test
            #:run-tests
            ;; Harness
