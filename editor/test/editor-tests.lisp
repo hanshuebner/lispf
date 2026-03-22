@@ -1265,7 +1265,7 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
     (multiple-value-bind (prefix data) (ed::build-screen-data s)
       (let ((prefix-lines (split-sequence:split-sequence #\Newline prefix))
             (data-lines (split-sequence:split-sequence #\Newline data)))
-        (assert-equal "000001" (first prefix-lines))
+        (assert-equal "00001 " (first prefix-lines))
         (assert-equal "Hello"
                       (string-right-trim '(#\Space) (first data-lines)))))))
 
@@ -1457,7 +1457,7 @@ Returns T if the file was falsely marked as modified."
              ;; At top: should see Top-of-Data marker and first lines
              ;; Data fields start at display row 3 (screen row 2 + 1 for title)
              (assert-row-contains s 2 "Top of File" "Top marker on initial display")
-             (assert-row-contains s 3 "000001" "Line 1 number on initial display")
+             (assert-row-contains s 3 "00001" "Line 1 number on initial display")
              (assert-row-contains s 3 "Line 1 of" "Line 1 content on initial display")
              (assert-no-modify-flag s "No modification on initial display")
              (assert-command-field-clean s "Command field clean on initial display")
@@ -1493,7 +1493,7 @@ Returns T if the file was falsely marked as modified."
 
              ;; Back at top: should see Top-of-Data marker again
              (assert-row-contains s 2 "Top of File" "Top marker after scroll back")
-             (assert-row-contains s 3 "000001" "Line 1 after scroll back")
+             (assert-row-contains s 3 "00001" "Line 1 after scroll back")
 
              ;; PF3 should exit without "modified" warning
              (press-pf s 3)
@@ -1519,7 +1519,7 @@ Returns T if the file was falsely marked as modified."
              (press-enter s)
              ;; Should now have 2 lines
              (assert-screen-contains s "Size=2")
-             (assert-screen-contains s "000002")
+             (assert-screen-contains s "00002")
              ;; Cursor should be on the new line (row 5 = second data line, col 7 = data start)
              (assert-cursor-at s 4 7)
              ;; Cancel to exit without saving
@@ -1547,7 +1547,7 @@ Returns T if the file was falsely marked as modified."
              (assert-screen-contains s "Hello World")
              (assert-screen-contains s "Second line")
              ;; Should see line numbers
-             (assert-screen-contains s "000001")
+             (assert-screen-contains s "00001")
              ;; PF3 should exit (file is unmodified)
              (press-pf s 3)
              (assert-on-screen s "OPEN")))

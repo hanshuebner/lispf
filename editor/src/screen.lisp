@@ -35,8 +35,8 @@ suitable for the framework's repeat field split mechanism."
                   (line (or (nth real (editor-lines session)) ""))
                   (pending-start-p (and pending (= real (second pending)))))
              (push (if pending-start-p
-                       (format nil "~6A" (string-upcase (symbol-name (first pending))))
-                       (format nil "~6,'0D" (1+ real)))
+                       (format nil "~5A " (string-upcase (symbol-name (first pending))))
+                       (format nil "~5,'0D " (1+ real)))
                    prefix-lines)
              (push (visible-portion line col-offset) data-lines)))
           ;; Past end

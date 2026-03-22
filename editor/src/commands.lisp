@@ -121,6 +121,64 @@ Returns (values from-string to-string remainder)."
             (format nil "Justified ~D line~:P to ~D at width ~D"
                     count (length new-lines) width))))))
 
+(defun handle-set-command (session parts)
+  "Handle SET subcommands. PARTS is the split command with SET already consumed.
+Returns a message string or :stay."
+  (let* ((layout (editor-layout session))
+         (sub (command-keyword (or (second parts) "")))
+         (arg (third parts)))
+    (case sub
+      (:CURLINE
+       (let ((n (when arg (parse-integer arg :junk-allowed t))))
+         (if (and n (>= n (layout-data-start-row layout))
+                    (<= n (layout-data-end-row layout)))
+             (progn
+               (setf (layout-scale-row layout) n)  ; curline position for scale
+               (format nil "CURLINE set to ~D" n))
+             (format nil "CURLINE must be between ~D and ~D"
+                     (layout-data-start-row layout) (layout-data-end-row layout)))))
+      ((:SCALE :SCA)
+       (cond
+         ((null arg) "SET SCALE ON/OFF or SET SCALE n")
+         ((string-equal arg "ON")
+          (setf (layout-scale-row layout)
+                (or (layout-scale-row layout)
+                    (+ (layout-data-start-row layout)
+                       (floor (page-size layout) 2))))
+          "Scale line enabled")
+         ((string-equal arg "OFF")
+          (setf (layout-scale-row layout) nil)
+          "Scale line disabled")
+         (t (let ((n (parse-integer arg :junk-allowed t)))
+              (if (and n (>= n (layout-data-start-row layout))
+                         (<= n (layout-data-end-row layout)))
+                  (progn
+                    (setf (layout-scale-row layout) n)
+                    (format nil "Scale line set to row ~D" n))
+                  (format nil "Scale row must be between ~D and ~D"
+                          (layout-data-start-row layout)
+                          (layout-data-end-row layout)))))))
+      (:ALT
+       (let ((n (when arg (parse-integer arg :junk-allowed t))))
+         (if n
+             (progn
+               (setf (editor-alteration-count session) n)
+               (format nil "Alt set to ~D" n))
+             "SET ALT requires a number")))
+      (:TRUNC
+       (let ((n (when arg (parse-integer arg :junk-allowed t))))
+         (if (and n (> n 0))
+             (format nil "TRUNC set to ~D (not yet implemented)" n)
+             "SET TRUNC requires a positive number")))
+      (:PROMPT
+       (let ((text (if (> (length parts) 2)
+                       (format nil "~{~A~^ ~}" (cddr parts))
+                       "====>")))
+         (setf (layout-command-prompt layout) text)
+         (format nil "Prompt set to ~S" text)))
+      (otherwise
+       (format nil "Unknown SET option: ~A" (or (second parts) ""))))))
+
 (defun handle-primary-command (session command)
   "Process a primary (command-line) command.
 Returns :stay, :back, or an error message string. NIL means unrecognized."
@@ -202,6 +260,19 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
 
         (:UNDO
          (undo session))
+
+        (:SET
+         (handle-set-command session parts))
+
+        (:HELP
+         (let* ((topic (second parts))
+                (help-name (if topic
+                               (format nil "help-~A" (string-downcase topic))
+                               "help-edit"))
+                (app-package (lspf::application-package lspf:*application*)))
+           (if (lspf::find-screen-file help-name)
+               (lspf::intern-screen-name help-name app-package)
+               (format nil "~A: help topic not found" (or topic "HELP")))))
 
         ((:REVERT :REV)
          (if (editor-restricted-p session)
