@@ -1565,6 +1565,110 @@ Returns T if the file was falsely marked as modified."
              (assert-on-screen s "OPEN")))
       (ignore-errors (delete-file path)))))
 
+(defun e2e-type-command (s command)
+  "Type a command in the editor command field and press Enter."
+  (move-cursor s 23 7)
+  (type-text s command)
+  (press-enter s))
+
+(defun e2e-type-prefix (s row text)
+  "Type a prefix command on the given data ROW (0-based from data start, so row 0 = screen row 2).
+Moves cursor to command field before pressing Enter to avoid auto-insert."
+  (move-cursor s (+ 2 row) 1)
+  (type-text s text)
+  (move-cursor s 23 7)
+  (press-enter s))
+
+(define-test e2e-comprehensive-editing ()
+  ;; Comprehensive test exercising: inline edit, prefix commands (i, d, dd, cc, a),
+  ;; primary commands (FIND, CHANGE, UNDO, SAVE, TOP, BOTTOM), PF3 exit with
+  ;; modification warning, and file persistence.
+  (let ((path #P"/tmp/lispf-e2e-comprehensive.txt"))
+    (unwind-protect
+         (progn
+           (ed:write-file-lines path '("alpha" "bravo" "charlie" "delta" "echo"
+                                       "foxtrot" "golf" "hotel"))
+           (with-test-app (s ed::*editor-app* :port 13280)
+             (type-text s (namestring path))
+             (press-enter s)
+             (assert-screen-contains s "Size=8")
+
+             ;; --- Inline edit: overtype first data line ---
+             ;; Row 3 = first file line (row 2 = Top of File marker)
+             ;; Move cursor to command field before Enter to avoid auto-insert
+             (move-cursor s 3 7)
+             (type-text s "ALPHA")
+             (move-cursor s 23 7)
+             (press-enter s)
+             (assert-screen-contains s "ALPHA")
+
+             ;; --- CHANGE command with UNDO ---
+             (e2e-type-command s "CHANGE /bravo/BRAVO/")
+             (assert-screen-contains s "CHANGED 1")
+             (assert-screen-contains s "BRAVO")
+             (e2e-type-command s "UNDO")
+             (assert-screen-contains s "bravo")
+
+             ;; --- Prefix i: insert a line after "bravo" ---
+             ;; bravo is line 2, screen row 4 (row 2=TOF, 3=ALPHA, 4=bravo)
+             (e2e-type-prefix s 2 "i")
+             (assert-screen-contains s "Size=9")
+
+             ;; --- Prefix d: delete the blank line we just inserted ---
+             ;; The new blank line is at screen row 5 (data row 3)
+             (e2e-type-prefix s 3 "d")
+             (assert-screen-contains s "Size=8")
+
+             ;; --- FIND command ---
+             (e2e-type-command s "FIND /hotel/")
+             (assert-screen-contains s "found")
+
+             ;; --- CHANGE ALL ---
+             (e2e-type-command s "TOP")
+             (e2e-type-command s "CHANGE /delta/DELTA/ ALL")
+             (assert-screen-contains s "CHANGED 1")
+             (assert-screen-contains s "DELTA")
+
+             ;; --- Block delete: dd on charlie and DELTA ---
+             ;; After TOP: row 2=TOF, 3=ALPHA, 4=bravo, 5=charlie, 6=DELTA
+             (e2e-type-command s "TOP")
+             (move-cursor s 5 1)
+             (type-text s "dd")
+             (move-cursor s 6 1)
+             (type-text s "dd")
+             (press-enter s)
+             (assert-screen-contains s "deleted")
+             (assert-screen-contains s "Size=6")
+
+             ;; --- Block copy: cc on ALPHA+bravo, a after golf ---
+             ;; After delete: row 2=TOF, 3=ALPHA, 4=bravo, 5=echo, 6=foxtrot, 7=golf, 8=hotel, 9=EOF
+             (move-cursor s 3 1)
+             (type-text s "cc")
+             (move-cursor s 4 1)
+             (type-text s "cc")
+             (move-cursor s 7 1)
+             (type-text s "a")
+             (press-enter s)
+             (assert-screen-contains s "copied")
+             (assert-screen-contains s "Size=8")
+
+             ;; --- PF3 should warn about modifications ---
+             (press-pf s 3)
+             (assert-screen-contains s "modified")
+
+             ;; --- SAVE and verify file ---
+             (e2e-type-command s "SAVE")
+             (assert-screen-contains s "Alt=0")
+
+             ;; --- PF3 should exit now (no modifications) ---
+             (press-pf s 3)
+             (assert-on-screen s "OPEN")
+
+             ;; --- Verify saved file contents ---
+             (let ((saved (ed:read-file-lines path)))
+               (assert-equal '("ALPHA" "bravo" "echo" "foxtrot" "golf" "ALPHA" "bravo" "hotel")
+                             saved "Saved file should reflect all edits"))))
+      (ignore-errors (delete-file path)))))
 ;;; ============================================================
 ;;; Runner
 ;;; ============================================================
