@@ -90,13 +90,27 @@ did not type a new command - the prefix is just our own marker echoed back."
 (defun process-data-edits (session prefix-lines data-lines)
   "Process data edits and prefix commands using MDT-based detection.
 Only processes fields that were modified by the user (present in the response).
+Skips the scale line slot if the scale is active.
 Returns a list of (real-index cmd count row)."
-  (let ((top (editor-top-line session))
-        (col-offset (editor-col-offset session))
-        (response lspf:*current-response*)
-        (commands '()))
+  (let* ((layout (editor-layout session))
+         (top (editor-top-line session))
+         (col-offset (editor-col-offset session))
+         (response lspf:*current-response*)
+         ;; Compute which data slot has the scale line (if any)
+         (cur-virtual (1+ (editor-current-line session)))
+         (scale-slot (when (layout-scale-row layout)
+                       (let ((slot (- cur-virtual top)))
+                         (when (and (>= slot 0) (< slot (page-size session)))
+                           (1+ slot)))))
+         (commands '())
+         (virtual-offset 0))
     (dotimes (i (page-size session))
-      (let* ((virtual (+ top i))
+      (cond
+        ;; Skip scale line slot
+        ((and scale-slot (= i scale-slot))
+         (decf virtual-offset))
+        (t
+      (let* ((virtual (+ top i virtual-offset))
              (real (virtual-to-real session virtual))
              (is-marker (marker-line-p session virtual))
              (prefix-key (format nil "prefix.~D" i))
@@ -137,7 +151,7 @@ Returns a list of (real-index cmd count row)."
                   ;; Empty row past EOF
                   (t
                    (when (member cmd '(:a :b))
-                     (push (list (line-count session) cmd count i) commands))))))))))
+                     (push (list (line-count session) cmd count i) commands))))))))))))
     (nreverse commands)))
 
 (defun process-editor-changes (session context)
