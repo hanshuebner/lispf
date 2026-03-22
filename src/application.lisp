@@ -846,13 +846,17 @@ Returns NIL if the thread should exit."
       (consume-dirty-indicators-p)))
 
 (defun update-thread-fn (ctx)
-  "Background thread: sleeps, then pushes title and dynamic area overlays.
-Sleeps before the first check to avoid racing with the main thread."
+  "Background thread: pushes title and dynamic area overlays periodically.
+First update fires immediately, subsequent updates wait up to 1 second."
   (handler-case
-      (loop while (wait-for-update-signal ctx)
-            when (title-needs-update-p ctx)
-              do (send-title-overlay ctx)
-            do (send-dynamic-area-overlays ctx))
+      (progn
+        ;; Immediate first update for dynamic areas
+        (when (update-context-running ctx)
+          (send-dynamic-area-overlays ctx))
+        (loop while (wait-for-update-signal ctx)
+              when (title-needs-update-p ctx)
+                do (send-title-overlay ctx)
+              do (send-dynamic-area-overlays ctx)))
     (error (e)
       (format *error-output* "~&;;; Update thread error: ~A~%" e))))
 
