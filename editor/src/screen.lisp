@@ -16,13 +16,12 @@ suitable for the framework's repeat field split mechanism."
          (n (line-count session))
          (pending (editor-pending-block session))
          (scale-enabled (layout-scale-row layout))
-         (cur-line (editor-current-line session))
-         (cur-virtual (1+ cur-line))  ; virtual index of current line
-         ;; Scale appears after the current line. Compute which data slot that is.
-         (scale-after-slot (when scale-enabled
-                             (let ((slot (- cur-virtual top)))
-                               (when (and (>= slot 0) (< slot (page-size session)))
-                                 (1+ slot)))))
+         ;; Scale is at a fixed screen row within the data area.
+         ;; Compute which data slot it occupies.
+         (scale-slot (when scale-enabled
+                       (let ((slot (- scale-enabled (layout-data-start-row layout))))
+                         (when (and (>= slot 0) (< slot (page-size session)))
+                           slot))))
          (scale-string (when scale-enabled
                          ;; Pattern: ....+....1....+....2....+....3...
                          ;; 1-based column positions: +5, 1=10, +15, 2=20, +25, 3=30...
@@ -41,7 +40,7 @@ suitable for the framework's repeat field split mechanism."
     (loop while (< data-slot (page-size session))
           do (let ((virtual (+ top virtual-idx)))
                ;; Insert scale line after current line if enabled
-               (when (and scale-after-slot (= data-slot scale-after-slot))
+               (when (and scale-slot (= data-slot scale-slot))
                  (push "      " prefix-lines)
                  (push scale-string data-lines)
                  (incf data-slot)
@@ -96,12 +95,12 @@ Returns a list of (real-index cmd count row)."
          (top (editor-top-line session))
          (col-offset (editor-col-offset session))
          (response lspf:*current-response*)
-         ;; Compute which data slot has the scale line (if any)
-         (cur-virtual (1+ (editor-current-line session)))
+         ;; Scale is at a fixed screen row within the data area
          (scale-slot (when (layout-scale-row layout)
-                       (let ((slot (- cur-virtual top)))
+                       (let ((slot (- (layout-scale-row layout)
+                                      (layout-data-start-row layout))))
                          (when (and (>= slot 0) (< slot (page-size session)))
-                           (1+ slot)))))
+                           slot))))
          (commands '())
          (virtual-offset 0))
     (dotimes (i (page-size session))
@@ -178,6 +177,9 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
          (col-start (1+ (editor-col-offset session)))
          (col-end (+ (editor-col-offset session) +data-width+))
          (pending (editor-pending-block session)))
+    ;; Ensure top-line is within valid range (may be out after block delete/justify)
+    (clamp-top-line session)
+    (setf top (editor-top-line session))
     ;; Populate data
     (multiple-value-bind (prefix-str data-str) (build-screen-data session)
       (setf prefix prefix-str)
@@ -213,15 +215,16 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
     (let* ((bot-virtual (1+ (line-count session)))
            (cur-line (editor-current-line session))
            (cur-virtual (1+ cur-line))
-           (scale-after (when (layout-scale-row layout)
-                          (let ((slot (- cur-virtual top)))
-                            (when (and (>= slot 0) (< slot (page-size session)))
-                              (1+ slot))))))
+           (scale-slot-attr (when (layout-scale-row layout)
+                             (let ((slot (- (layout-scale-row layout)
+                                            (layout-data-start-row layout))))
+                               (when (and (>= slot 0) (< slot (page-size session)))
+                                 slot)))))
       (let ((virtual-offset 0))
       (dotimes (i (page-size session))
         (cond
           ;; Scale line slot: non-writable, turquoise
-          ((and scale-after (= i scale-after))
+          ((and scale-slot-attr (= i scale-slot-attr))
            (decf virtual-offset)
            (lspf:set-field-attribute (format nil "prefix.~D" i)
                                      :write nil :color cl3270:+turquoise+)
