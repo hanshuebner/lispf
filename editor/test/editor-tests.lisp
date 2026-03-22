@@ -1669,6 +1669,7 @@ Moves cursor to command field before pressing Enter to avoid auto-insert."
                (assert-equal '("ALPHA" "bravo" "echo" "foxtrot" "golf" "ALPHA" "bravo" "hotel")
                              saved "Saved file should reflect all edits"))))
       (ignore-errors (delete-file path)))))
+
 ;;; ============================================================
 ;;; Runner
 ;;; ============================================================
