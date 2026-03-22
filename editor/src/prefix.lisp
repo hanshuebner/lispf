@@ -44,52 +44,50 @@ Leading zeros indicate line number remnants, not a count."
 
 (defun parse-prefix-command (text)
   "Parse a prefix command from a 3270 prefix field value.
-Handles overtype mode where the user types over an existing line number
-like '000001', leaving remnants (e.g. 'DD0001' means block delete).
+Handles overtype mode where the user types over an existing line number.
+Non-digit characters are extracted from the field since line numbers are
+all digits - the user's typed command is whatever isn't a digit.
 Returns (values command count) or nil."
-  (let ((trimmed (string-trim '(#\Space) (string-upcase text))))
+  (let* ((raw (string-trim '(#\Space) (string-upcase text)))
+         ;; Extract non-digit characters (the user's input over the line number)
+         (command-chars (remove-if #'digit-char-p raw))
+         (trimmed (string-trim '(#\Space) command-chars)))
     (when (plusp (length trimmed))
       (cond
-        ;; Block commands: match at start (DD, CC, MM, RR followed by anything)
-        ((and (>= (length trimmed) 2) (string= trimmed "DD" :end1 2))
-         (values :dd 0))
-        ((and (>= (length trimmed) 2) (string= trimmed "CC" :end1 2))
-         (values :cc 0))
-        ((and (>= (length trimmed) 2) (string= trimmed "MM" :end1 2))
-         (values :mm 0))
-        ((and (>= (length trimmed) 2) (string= trimmed "RR" :end1 2))
-         (values :rr 0))
-        ((and (>= (length trimmed) 2) (string= trimmed "JJ" :end1 2))
-         (values :jj 0))
-        ;; UC/LC with optional count
-        ((and (>= (length trimmed) 2) (string= trimmed "UC" :end1 2))
-         (values :uc (parse-prefix-count trimmed 2)))
-        ((and (>= (length trimmed) 2) (string= trimmed "LC" :end1 2))
-         (values :lc (parse-prefix-count trimmed 2)))
+        ;; Block commands
+        ((string= trimmed "DD") (values :dd 0))
+        ((string= trimmed "CC") (values :cc 0))
+        ((string= trimmed "MM") (values :mm 0))
+        ((string= trimmed "RR") (values :rr 0))
+        ((string= trimmed "JJ") (values :jj 0))
+        ;; UC/LC
+        ((string= trimmed "UC") (values :uc 1))
+        ((string= trimmed "LC") (values :lc 1))
         ;; Text split
-        ((and (>= (length trimmed) 2) (string= trimmed "TS" :end1 2))
-         (values :ts 0))
-        ;; Targets: A or B at start, rest is line number remnants
-        ((char= (char trimmed 0) #\A)
-         (values :a 0))
-        ((char= (char trimmed 0) #\B)
-         (values :b 0))
-        ;; Single-line commands with optional count
-        ((char= (char trimmed 0) #\I)
-         (values :i (parse-prefix-count trimmed 1)))
-        ((char= (char trimmed 0) #\D)
-         (values :d (parse-prefix-count trimmed 1)))
-        ((char= (char trimmed 0) #\R)
-         (values :r (parse-prefix-count trimmed 1)))
-        ((char= (char trimmed 0) #\C)
-         (values :c (parse-prefix-count trimmed 1)))
-        ((char= (char trimmed 0) #\M)
-         (values :m (parse-prefix-count trimmed 1)))
-        ;; Shift commands
-        ((char= (char trimmed 0) #\()
-         (values :shift-left (parse-prefix-count trimmed 1)))
-        ((char= (char trimmed 0) #\))
-         (values :shift-right (parse-prefix-count trimmed 1)))
+        ((string= trimmed "TS") (values :ts 0))
+        ;; Targets
+        ((string= trimmed "A") (values :a 0))
+        ((string= trimmed "B") (values :b 0))
+        ;; Single-line commands (check for count digit in the raw input)
+        ((= (length trimmed) 1)
+         (let* ((cmd-char (char trimmed 0))
+                ;; Look for a count digit immediately after the command char in raw
+                (cmd-pos (position cmd-char raw))
+                (count (when cmd-pos
+                         (let ((next-pos (1+ cmd-pos)))
+                           (when (and (< next-pos (length raw))
+                                      (digit-char-p (char raw next-pos))
+                                      (char/= (char raw next-pos) #\0))
+                             (digit-char-p (char raw next-pos)))))))
+           (case cmd-char
+             (#\I (values :i (or count 1)))
+             (#\D (values :d (or count 1)))
+             (#\R (values :r (or count 1)))
+             (#\C (values :c (or count 1)))
+             (#\M (values :m (or count 1)))
+             (#\( (values :shift-left (or count 1)))
+             (#\) (values :shift-right (or count 1)))
+             (t nil))))
         (t nil)))))
 
 ;;; ============================================================
