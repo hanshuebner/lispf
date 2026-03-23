@@ -34,15 +34,16 @@
 (define-test e2e-set-cursor-from-handler ()
   (with-test-app (s *cursor-test-app* :port 13282)
     (assert-on-screen s "CURSOR-FORM")
-    ;; Initial cursor should be on the first writable field
-    ;; Field attr at (1,0), content starts at (1,1)
-    (assert-cursor-at s 1 0 :description "Initial cursor on first input field")
-    ;; Press Enter — handler should advance cursor to row 2
+    ;; Initial cursor should be on the first writable field.
+    ;; Field :from (1 0) in app space = screen row 2 (after title row offset).
+    ;; Attribute byte at (1,79), content starts at (2,0).
+    (assert-cursor-at s 2 0 :description "Initial cursor on first input field")
+    ;; Press Enter — handler sees cursor at row 2, advances to row 3
     (press-enter s)
-    (assert-cursor-at s 2 0 :description "Cursor advanced to row 2 after Enter")
-    ;; Press Enter again — should advance to row 3
+    (assert-cursor-at s 3 0 :description "Cursor advanced to row 3 after Enter")
+    ;; Press Enter again — should advance to row 4
     (press-enter s)
-    (assert-cursor-at s 3 0 :description "Cursor advanced to row 3 after second Enter")
+    (assert-cursor-at s 4 0 :description "Cursor advanced to row 4 after second Enter")
     ;; Exit
     (press-pf s 3)))
 
