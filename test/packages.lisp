@@ -25,6 +25,7 @@
            #:press-key
            #:move-cursor
            #:tab-forward
+           #:erase-eof
            #:type-at
            #:cursor-position
            #:wait-for-field

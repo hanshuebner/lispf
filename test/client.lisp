@@ -79,6 +79,10 @@ Uses Wait(3270Mode) then Wait(Unlock) since the first screen may have no input f
   "Advance to the next input field."
   (send-action session "Tab"))
 
+(defun erase-eof (session)
+  "Erase from cursor to end of current field."
+  (send-action session "EraseEOF"))
+
 ;;; Compound operations
 
 (defun type-at (session row col text)

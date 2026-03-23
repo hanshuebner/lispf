@@ -426,6 +426,9 @@ blank space. Keys not in the layout (added at runtime) are appended."
 (defparameter *framework-fields* '("title" "cmdlabel" "command" "errormsg" "keys")
   "Field names managed by the framework, excluded from context.")
 
+(defconstant +command-field-width+ 65
+  "Width of the command input field (col 14 through col 78).")
+
 ;;; Screen key handler validation
 
 (defun has-list-data-getter-p (screen-sym)
@@ -1107,7 +1110,8 @@ With FULL-CONTROL, do nothing (app manages all fields)."
             (if is-menu
                 (menu-command-label *application*)
                 (default-command-label *application*))))
-    (setf (gethash "command" field-values) ""))
+    (setf (gethash "command" field-values)
+          (make-string +command-field-width+ :initial-element #\Space)))
   (setf (gethash "errormsg" field-values)
         (or (gethash "errormsg" field-values) ""))
   (let ((key-labels (format-key-labels-from-specs *current-screen-keys*
