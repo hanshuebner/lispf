@@ -453,7 +453,7 @@
     (unwind-protect
          (progn
            (ed:write-file-lines path '("test"))
-           (with-test-app (s ed::*editor-app* :port 13290)
+           (with-test-app (s ed::*editor-app* :port 0)
              ;; Open a file
              (type-text s (namestring path))
              (press-enter s)
@@ -486,7 +486,7 @@
                             "This is the sub topic."
                             "Back to {lispf-e2e-helpnav:main}.")
            (ed:write-file-lines #P"/tmp/lispf-e2e-helpnav.txt" '("test"))
-           (with-test-app (s ed::*editor-app* :port 13291)
+           (with-test-app (s ed::*editor-app* :port 0)
              ;; Open dummy file
              (type-text s "/tmp/lispf-e2e-helpnav.txt")
              (press-enter s)
@@ -525,7 +525,7 @@
     (unwind-protect
          (progn
            (ed:write-file-lines path '("test"))
-           (with-test-app (s ed::*editor-app* :port 13292)
+           (with-test-app (s ed::*editor-app* :port 0)
              (type-text s (namestring path))
              (press-enter s)
              (assert-screen-contains s "Size=")
@@ -558,7 +558,7 @@
            (write-help-file path "Test Page"
                             "See {topic:a link} here."
                             "Plain text.")
-           (with-test-app (s ed::*editor-app* :port 13293)
+           (with-test-app (s ed::*editor-app* :port 0)
              (type-text s (namestring path))
              (press-enter s)
              ;; Should see stripped content
@@ -580,7 +580,7 @@
            (write-help-file path "Test Page"
                             "Hello world here."
                             "Another line.")
-           (with-test-app (s ed::*editor-app* :port 13294)
+           (with-test-app (s ed::*editor-app* :port 0)
              (type-text s (namestring path))
              (press-enter s)
              (assert-screen-contains s "Hello world here.")
@@ -626,7 +626,7 @@
            (write-help-file path "Test Page"
                             "See {topic:old text} end."
                             "Plain.")
-           (with-test-app (s ed::*editor-app* :port 13295)
+           (with-test-app (s ed::*editor-app* :port 0)
              (type-text s (namestring path))
              (press-enter s)
              (assert-screen-contains s "old text")
