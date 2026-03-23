@@ -32,4 +32,8 @@ jobs:
         run: |
           sbcl --non-interactive \
             --load "$HOME/quicklisp/setup.lisp" \
-            --load run-tests.lisp
+            --load load.lisp \
+            --eval '(asdf:load-system :lispf-edit)' \
+            --eval '(asdf:load-system :lispf-test)' \
+            --load run-tests.lisp \
+            --eval '(unless (lispf-run-tests:run-all) (uiop:quit 1))'
