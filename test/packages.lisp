@@ -29,6 +29,7 @@
            #:type-at
            #:cursor-position
            #:wait-for-field
+           #:press-pf-wait-screen
            ;; Assertions
            #:test-failure
            #:assert-screen-contains
