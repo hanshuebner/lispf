@@ -534,8 +534,7 @@
              (press-pf s 1)
              (assert-screen-contains s "LISPF Editor Help")
              ;; PF1 from help viewer should go to index
-             (press-pf s 1)
-             (assert-screen-contains s "index")
+             (press-pf-wait-screen s 1 "index")
              (assert-screen-contains s "Choose a topic")
              ;; PF3 back to edit help
              (press-pf s 3)
