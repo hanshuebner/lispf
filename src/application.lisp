@@ -1132,6 +1132,10 @@ Uses set-cursor override if set, otherwise falls back to the first writable fiel
                          (if first-write (cl3270:field-row first-write) 23)))
          (cursor-col (or *next-cursor-col*
                          (if first-write (1+ (cl3270:field-col first-write)) 0))))
+    ;; Handle wrapping attribute byte at col 79: content starts on next row
+    (when (and first-write (not *next-cursor-row*) (>= cursor-col 80))
+      (setf cursor-row (1+ cursor-row)
+            cursor-col 0))
     (values cursor-row cursor-col)))
 
 (defun merge-response-into-context (response context transient-fields)
