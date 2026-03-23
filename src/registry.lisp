@@ -216,28 +216,35 @@ With FULL-CONTROL, no framework fields are created (app manages all rows)."
     (format nil "~2,'0D:~2,'0D" h m)))
 
 (defun format-title-line (screen-name &optional indicators)
-  "Format the title line with the app title at a fixed center position.
-Left: SCREENNAME, Center: app title (+ indicators), Right: date HH:MM.
-The center section is always positioned at column 39 regardless of
-screen name length. Padded to exactly 78 characters."
-  (let* ((left (string-upcase (screen-name-string screen-name)))
+  "Format the title line: SCREEN APP  ...IND2 IND1  YYYY-MM-DD HH:MM.
+Screen name is truncated to 20 characters, app name to 10.
+Indicators are right-aligned, stacked from the date leftward, separated
+from the date by two spaces and from each other by one space.
+Warns at runtime if indicators do not fit the available space."
+  (let* ((screen (subseq (string-upcase (screen-name-string screen-name))
+                         0 (min 20 (length (screen-name-string screen-name)))))
+         (app (let ((name (or (application-title *application*)
+                              (application-name *application*))))
+                (subseq name 0 (min 10 (length name)))))
          (right (concatenate 'string (cl3270:today-date) " " (now-time-hhmm)))
-         (center (or (application-title *application*)
-                     (application-name *application*)))
-         (middle (if indicators
-                     (format nil "~A  ~{(~A)~^ ~}" center indicators)
-                     center))
-         (mid-col 39)
-         (mid-start (max (1+ (length left))
-                         (- mid-col (floor (length middle) 2))))
-         (mid-end (+ mid-start (length middle)))
-         (right-start (max (1+ mid-end) (- 78 (length right))))
+         (left (format nil "~20A ~A" screen app))
+         (ind-str (if indicators
+                      (format nil "~{~A~^ ~}" indicators)
+                      ""))
+         (right-block (if (plusp (length ind-str))
+                          (concatenate 'string ind-str "  " right)
+                          right))
+         (available (- 78 (length left) 1))
          (line (make-string 78 :initial-element #\Space)))
+    (when (and indicators (> (length right-block) available))
+      (warn "Title line indicators overflow: ~S needs ~D chars, ~D available"
+            ind-str (length ind-str) (- available (length right) 2)))
     (replace line left :start1 0)
-    (when (<= (+ mid-start (length middle)) 78)
-      (replace line middle :start1 mid-start))
-    (when (<= right-start (- 78 (length right)))
-      (replace line right :start1 (- 78 (length right))))
+    (let ((rb-start (max (1+ (length left))
+                         (- 78 (length right-block)))))
+      (replace line right-block
+               :start1 rb-start
+               :end1 (min (+ rb-start (length right-block)) 78)))
     line))
 
 ;;; Rule extraction from .screen field definitions
