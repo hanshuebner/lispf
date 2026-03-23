@@ -997,6 +997,7 @@ cl3270 symbols, adding background update thread support via post-send-callback."
              (when (validate-fields rules my-vals orig-values error-field)
                (return (values resp nil))))))))))
 
+
 ;;; Field attribute overrides
 
 (defun copy-field-with-overrides (field attrs)
@@ -1424,6 +1425,11 @@ Binds dynamic variables, creates a session, and loops through screens."
          (*device-info* devinfo)
          (*session* (make-instance (application-session-class application)
                                    :application application))
+         (*current-field-values* nil)
+         (*current-response* nil)
+         (*cursor-row* 0)
+         (*cursor-col* 0)
+         (*field-attribute-overrides* nil)
          (app-package (application-package application)))
     (bt:with-lock-held ((application-sessions-lock application))
       (push *session* (application-sessions application)))

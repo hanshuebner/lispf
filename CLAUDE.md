@@ -65,6 +65,10 @@ The editor uses full-control mode and manages its own screen layout via `editor-
 
 Tests are self-registering via `define-test` into a per-package registry (`*test-registry*`). `run-tests` with no arguments runs all tests in the current package in definition order. E2E tests use `with-test-app` to start a lispf instance and `s3270` to drive it.
 
+## Thread Safety
+
+Each 3270 connection runs in its own thread. `run-application` establishes thread-local bindings (via `let*`) for all per-session dynamic variables. Any new `defvar` that holds per-session state **must** be added to this `let*`; using bare `setf` without a thread-local binding will clobber the global value and cause cross-session corruption.
+
 ## Key Conventions for Lisp code
 
 - **defclass over defstruct** for editor code
