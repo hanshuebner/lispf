@@ -1,0 +1,9 @@
+(:name "cursor-form"
+ :anonymous t
+ :screen "
+Input:
+"
+ :fields ((:from (1 0) :len 79 :name input :write t :highlighting underscore
+           :repeat 19))
+ :keys ((:enter "" :hidden t)
+        (:pf3 "Exit" :back t)))
