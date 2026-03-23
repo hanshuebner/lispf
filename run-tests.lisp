@@ -1,4 +1,4 @@
-;;;; run-tests.lisp — Load all test suites and run them via the framework.
+;;;; run-tests.lisp — Load and run all LISPF test suites.
 
 (defun setup-registry (directory-path)
   (mapc (lambda (asd-pathname)
@@ -10,7 +10,7 @@
 
 (setup-registry (make-pathname :defaults *load-truename* :name nil :type nil))
 
-(load (merge-pathnames "load-tests.lisp" *load-truename*))
+(ql:quickload :lispf/tests)
 
 (unless (lispf-test:run-all-suites)
   (uiop:quit 1))

@@ -25,10 +25,17 @@
 (asdf:defsystem #:lispf/tests
   :author "Hans Hübner"
   :license "MIT"
-  :description "Unit tests for the LISPF framework"
+  :description "All tests for LISPF framework, editor, and examples"
   :serial t
-  :pathname "test/"
-  :components ((:file "key-layout-tests"))
-  :depends-on (#:lispf #:lispf-test)
+  :depends-on (#:lispf #:lispf-edit #:lispf-test #:lispf-guestbook)
+  :components ((:module "test"
+                :components ((:file "key-layout-tests")
+                             (:file "i18n-tests")
+                             (:file "cursor-tests")
+                             (:file "help-tests")))
+               (:module "editor/test"
+                :components ((:file "editor-tests")))
+               (:module "examples/guestbook"
+                :components ((:file "guestbook-tests"))))
   :perform (asdf:test-op (op c)
-             (uiop:symbol-call :lispf-key-layout-tests :run-all)))
+             (uiop:symbol-call :lispf-test :run-all-suites)))
