@@ -464,12 +464,12 @@
              ;; Dynamic area overlay arrives shortly after main screen
              ;; Should see link text without markup
              (assert-screen-contains s "Prefix Commands")
-             ;; PF3 should return to editor.
-             ;; The help viewer subapp exits, then the parent screen loop
-             ;; sends a new erase/write. The first Wait(Unlock) returns from
-             ;; the help viewer's screen; a second Wait(Unlock) catches the
-             ;; editor's screen write.
-             (press-pf s 3)
+             ;; PF3 exits the help viewer subapp. The parent screen loop then
+             ;; sends the editor screen as a new erase/write. press-pf's
+             ;; Wait(Unlock) may return before the editor screen arrives,
+             ;; so wait for the next screen explicitly.
+             (send-action s "PF(3)")
+             (send-action s "Wait(3270Mode)")
              (send-action s "Wait(Unlock)")
              (assert-screen-contains s "Size=")
              ;; Cancel and exit
@@ -544,8 +544,9 @@
              ;; PF3 back to edit help
              (press-pf s 3)
              (assert-screen-contains s "LISPF Editor Help")
-             ;; PF3 back to editor (second Wait(Unlock) for parent screen)
-             (press-pf s 3)
+             ;; PF3 back to editor (wait for editor screen to arrive)
+             (send-action s "PF(3)")
+             (send-action s "Wait(3270Mode)")
              (send-action s "Wait(Unlock)")
              (assert-screen-contains s "Size=")
              (move-cursor s 23 6)
