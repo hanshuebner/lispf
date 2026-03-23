@@ -176,15 +176,16 @@ Tests are automatically available to run-tests."
 (defun run-all-suites ()
   "Run all registered test suites.  Returns T if all passed.
 For each suite, calls its RUN-ALL if exported, otherwise calls RUN-TESTS
-in that package's context."
+in that package's context.  Always binds *package* to the suite's package
+so that run-tests can find the test registry."
   (let ((all-passed t))
     (dolist (pkg (reverse *suite-order*))
       (format t "~&~%=== ~A ===~%" (package-name pkg))
-      (let ((run-all (find-symbol "RUN-ALL" pkg)))
-        (if (and run-all (fboundp run-all))
-            (unless (funcall run-all)
-              (setf all-passed nil))
-            (let ((*package* pkg))
+      (let ((*package* pkg))
+        (let ((run-all (find-symbol "RUN-ALL" pkg)))
+          (if (and run-all (fboundp run-all))
+              (unless (funcall run-all)
+                (setf all-passed nil))
               (unless (run-tests)
                 (setf all-passed nil))))))
     all-passed))
