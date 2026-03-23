@@ -120,11 +120,16 @@ Accounts for the 3270 field attribute byte at column 0 by checking from column 1
 (defvar *test-registry* (make-hash-table :test 'eq)
   "Per-package test registry: package -> (tests-hash . test-order-list).")
 
+(defvar *suite-order* nil
+  "Packages in the order their first test was registered.")
+
 (defun package-tests (&optional (pkg *package*))
   "Return (tests-hash . test-order) for PKG, creating if needed."
   (or (gethash pkg *test-registry*)
-      (setf (gethash pkg *test-registry*)
-            (cons (make-hash-table :test 'equal) nil))))
+      (progn
+        (pushnew pkg *suite-order*)
+        (setf (gethash pkg *test-registry*)
+              (cons (make-hash-table :test 'equal) nil)))))
 
 (defmacro define-test (name () &body body)
   "Define a named test, registered in the current package's test suite.
@@ -167,3 +172,19 @@ Tests are automatically available to run-tests."
     (format t "~&~%Results: ~D passed, ~D failed out of ~D~%"
             pass fail-count (+ pass fail-count))
     (values (zerop fail-count) pass fail-count errors)))
+
+(defun run-all-suites ()
+  "Run all registered test suites.  Returns T if all passed.
+For each suite, calls its RUN-ALL if exported, otherwise calls RUN-TESTS
+in that package's context."
+  (let ((all-passed t))
+    (dolist (pkg (reverse *suite-order*))
+      (format t "~&~%=== ~A ===~%" (package-name pkg))
+      (let ((run-all (find-symbol "RUN-ALL" pkg)))
+        (if (and run-all (fboundp run-all))
+            (unless (funcall run-all)
+              (setf all-passed nil))
+            (let ((*package* pkg))
+              (unless (run-tests)
+                (setf all-passed nil))))))
+    all-passed))

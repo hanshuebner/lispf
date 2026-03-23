@@ -43,8 +43,10 @@
            #:load-test-screen-data
            ;; Test runner
            #:*test-registry*
+           #:*suite-order*
            #:package-tests
            #:define-test
            #:run-tests
+           #:run-all-suites
            ;; Harness
            #:with-test-app))
