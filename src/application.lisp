@@ -67,7 +67,9 @@ Keys are screen symbols, values are plists of (:offset N :data-count N :cursor-r
                 :reader session-update-cond)
    (current-response :initform nil :accessor session-current-response)
    (cursor-row :initform 0 :accessor session-cursor-row)
-   (cursor-col :initform 0 :accessor session-cursor-col)))
+   (cursor-col :initform 0 :accessor session-cursor-col)
+   (tls-p :initform nil :accessor session-tls-p
+          :documentation "True when this session's connection is TLS-encrypted.")))
 
 (defun session-property (session key &optional default)
   "Get a session property by key."
@@ -460,19 +462,27 @@ Signals a warning for any key that would fall through to the default handler."
 
 ;;; Server and connection handling
 
-(defun handle-connection (application socket)
-  "Handle a single 3270 connection for APPLICATION on SOCKET."
+(defun handle-connection (application socket &key tls-config tls-immediate-p)
+  "Handle a single 3270 connection for APPLICATION on SOCKET.
+When TLS-IMMEDIATE-P is true, perform TLS handshake immediately (dedicated TLS port).
+When TLS-CONFIG is provided without TLS-IMMEDIATE-P, STARTTLS is offered during
+telnet negotiation."
   (declare (type usocket:stream-usocket socket))
   (handler-case
-      (multiple-value-bind (devinfo err)
-          (cl3270:negotiate-telnet socket)
-        (when err
-          (format *error-output* "~&;;; ~A: negotiation error: ~A~%"
-                  (application-name application) err)
-          (return-from handle-connection))
-        (unwind-protect
-             (run-application application socket devinfo)
-          (cl3270:unnegotiate-telnet socket 1)))
+      (progn
+        (when tls-immediate-p
+          (cl3270:wrap-socket-with-tls socket tls-config))
+        (multiple-value-bind (devinfo err starttls-established)
+            (cl3270:negotiate-telnet socket
+                                     :tls-config (unless tls-immediate-p tls-config))
+          (when err
+            (format *error-output* "~&;;; ~A: negotiation error: ~A~%"
+                    (application-name application) err)
+            (return-from handle-connection))
+          (unwind-protect
+               (run-application application socket devinfo
+                                :tls-p (or tls-immediate-p starttls-established))
+            (cl3270:unnegotiate-telnet socket 1))))
     (error (e)
       (format *error-output* "~&;;; ~A: connection error: ~A~%"
               (application-name application) e))))
@@ -541,32 +551,79 @@ Signals a warning for any key that would fall through to the default handler."
               (intern (string-upcase (string (getf item :screen))) pkg))))))))
 
 (defun start-application (application &key (port 3270) (host "127.0.0.1")
+                                          tls-port certificate-file key-file
+                                          key-password (starttls t)
                                           listener-callback)
   "Start APPLICATION, listening for 3270 connections on HOST:PORT.
 Serves multiple users concurrently using threads.
+When CERTIFICATE-FILE and KEY-FILE are provided, TLS is available.
+TLS-PORT enables a dedicated TLS listener on that port.
+STARTTLS (default T) offers STARTTLS negotiation on the plain port.
 When LISTENER-CALLBACK is provided, it is called with the listener socket
 after binding but before the accept loop. Useful for test harnesses."
-  (load-application-menus application)
-  (format t "~&;;; ~A: listening on ~A:~D~%" (application-name application) host port)
-  (usocket:with-socket-listener (listener host port
-                                          :element-type '(unsigned-byte 8)
-                                          :reuse-address t)
-    (when listener-callback
-      (funcall listener-callback listener))
-    (loop
-      (let ((c (usocket:socket-accept listener))
-            (out *standard-output*)
-            (err *error-output*))
-        (bt:make-thread
-         (lambda ()
-           (let ((*standard-output* out)
-                 (*error-output* err))
-             (unwind-protect
-                  (handle-connection application c)
-               (ignore-errors (usocket:socket-close c)))))
-         :name (format nil "~A-~A"
-                        (application-name application)
-                        (usocket:get-peer-address c)))))))
+  (let ((tls-config (when certificate-file
+                      (make-instance 'cl3270:tls-config
+                                     :certificate-file certificate-file
+                                     :key-file key-file
+                                     :key-password key-password
+                                     :starttls-p starttls)))
+        (tls-listener-socket nil))
+    (load-application-menus application)
+    ;; Start dedicated TLS listener in background thread
+    (when (and tls-config tls-port)
+      (bt:make-thread
+       (lambda ()
+         (let ((out *standard-output*)
+               (err *error-output*))
+           (usocket:with-socket-listener (tls-listener host tls-port
+                                                       :element-type '(unsigned-byte 8)
+                                                       :reuse-address t)
+             (setf tls-listener-socket tls-listener)
+             (format out "~&;;; ~A: TLS listening on ~A:~D~%"
+                     (application-name application) host tls-port)
+             (handler-case
+                 (loop
+                   (let ((c (usocket:socket-accept tls-listener)))
+                     (bt:make-thread
+                      (lambda ()
+                        (let ((*standard-output* out)
+                              (*error-output* err))
+                          (unwind-protect
+                               (handle-connection application c
+                                                  :tls-config tls-config
+                                                  :tls-immediate-p t)
+                            (ignore-errors (usocket:socket-close c)))))
+                      :name (format nil "~A-tls-~A"
+                                    (application-name application)
+                                    (usocket:get-peer-address c)))))
+               (error ()
+                 (format err "~&;;; ~A: TLS listener stopped~%"
+                         (application-name application)))))))
+       :name (format nil "~A-tls-listener" (application-name application))))
+    ;; Plain port listener (main thread)
+    (format t "~&;;; ~A: listening on ~A:~D~%" (application-name application) host port)
+    (unwind-protect
+         (usocket:with-socket-listener (listener host port
+                                                 :element-type '(unsigned-byte 8)
+                                                 :reuse-address t)
+           (when listener-callback
+             (funcall listener-callback listener))
+           (loop
+             (let ((c (usocket:socket-accept listener))
+                   (out *standard-output*)
+                   (err *error-output*))
+               (bt:make-thread
+                (lambda ()
+                  (let ((*standard-output* out)
+                        (*error-output* err))
+                    (unwind-protect
+                         (handle-connection application c :tls-config tls-config)
+                      (ignore-errors (usocket:socket-close c)))))
+                :name (format nil "~A-~A"
+                               (application-name application)
+                               (usocket:get-peer-address c))))))
+      (when tls-listener-socket
+        (ignore-errors (usocket:socket-close tls-listener-socket))))))
 
 ;;; Dynamic key label management
 
@@ -1494,9 +1551,10 @@ Returns the 3270 response."
                 (when (eq transition-result :exit)
                   (return)))))))))))))
 
-(defun run-application (application conn devinfo)
+(defun run-application (application conn devinfo &key tls-p)
   "Run an application's main loop for a single connection.
-Binds dynamic variables, creates a session, and loops through screens."
+Binds dynamic variables, creates a session, and loops through screens.
+TLS-P indicates the connection is TLS-encrypted."
   (let* ((*application* application)
          (*connection* conn)
          (*device-info* devinfo)
@@ -1506,7 +1564,8 @@ Binds dynamic variables, creates a session, and loops through screens."
          (app-package (application-package application)))
     (bt:with-lock-held ((application-sessions-lock application))
       (push *session* (application-sessions application)))
-    (setf (session-active-application *session*) application)
+    (setf (session-active-application *session*) application
+          (session-tls-p *session*) tls-p)
     (unwind-protect
          (progn
            (setf (session-current-screen *session*)

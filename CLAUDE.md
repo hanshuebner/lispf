@@ -71,7 +71,7 @@ Each 3270 connection runs in its own thread. Per-session state belongs on the se
 
 ## Key Conventions for Lisp code
 
-- **defclass over defstruct** for editor code
+- **defclass over defstruct** always — never use defstruct
 - **case with find-symbol** for command dispatch instead of cond chains
 - **Early returns** with `unless`/`when` + `return-from` instead of `(if cond (progn ...) error-value)`
 - **Combined setf**: `(setf a 1 b 2 c 3)` instead of separate setf calls

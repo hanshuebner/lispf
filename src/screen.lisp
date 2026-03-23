@@ -64,6 +64,7 @@
            #:session-context
            #:session-properties
            #:session-property
+           #:session-tls-p
            #:*application*
            #:*session*
            #:*connection*
