@@ -49,8 +49,8 @@ Return value controls navigation:
 SCREEN-NAME is a symbol, interned in *package* at macro-expansion time.
 This must match the package used in define-application.
 
-FIELD-NAMES are bound as setf-able accessors into *current-field-values*
-(the session context). Values set here persist across screen transitions.
+FIELD-NAMES are bound as setf-able accessors into the session context.
+Values set here persist across screen transitions.
 
 The handler body should return a navigation value (see handle-key):
   'some-screen - navigate to that screen (symbol in app package)
@@ -67,7 +67,7 @@ Example:
   (let ((screen-sym (intern (string-upcase (string screen-name)) *package*))
         (aid-kw (intern (string aid-key) :keyword)))
     `(defmethod handle-key ((screen-name (eql ',screen-sym)) (aid-key (eql ,aid-kw)))
-       (with-field-bindings (*current-field-values* ,@field-names)
+       (with-field-bindings ((session-context *session*) ,@field-names)
          ,@body))))
 
 ;;; List data getter for repeat field population
@@ -109,7 +109,7 @@ to set display values.")
   "Define a preparation function called before SCREEN-NAME is displayed.
 
 SCREEN-NAME is a symbol, interned in *package* at macro-expansion time.
-FIELD-NAMES are bound as setf-able accessors into *current-field-values*.
+FIELD-NAMES are bound as setf-able accessors into the session context.
 
 Within the body, use SHOW-KEY and HIDE-KEY to control which keys
 appear in the key label line. The framework handles rendering.
@@ -120,7 +120,7 @@ Example:
     (when has-entries-p (show-key :pf7 \"Prev\")))"
   (let ((screen-sym (intern (string-upcase (string screen-name)) *package*)))
     `(defmethod prepare-screen ((screen-name (eql ',screen-sym)))
-       (with-field-bindings (*current-field-values* ,@field-names)
+       (with-field-bindings ((session-context *session*) ,@field-names)
          ,@body))))
 
 ;;; Anonymous access control
@@ -216,5 +216,5 @@ Each entry may be a string or a plist with :content and field attributes:
         (area-sym (intern (string-upcase (string area-name)) *package*)))
     `(defmethod update-dynamic-area ((screen-name (eql ',screen-sym))
                                      (area-name (eql ',area-sym)))
-       (with-field-bindings (*current-field-values* ,@bindings)
+       (with-field-bindings ((session-context *session*) ,@bindings)
          ,@body))))

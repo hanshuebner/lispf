@@ -68,10 +68,9 @@
            #:*session*
            #:*connection*
            #:*device-info*
-           #:*cursor-row*
-           #:*cursor-col*
-           #:*current-field-values*
-           #:*current-response*
+           #:cursor-row
+           #:cursor-col
+           #:current-response
            #:define-application
            #:run-application
            #:start-application

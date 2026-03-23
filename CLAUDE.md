@@ -49,7 +49,7 @@ cd screen-editor && make   # standalone binary (needs SBCL, buildapp, Node.js)
 
 The framework manages a 24x80 3270 screen. By default, rows 0 (title), 21 (command), 22 (error), 23 (key labels) are framework-managed; apps use rows 1-20. Screens with `:full-control t` give the app all 24 rows.
 
-Key dispatch chain: `show-screen-and-read` -> 3270 response -> `dispatch-key` -> `handle-key` (EQL-specialized generic on screen+AID-key). Session state persists in `*current-field-values*` hash table across screen transitions.
+Key dispatch chain: `show-screen-and-read` -> 3270 response -> `dispatch-key` -> `handle-key` (EQL-specialized generic on screen+AID-key). Session state persists in the session context hash table across screen transitions.
 
 Applications are defined with `define-application`, key handlers with `define-key-handler`, screen pre-render with `define-screen-update`. Field values are accessed via `with-field-bindings` (setf-able symbol macros).
 
@@ -67,7 +67,7 @@ Tests are self-registering via `define-test` into a per-package registry (`*test
 
 ## Thread Safety
 
-Each 3270 connection runs in its own thread. `run-application` establishes thread-local bindings (via `let*`) for all per-session dynamic variables. Any new `defvar` that holds per-session state **must** be added to this `let*`; using bare `setf` without a thread-local binding will clobber the global value and cause cross-session corruption.
+Each 3270 connection runs in its own thread. Per-session state belongs on the session object (slots or properties), not in dynamic variables. The accessor functions `cursor-row`, `cursor-col`, and `current-response` read from session slots via `*session*`. Adding a new `defvar` for per-session state risks cross-session corruption if it isn't properly `let`-bound in every thread — use a session slot instead.
 
 ## Key Conventions for Lisp code
 

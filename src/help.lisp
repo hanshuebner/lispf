@@ -47,7 +47,7 @@ Returns the help screen symbol if a help screen exists, NIL otherwise."
     (if help-sym
         help-sym
         (progn
-          (setf (gethash "errormsg" *current-field-values*)
+          (setf (gethash "errormsg" (session-context *session*))
                 (msg "No help available"))
           :stay))))
 
@@ -62,7 +62,7 @@ Returns the help screen symbol if a help screen exists, NIL otherwise."
             (intern-screen-name topic-name
                                 (application-package *application*))
             (progn
-              (setf (gethash "errormsg" *current-field-values*)
+              (setf (gethash "errormsg" (session-context *session*))
                     (msg "~A: help topic not found" topic))
               :stay)))
       (call-next-method)))

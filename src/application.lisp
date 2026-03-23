@@ -64,7 +64,10 @@ Keys are screen symbols, values are plists of (:offset N :data-count N :cursor-r
    (indicators-dirty :initform nil :accessor session-indicators-dirty)
    (update-lock :initform (bt:make-lock "update-wake") :reader session-update-lock)
    (update-cond :initform (bt:make-condition-variable :name "update-wake")
-                :reader session-update-cond)))
+                :reader session-update-cond)
+   (current-response :initform nil :accessor session-current-response)
+   (cursor-row :initform 0 :accessor session-cursor-row)
+   (cursor-col :initform 0 :accessor session-cursor-col)))
 
 (defun session-property (session key &optional default)
   "Get a session property by key."
@@ -74,6 +77,29 @@ Keys are screen symbols, values are plists of (:offset N :data-count N :cursor-r
   "Set a session property by key."
   (declare (ignore default))
   (setf (gethash key (session-properties session)) value))
+
+;;; Per-session state accessors
+
+(defun current-response ()
+  "Return the raw 3270 response from the last key press."
+  (session-current-response *session*))
+
+(defun (setf current-response) (value)
+  (setf (session-current-response *session*) value))
+
+(defun cursor-row ()
+  "Return the cursor row from the last 3270 response."
+  (session-cursor-row *session*))
+
+(defun (setf cursor-row) (value)
+  (setf (session-cursor-row *session*) value))
+
+(defun cursor-col ()
+  "Return the cursor column from the last 3270 response."
+  (session-cursor-col *session*))
+
+(defun (setf cursor-col) (value)
+  (setf (session-cursor-col *session*) value))
 
 ;;; Indicator API
 
@@ -891,16 +917,14 @@ First update fires immediately, subsequent updates wait up to 1 second."
   (let ((session *session*)
         (connection *connection*)
         (device-info *device-info*)
-        (application *application*)
-        (field-values *current-field-values*))
+        (application *application*))
     (setf (update-context-thread ctx)
           (bt:make-thread
            (lambda ()
              (let ((*session* session)
                    (*connection* connection)
                    (*device-info* device-info)
-                   (*application* application)
-                   (*current-field-values* field-values))
+                   (*application* application))
                (update-thread-fn ctx)))
            :name "lispf-update"))))
 
@@ -1185,7 +1209,7 @@ COMMAND is the trimmed value from the command field (extracted from response)."
              (cond
                (result
                 ;; Command triggered navigation: save cursor at command field start
-                (setf *cursor-row* 21 *cursor-col* 14)
+                (setf (cursor-row) 21 (cursor-col) 14)
                 result)
                (t
                 (setf (gethash "errormsg" context)
@@ -1200,7 +1224,7 @@ COMMAND is the trimmed value from the command field (extracted from response)."
                ;; Menu screen: cursor-based item selection or stay
                (is-menu (let ((target (menu-screen-select dispatch-sym)))
                           (when target
-                            (setf *cursor-row* 21 *cursor-col* 14))
+                            (setf (cursor-row) 21 (cursor-col) 14))
                           (or target :stay)))
                ;; Has an Enter key spec: dispatch normally
                (key-spec (handle-key dispatch-sym aid-kw))
@@ -1235,7 +1259,7 @@ Screen stack entries are (symbol cursor-row . cursor-col) to restore cursor on :
        (setf (session-current-screen *session*) (cdr result))))
     ((symbolp result)
      ;; Save current screen with cursor position
-     (push (cons screen-sym (cons *cursor-row* *cursor-col*))
+     (push (cons screen-sym (cons (cursor-row) (cursor-col)))
            (session-screen-stack *session*))
      (setf (session-current-screen *session*) result))
     (t
@@ -1278,12 +1302,12 @@ Returns the 3270 response."
   (when (and repeat-groups (not has-list-data))
     (join-repeat-field-values repeat-groups context))
   (remhash "errormsg" context)
-  (setf *cursor-row* (cl3270:response-row response)
-        *cursor-col* (cl3270:response-col response)
-        *current-response* response)
+  (setf (cursor-row) (cl3270:response-row response)
+        (cursor-col) (cl3270:response-col response)
+        (current-response) response)
   (when has-list-data
-    (setf (list-state-value *session* dispatch-sym :cursor-row) *cursor-row*)
-    (setf (list-state-value *session* dispatch-sym :cursor-col) *cursor-col*)))
+    (setf (list-state-value *session* dispatch-sym :cursor-row) (cursor-row))
+    (setf (list-state-value *session* dispatch-sym :cursor-col) (cursor-col))))
 
 (defun run-screen-loop (app-package)
   "Execute the main screen loop. Returns when the session ends."
@@ -1309,7 +1333,6 @@ Returns the 3270 response."
                                              (or handler-package app-package)))
            (field-values (cl3270:make-dict :test #'equal)))
       (ensure-key-handlers-validated dispatch-sym key-specs)
-      (setf *current-field-values* context)
       ;; Clear cmdlabel from context so stale overrides don't persist
       (remhash "cmdlabel" context)
       (let ((*current-screen-keys*
@@ -1425,10 +1448,6 @@ Binds dynamic variables, creates a session, and loops through screens."
          (*device-info* devinfo)
          (*session* (make-instance (application-session-class application)
                                    :application application))
-         (*current-field-values* nil)
-         (*current-response* nil)
-         (*cursor-row* 0)
-         (*cursor-col* 0)
          (*field-attribute-overrides* nil)
          (app-package (application-package application)))
     (bt:with-lock-held ((application-sessions-lock application))

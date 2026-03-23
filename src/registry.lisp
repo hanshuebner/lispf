@@ -588,7 +588,7 @@ Call from a key handler on a screen with a list-data-getter."
     (when repeat-groups
       (let* ((first-row (list-data-row screen repeat-groups))
              (page-size (reduce #'max repeat-groups :key #'second :initial-value 0))
-             (row-index (- *cursor-row* first-row))
+             (row-index (- (cursor-row) first-row))
              (data-count (or (getf (list-state *session* screen-sym) :data-count) 0)))
         (when (and first-row
                    (<= 0 row-index (1- page-size))

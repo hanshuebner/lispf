@@ -44,7 +44,7 @@
 
 (defmethod lspf:process-screen-command ((screen-name (eql 'edit)) (command string))
   "Process primary commands on the edit screen."
-  (let ((msg (process-editor-changes lspf:*session* lspf:*current-field-values*))
+  (let ((msg (process-editor-changes lspf:*session* (lspf:session-context lspf:*session*)))
         (result (handle-primary-command lspf:*session* command)))
     (cond
       ;; Primary command returned a navigation result
@@ -53,11 +53,11 @@
       ;; Primary command was handled (returned :stay)
       ((eq result :stay)
        (when msg
-         (setf (gethash "errormsg" lspf:*current-field-values*) msg))
+         (setf (gethash "errormsg" (lspf:session-context lspf:*session*)) msg))
        :stay)
       ;; Primary command returned a message string (info or error)
       ((stringp result)
-       (setf (gethash "errormsg" lspf:*current-field-values*) result)
+       (setf (gethash "errormsg" (lspf:session-context lspf:*session*)) result)
        :stay)
       ;; Unknown command - fall through to app-level process-command
       (t nil))))

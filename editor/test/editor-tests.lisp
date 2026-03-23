@@ -787,9 +787,10 @@ of (screen-row . typed-text). Unmodified rows get their original line numbers."
     context))
 
 (defun test-process-editor-changes (session context)
-  "Call process-editor-changes with *current-response* bound to nil so that
+  "Call process-editor-changes with current-response set to nil so that
 MDT-based detection treats all fields as modified (the test default)."
-  (let ((lispf:*current-response* nil))
+  (let ((lispf:*session* session))
+    (setf (lispf:current-response) nil)
     (ed::process-editor-changes session context)))
 (define-test round-trip-single-dd-enters-pending ()
   ;; User types "dd" on line 2 (screen row 1, since row 0 is Top of File marker)
@@ -1354,7 +1355,8 @@ Returns T if the file was falsely marked as modified."
   (multiple-value-bind (prefix-str data-str) (ed::build-screen-data session)
     ;; Simulate the framework join round-trip (what happens to field values
     ;; between display and response when the user doesn't edit anything)
-    (let* ((joined-prefix (simulate-join prefix-str (ed:page-size session)))
+    (let* ((lispf:*session* session)
+           (joined-prefix (simulate-join prefix-str (ed:page-size session)))
            (joined-data (simulate-join data-str (ed:page-size session)))
            (prefix-lines (split-sequence:split-sequence #\Newline joined-prefix))
            (data-lines (split-sequence:split-sequence #\Newline joined-data)))

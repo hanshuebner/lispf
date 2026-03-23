@@ -94,7 +94,7 @@ Returns a list of (real-index cmd count row)."
   (let* ((layout (editor-layout session))
          (top (editor-top-line session))
          (col-offset (editor-col-offset session))
-         (response lspf:*current-response*)
+         (response (lspf:current-response))
          ;; Scale is at a fixed screen row within the data area
          (scale-slot (when (layout-scale-row layout)
                        (let ((slot (- (layout-scale-row layout)
@@ -202,7 +202,7 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
                   (editor-alteration-count session)))
     ;; Message line: show pending info or error
     (setf ed-message
-          (or (gethash "errormsg" lspf:*current-field-values*)
+          (or (gethash "errormsg" (lspf:session-context lspf:*session*))
               (if pending
                   (let* ((cmd-name (string-upcase (symbol-name (first pending))))
                          (start-line (second pending))
@@ -281,7 +281,7 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
                        (lspf:session-current-screen session) command)
                       (lspf:process-command lspf:*application* command))))
       (return-from dispatch-command result))
-    (setf (gethash "errormsg" lspf:*current-field-values*)
+    (setf (gethash "errormsg" (lspf:session-context lspf:*session*))
           (lspf:unknown-command-message lspf:*application* command))
     :stay))
 
@@ -295,7 +295,7 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
 
 (defun auto-insert-line (session layout)
   "Insert a blank line after the cursor position and set up cursor for next display."
-  (let* ((data-row (cursor-data-row lspf:*cursor-row* layout))
+  (let* ((data-row (cursor-data-row (lspf:cursor-row) layout))
          (top (editor-top-line session)))
     (unless (and (>= data-row 0) (< data-row (page-size session)))
       (return-from auto-insert-line))
@@ -304,7 +304,7 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
       (save-undo-state session)
       (insert-lines-after session real (list ""))
       (let* ((scale-row (layout-scale-row layout))
-             (new-row (1+ lspf:*cursor-row*))
+             (new-row (1+ (lspf:cursor-row)))
              (new-row (if (and scale-row (= new-row scale-row))
                           (1+ new-row)
                           new-row))
@@ -317,7 +317,7 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
               (setf (editor-next-cursor session)
                     (cons (layout-data-start-row layout) data-col))))))))
 (lspf:define-key-handler edit :pf1 ()
-  (process-editor-changes lspf:*session* lspf:*current-field-values*)
+  (process-editor-changes lspf:*session* (lspf:session-context lspf:*session*))
   (let ((help-sym (lspf:navigate-to-help 'edit
                     (lspf::application-package lspf:*application*))))
     (or help-sym :stay)))
@@ -327,14 +327,14 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
   (let* ((session lspf:*session*)
          (layout (editor-layout session))
          (command (string-trim '(#\Space)
-                               (or (gethash "ed-command" lspf:*current-field-values*) "")))
-         (msg (process-editor-changes session lspf:*current-field-values*)))
+                               (or (gethash "ed-command" (lspf:session-context lspf:*session*)) "")))
+         (msg (process-editor-changes session (lspf:session-context lspf:*session*))))
     ;; Handle command field input (since framework doesn't process it in full-control)
     (let ((cmd-result (dispatch-command session command)))
       (when cmd-result
         (return-from lspf:handle-key cmd-result)))
     (when msg
-      (setf (gethash "errormsg" lspf:*current-field-values*) msg))
+      (setf (gethash "errormsg" (lspf:session-context lspf:*session*)) msg))
     ;; Auto-insert new line when Enter is pressed on a data line
     (unless msg
       (auto-insert-line session layout))
@@ -342,39 +342,39 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
 
 ;;; PF3 - Exit (with save prompt if modified)
 (lspf:define-key-handler edit :pf3 ()
-  (process-editor-changes lspf:*session* lspf:*current-field-values*)
+  (process-editor-changes lspf:*session* (lspf:session-context lspf:*session*))
   (when (editor-modified lspf:*session*)
-    (setf (gethash "errormsg" lspf:*current-field-values*)
+    (setf (gethash "errormsg" (lspf:session-context lspf:*session*))
           "File modified - use SAVE, SUBMIT, or CANCEL")
     (return-from lspf:handle-key :stay))
   :back)
 
 ;;; PF5 - Repeat Find
 (lspf:define-key-handler edit :pf5 ()
-  (process-editor-changes lspf:*session* lspf:*current-field-values*)
+  (process-editor-changes lspf:*session* (lspf:session-context lspf:*session*))
   (let ((search-str (editor-last-find lspf:*session*)))
     (unless search-str
-      (setf (gethash "errormsg" lspf:*current-field-values*) "No previous FIND")
+      (setf (gethash "errormsg" (lspf:session-context lspf:*session*)) "No previous FIND")
       (return-from lspf:handle-key :stay))
-    (setf (gethash "errormsg" lspf:*current-field-values*)
+    (setf (gethash "errormsg" (lspf:session-context lspf:*session*))
           (do-find lspf:*session* search-str t))
     :stay))
 
 ;;; PF6 - Repeat Change
 (lspf:define-key-handler edit :pf6 ()
-  (process-editor-changes lspf:*session* lspf:*current-field-values*)
+  (process-editor-changes lspf:*session* (lspf:session-context lspf:*session*))
   (let ((last (editor-last-change lspf:*session*)))
     (unless last
-      (setf (gethash "errormsg" lspf:*current-field-values*) "No previous CHANGE")
+      (setf (gethash "errormsg" (lspf:session-context lspf:*session*)) "No previous CHANGE")
       (return-from lspf:handle-key :stay))
     (destructuring-bind (from to all-p) last
-      (setf (gethash "errormsg" lspf:*current-field-values*)
+      (setf (gethash "errormsg" (lspf:session-context lspf:*session*))
             (do-change lspf:*session* from to all-p))
       :stay)))
 
 ;;; PF7 - Scroll Up (with wrap-around)
 (lspf:define-key-handler edit :pf7 ()
-  (process-editor-changes lspf:*session* lspf:*current-field-values*)
+  (process-editor-changes lspf:*session* (lspf:session-context lspf:*session*))
   (let* ((session lspf:*session*)
          (top (editor-top-line session))
          (ps (page-size session))
@@ -391,7 +391,7 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
 
 ;;; PF8 - Scroll Down (with wrap-around)
 (lspf:define-key-handler edit :pf8 ()
-  (process-editor-changes lspf:*session* lspf:*current-field-values*)
+  (process-editor-changes lspf:*session* (lspf:session-context lspf:*session*))
   (let* ((session lspf:*session*)
          (top (editor-top-line session))
          (ps (page-size session))
@@ -405,14 +405,14 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
 
 ;;; PF10 - Scroll Left
 (lspf:define-key-handler edit :pf10 ()
-  (process-editor-changes lspf:*session* lspf:*current-field-values*)
+  (process-editor-changes lspf:*session* (lspf:session-context lspf:*session*))
   (setf (editor-col-offset lspf:*session*)
         (max 0 (- (editor-col-offset lspf:*session*) +data-width+)))
   :stay)
 
 ;;; PF11 - Scroll Right
 (lspf:define-key-handler edit :pf11 ()
-  (process-editor-changes lspf:*session* lspf:*current-field-values*)
+  (process-editor-changes lspf:*session* (lspf:session-context lspf:*session*))
   (setf (editor-col-offset lspf:*session*)
         (+ (editor-col-offset lspf:*session*) +data-width+))
   :stay)
