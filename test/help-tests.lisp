@@ -465,10 +465,12 @@
              ;; Should see link text without markup
              (assert-screen-contains s "Prefix Commands")
              ;; PF3 should return to editor.
-             ;; The help viewer exits the subapp, then the parent screen loop
-             ;; sends a new screen. Wait for the second screen write.
+             ;; The help viewer subapp exits, then the parent screen loop
+             ;; sends a new erase/write. The first Wait(Unlock) returns from
+             ;; the help viewer's screen; a second Wait(Unlock) catches the
+             ;; editor's screen write.
              (press-pf s 3)
-             (send-action s "Wait(Output)")
+             (send-action s "Wait(Unlock)")
              (assert-screen-contains s "Size=")
              ;; Cancel and exit
              (move-cursor s 23 6)
@@ -542,9 +544,9 @@
              ;; PF3 back to edit help
              (press-pf s 3)
              (assert-screen-contains s "LISPF Editor Help")
-             ;; PF3 back to editor (wait for parent screen write)
+             ;; PF3 back to editor (second Wait(Unlock) for parent screen)
              (press-pf s 3)
-             (send-action s "Wait(Output)")
+             (send-action s "Wait(Unlock)")
              (assert-screen-contains s "Size=")
              (move-cursor s 23 6)
              (type-text s "CANCEL")
