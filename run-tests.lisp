@@ -10,16 +10,7 @@
 
 (setup-registry (make-pathname :defaults *load-truename* :name nil :type nil))
 
-(ql:quickload :lispf)
-(ql:quickload :lispf-edit)
-(ql:quickload :lispf-test)
-(ql:quickload :lispf-guestbook)
-
-(let ((*default-pathname-defaults* (asdf:system-source-directory :lispf)))
-  (load "test/i18n-tests.lisp")
-  (load "test/cursor-tests.lisp")
-  (load "editor/test/editor-tests.lisp")
-  (load "examples/guestbook/guestbook-tests.lisp"))
+(load (merge-pathnames "load-tests.lisp" *load-truename*))
 
 (unless (lispf-test:run-all-suites)
   (uiop:quit 1))
