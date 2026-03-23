@@ -4,11 +4,11 @@
 (asdf:load-system :lispf-edit)
 (asdf:load-system :lispf-test)
 
-(let ((base (asdf:system-source-directory :lispf)))
-  (load (merge-pathnames "test/i18n-tests.lisp" base))
-  (load (merge-pathnames "test/cursor-tests.lisp" base))
-  (load (merge-pathnames "editor/test/editor-tests.lisp" base))
-  (load (merge-pathnames "examples/guestbook/guestbook-tests.lisp" base)))
+(let ((*default-pathname-defaults* (asdf:system-source-directory :lispf)))
+  (load "test/i18n-tests.lisp")
+  (load "test/cursor-tests.lisp")
+  (load "editor/test/editor-tests.lisp")
+  (load "examples/guestbook/guestbook-tests.lisp"))
 
 (let ((all-passed t))
   (dolist (suite '(lispf-key-layout-tests:run-all
