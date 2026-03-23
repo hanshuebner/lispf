@@ -200,7 +200,8 @@ With FULL-CONTROL, no framework fields are created (app manages all rows)."
   (when full-control
     (return-from make-framework-fields '()))
   (append
-   (list (cl3270:make-field :row 0 :col 0 :name "title"))
+   (list (cl3270:make-field :row 0 :col 0 :name "title" :position-only t)
+         (cl3270:make-field :row 0 :col 79 :name ""))
    (unless no-command
      (list (cl3270:make-field :row 21 :col 0 :name "cmdlabel"
                               :content "Command ==>" :color cl3270:+turquoise+)
@@ -234,17 +235,17 @@ Warns at runtime if indicators do not fit the available space."
          (right-block (if (plusp (length ind-str))
                           (concatenate 'string ind-str "  " right)
                           right))
-         (available (- 78 (length left) 1))
-         (line (make-string 78 :initial-element #\Space)))
+         (available (- 79 (length left) 1))
+         (line (make-string 79 :initial-element #\Space)))
     (when (and indicators (> (length right-block) available))
       (warn "Title line indicators overflow: ~S needs ~D chars, ~D available"
             ind-str (length ind-str) (- available (length right) 2)))
     (replace line left :start1 0)
     (let ((rb-start (max (1+ (length left))
-                         (- 78 (length right-block)))))
+                         (- 79 (length right-block)))))
       (replace line right-block
                :start1 rb-start
-               :end1 (min (+ rb-start (length right-block)) 78)))
+               :end1 (min (+ rb-start (length right-block)) 79)))
     line))
 
 ;;; Rule extraction from .screen field definitions
