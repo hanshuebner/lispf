@@ -1,0 +1,16 @@
+LISPF Editor Help Index
+Welcome to the LISPF Editor help system.
+
+Choose a topic:
+
+  {edit:Editor Overview}    General editor usage and commands
+  {keys:Function Keys}      PF key assignments
+  {prefix:Prefix Commands}    Line number area commands
+  {block:Block Commands}     Multi-line block operations
+  {find:Find and Change}    Text search and replace
+
+NAVIGATION:
+  Position cursor on a topic name and press Enter to follow the link.
+  PF3 returns to the previous topic.
+  PF7/PF8 scroll up and down on long pages.
+  Type a topic name in the command field to navigate directly.

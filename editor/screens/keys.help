@@ -1,0 +1,13 @@
+Function Keys
+   PF1     Help             PF7     Scroll up (1-line overlap)
+   PF3     Exit editor      PF8     Scroll down (1-line overlap)
+   PF5     Repeat FIND      PF10    Scroll left
+   PF6     Repeat CHANGE    PF11    Scroll right
+
+SCROLLING: PF7/PF8 use DATA mode with 1-line overlap.
+You can also type UP n or DOWN n in the command field.
+Scrolling past end of file is allowed.
+
+SHORTCUT: Type a line number in the command field to jump there.
+
+See also: {edit:Editor Help}  {find:Find and Change}  {prefix:Prefix Commands}

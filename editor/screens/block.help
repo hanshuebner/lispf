@@ -1,0 +1,15 @@
+Block Commands
+Mark start and end lines with the same command, then press Enter.
+
+  DD..DD  Delete block       CC..CC + A/B  Copy block
+  RR..RR  Repeat block       MM..MM + A/B  Move block
+  JJ..JJ  Mark block, then type JUSTIFY (width) in command field
+
+SAME-SCREEN: Both markers (+ target) on one screen execute
+immediately. TWO-SCREEN: First marker enters PENDING mode.
+Type second marker on another screen to complete.
+
+PENDING: Marker shown in prefix instead of line number.
+Status line shows pending command. Use RESET to cancel.
+
+See also: {prefix:Prefix Commands}  {edit:Editor Help}

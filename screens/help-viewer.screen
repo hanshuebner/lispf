@@ -1,0 +1,16 @@
+(:name "help-viewer"
+ :handler-package "LISPF"
+ :command t
+ :screen "
+
+
+
+
+"
+ :fields ((:from (0 0) :len 79 :name hv-info :color turquoise :intense t))
+ :dynamic-areas ((:name content :from (1 0) :to (19 79)))
+ :keys ((:pf1 "Index")
+        (:pf3 "Back")
+        (:pf7 "Up" :hidden t)
+        (:pf8 "Down" :hidden t)
+        (:enter "")))

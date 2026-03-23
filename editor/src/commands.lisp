@@ -169,6 +169,69 @@ Returns a message string or :stay."
       (otherwise
        (format nil "Unknown SET option: ~A" (or (second parts) ""))))))
 
+(defun cursor-to-display-col (session)
+  "Map the current cursor position to a display column in the file.
+Returns (values real-line-index display-col) or NIL if cursor is not on a data line."
+  (let* ((layout (editor-layout session))
+         (cursor-row (lspf:cursor-row))
+         (cursor-col (lspf:cursor-col))
+         (data-row (- cursor-row (layout-data-start-row layout)))
+         (scale-row (layout-scale-row layout)))
+    ;; Account for scale line
+    (when (and scale-row (>= cursor-row scale-row))
+      (decf data-row))
+    (unless (and (>= data-row 0) (< data-row (page-size session)))
+      (return-from cursor-to-display-col nil))
+    (let* ((virtual (+ (editor-top-line session) data-row))
+           (real (virtual-to-real session virtual)))
+      (unless real
+        (return-from cursor-to-display-col nil))
+      (let ((display-col (+ (- cursor-col (layout-data-col-start layout))
+                            (editor-col-offset session))))
+        (values real (max 0 display-col))))))
+
+(defun handle-link-command (session parts)
+  "Handle the LINK command for .help file editing.
+LINK target - wrap word under cursor as link to target.
+LINK (no args) - show link target if cursor is on a link."
+  (unless (help-file-p session)
+    (return-from handle-link-command "LINK is only available in .help files"))
+  (multiple-value-bind (real display-col) (cursor-to-display-col session)
+    (unless real
+      (return-from handle-link-command "Position cursor on a data line"))
+    (let* ((raw-line (line-at session real))
+           (target (second parts)))
+      (if target
+          ;; LINK target: wrap word at cursor as link
+          (let ((new-line (lspf:wrap-word-as-link raw-line display-col
+                                                   (string-downcase target))))
+            (unless new-line
+              (return-from handle-link-command
+                "Position cursor on a word (not already a link)"))
+            (save-undo-state session)
+            (setf (nth real (editor-lines session)) new-line)
+            (format nil "Linked to ~A" (string-downcase target)))
+          ;; LINK (no args): show link info
+          (let* ((segments (lspf:parse-help-segments raw-line))
+                 (seg (lspf:find-link-segment-at-col segments display-col)))
+            (if seg
+                (format nil "Link target: ~A" (lspf:help-edit-segment-target seg))
+                "No link at cursor position"))))))
+
+(defun handle-unlink-command (session)
+  "Handle the UNLINK command: remove link markup at cursor position."
+  (unless (help-file-p session)
+    (return-from handle-unlink-command "UNLINK is only available in .help files"))
+  (multiple-value-bind (real display-col) (cursor-to-display-col session)
+    (unless real
+      (return-from handle-unlink-command "Position cursor on a data line"))
+    (let ((new-line (lspf:remove-link-at-col (line-at session real) display-col)))
+      (unless new-line
+        (return-from handle-unlink-command "No link at cursor position"))
+      (save-undo-state session)
+      (setf (nth real (editor-lines session)) new-line)
+      "Link removed")))
+
 (defun handle-primary-command (session command)
   "Process a primary (command-line) command.
 Returns :stay, :back, or an error message string. NIL means unrecognized."
@@ -266,6 +329,12 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
            (if (lspf::find-screen-file help-name)
                (lspf::intern-screen-name help-name app-package)
                (format nil "~A: help topic not found" (or topic "HELP")))))
+
+        (:LINK
+         (handle-link-command session parts))
+
+        (:UNLINK
+         (handle-unlink-command session))
 
         ((:REVERT :REV)
          (if (editor-restricted-p session)

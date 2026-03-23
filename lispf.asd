@@ -12,7 +12,9 @@
                (:file "conditions")
                (:file "key-handler")
                (:file "application")
-               (:file "help"))
+               (:file "help-parser")
+               (:file "help")
+               (:file "help-viewer"))
   :depends-on (#:cl3270
                #:alexandria
                #:split-sequence

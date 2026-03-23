@@ -61,7 +61,11 @@ suitable for the framework's repeat field split mechanism."
                               (format nil "~5A " (string-upcase (symbol-name (first pending))))
                               (format nil "~5,'0D " (1+ real)))
                           prefix-lines)
-                    (push (visible-portion line col-offset) data-lines)))
+                    (push (visible-portion (if (help-file-p session)
+                                               (lspf:strip-help-markup line)
+                                               line)
+                                           col-offset)
+                          data-lines)))
                  (t
                   (push "" prefix-lines)
                   (push "" data-lines)))
@@ -126,10 +130,21 @@ Returns a list of (real-index cmd count row)."
                            (nth i data-lines) "")))
         ;; Apply data edits only for fields the user actually modified
         (when (and data-modified real (not is-marker))
-          (let ((original (visible-portion (line-at session real) col-offset)))
+          (let* ((raw-line (line-at session real))
+                 (is-help (help-file-p session))
+                 (original (visible-portion (if is-help
+                                                (lspf:strip-help-markup raw-line)
+                                                raw-line)
+                                            col-offset)))
             (unless (string= (string-right-trim '(#\Space) data-val)
                              (string-right-trim '(#\Space) original))
-              (apply-edit session real data-val))))
+              (if is-help
+                  (progn
+                    (save-undo-state session)
+                    (setf (nth real (editor-lines session))
+                          (lspf:apply-help-line-edit raw-line col-offset
+                                                     +data-width+ data-val)))
+                  (apply-edit session real data-val)))))
         ;; Parse prefix commands only from modified prefix fields
         (when prefix-modified
           (unless (pending-prefix-for-line-p session real prefix-val)
@@ -250,6 +265,23 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
                                           :color cl3270:+yellow+)
                 (lspf:set-field-attribute (format nil "data.~D" i)
                                           :color cl3270:+yellow+)))))))))
+    ;; Highlight lines containing help links in .help files
+    (when (help-file-p session)
+      (let ((virtual-offset 0))
+        (dotimes (i (page-size session))
+          (if (and (layout-scale-row layout)
+                   (let ((slot (- (layout-scale-row layout)
+                                  (layout-data-start-row layout))))
+                     (and (>= slot 0) (< slot (page-size session))
+                          (= i slot))))
+              (decf virtual-offset)
+              (let* ((virtual (+ top i virtual-offset))
+                     (real (virtual-to-real session virtual)))
+                (when (and real (not (marker-line-p session virtual)))
+                  (let ((line (line-at session real)))
+                    (when (and line (position #\{ line))
+                      (lspf:set-field-attribute (format nil "data.~D" i)
+                                                :color cl3270:+turquoise+)))))))))
     ;; Position cursor (use override if set, otherwise command field)
     (let ((next (editor-next-cursor session)))
       (if next

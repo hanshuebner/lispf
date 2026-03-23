@@ -124,6 +124,31 @@
            #:find-help-screen
            #:navigate-to-help
            #:help-screen-p
+           ;; Help viewer
+           #:help-page
+           #:help-page-title
+           #:help-page-lines
+           #:help-link
+           #:help-link-target
+           #:help-link-text
+           #:parse-help-file
+           #:parse-help-line
+           #:find-help-file
+           #:render-help-page
+           #:strip-help-markup
+           #:parse-help-segments
+           #:help-edit-segment
+           #:help-edit-segment-kind
+           #:help-edit-segment-text
+           #:help-edit-segment-target
+           #:help-edit-segment-display-start
+           #:help-edit-segment-display-end
+           #:reconstruct-help-line
+           #:apply-help-line-edit
+           #:find-link-segment-at-col
+           #:wrap-word-as-link
+           #:remove-link-at-col
+           #:show-help
            ;; Internationalization
            #:msg
            #:load-message-catalog

@@ -50,6 +50,7 @@
            #:editor-restricted-p
            #:editor-current-line
            #:editor-alteration-count
+           #:help-file-p
            #:make-test-session
 
            ;; Buffer operations

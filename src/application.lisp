@@ -689,6 +689,7 @@ unlocking the 3270 keyboard after the main thread received a response."
 ;;;   Colors:       r red, b blue, g green, p pink, t turquoise, y yellow, w white, 0 default
 ;;;   Highlighting: _ underscore, ! blink, ~ reverse-video, . default
 ;;;   Intensity:    * intense, - normal
+;;;   Protection:   + unprotected (writable), = protected (default)
 ;;;   Literal:      ^^ produces a single ^
 
 (defparameter *attribute-code-map*
@@ -705,7 +706,9 @@ unlocking the 3270 keyboard after the main thread received a response."
     (#\~ :highlighting ,cl3270:+reverse-video+)
     (#\. :highlighting 0)
     (#\* :intense t)
-    (#\- :intense nil)))
+    (#\- :intense nil)
+    (#\+ :write t)
+    (#\= :write nil)))
 
 (defun lookup-attribute-code (char)
   "Return (key value) for an attribute code character, or NIL."
@@ -723,6 +726,7 @@ if STRING contains no attribute intro characters."
         (color 0)
         (highlighting 0)
         (intense nil)
+        (writable nil)
         (i 0)
         (len (length string)))
     (unless (position intro string)
@@ -736,7 +740,9 @@ if STRING contains no attribute intro characters."
                                  (unless (= highlighting 0)
                                    (list :highlighting highlighting))
                                  (when intense
-                                   (list :intense t)))))
+                                   (list :intense t))
+                                 (when writable
+                                   (list :write t)))))
                      (push (cons text attrs) segments))))))
       (loop while (< i len)
             for ch = (char string i)
@@ -754,7 +760,8 @@ if STRING contains no attribute intro characters."
                        (ecase (first attr)
                          (:color (setf color (second attr)))
                          (:highlighting (setf highlighting (second attr)))
-                         (:intense (setf intense (second attr))))
+                         (:intense (setf intense (second attr)))
+                         (:write (setf writable (second attr))))
                        (incf i 2))
                       (t
                        ;; Unknown code, pass through literally
@@ -818,14 +825,17 @@ Returns (values screen vals)."
                         (let* ((text (car seg))
                                (attrs (cdr seg))
                                (name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx)))
-                               (seg-width (min (length text) remaining))
+                               ;; Non-first segments lose 1 char for the attribute byte
+                               (attr-overhead (if first-seg 0 1))
+                               (seg-width (min (length text) (- remaining attr-overhead)))
                                (field-row (if first-seg (attr-row row) row))
                                (field-col (if first-seg attr-col col)))
-                          (add-field field-row field-col name attrs
-                                     (subseq text 0 seg-width) seg-width)
-                          (setf first-seg nil)
-                          (incf col seg-width)
-                          (decf remaining seg-width))))
+                          (when (plusp seg-width)
+                            (add-field field-row field-col name attrs
+                                       (subseq text 0 seg-width) seg-width)
+                            (setf first-seg nil)
+                            (incf col (+ seg-width attr-overhead))
+                            (decf remaining (+ seg-width attr-overhead))))))
                     ;; Pad remainder of the row if segments didn't fill it
                     (when (plusp remaining)
                       (let ((name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx))))
@@ -836,6 +846,30 @@ Returns (values screen vals)."
                     (add-field (attr-row row) attr-col name nil "" row-width))))))
     (values (apply #'cl3270:make-screen "dynamic-overlay" (nreverse fields))
             vals)))
+
+(defun merge-initial-dynamic-areas (screen vals update-ctx)
+  "Merge dynamic area content into SCREEN for the initial display.
+Calls dynamic area updaters and combines their fields with the main screen fields,
+so everything is sent in a single 3270 write. Returns the merged screen."
+  (let* ((screen-sym (update-context-screen-sym update-ctx))
+         (areas (get-screen-dynamic-areas screen-sym))
+         (app-package (application-package *application*))
+         (extra-fields '()))
+    (dolist (area areas)
+      (let ((area-sym (intern (string-upcase (dynamic-area-name area)) app-package)))
+        (when-let (content (update-dynamic-area screen-sym area-sym))
+          (multiple-value-bind (overlay-screen overlay-vals)
+              (build-dynamic-area-overlay area content)
+            ;; Merge overlay field values into main vals
+            (maphash (lambda (k v) (setf (gethash k vals) v)) overlay-vals)
+            ;; Collect overlay fields
+            (dolist (f (cl3270:screen-fields overlay-screen))
+              (push f extra-fields))))))
+    (if extra-fields
+        (apply #'cl3270:make-screen
+               (cl3270:screen-name screen)
+               (append (cl3270:screen-fields screen) (nreverse extra-fields)))
+        screen)))
 
 (defun send-dynamic-area-overlays (ctx)
   "Call dynamic area updaters for the current screen and send overlays."
@@ -979,15 +1013,19 @@ cl3270 symbols, adding background update thread support via post-send-callback."
                                (remhash field my-vals)))
                          (remhash field my-vals))))
                  rules))
-      ;; Show screen with update thread
-      (let ((update-ctx (when screen-sym
-                          (make-update-context
-                           :screen-sym screen-sym
-                           :last-minute (nth-value 1
-                                          (decode-universal-time
-                                           (get-universal-time)))))))
+      ;; Merge dynamic area content into the main screen for the initial display,
+      ;; so the complete screen arrives in a single write (no race with the client).
+      (let* ((update-ctx (when screen-sym
+                           (make-update-context
+                            :screen-sym screen-sym
+                            :last-minute (nth-value 1
+                                           (decode-universal-time
+                                            (get-universal-time))))))
+             (display-screen (if update-ctx
+                                 (merge-initial-dynamic-areas screen my-vals update-ctx)
+                                 screen)))
         (multiple-value-bind (resp err)
-            (cl3270:show-screen-opts screen my-vals conn
+            (cl3270:show-screen-opts display-screen my-vals conn
               (cl3270:make-screen-opts
                :cursor-row cursor-row :cursor-col cursor-col
                :altscreen devinfo :codepage codepage
@@ -1440,8 +1478,10 @@ Returns the 3270 response."
                                   :stay)
                                 result))
                           result)))
-              (setf no-clear (or (eq checked-result :stay)
-                                  (null checked-result)))
+              (setf no-clear (and (or (eq checked-result :stay)
+                                       (null checked-result))
+                                   (not (session-property *session* :force-redraw))))
+              (setf (session-property *session* :force-redraw) nil)
               ;; Propagate set-cursor from key handler to next :stay iteration
               (when (and no-clear *next-cursor-row*)
                 (setf restored-cursor-row *next-cursor-row*
@@ -1500,4 +1540,6 @@ with the subapplication's expected session class."
             (session-screen-stack *session*) saved-stack
             (session-context *session*) saved-context
             (session-current-screen *session*) saved-screen)))
+  ;; Force full erase/write on next display since subapp used different screen layout
+  (setf (session-property *session* :force-redraw) t)
   :stay)

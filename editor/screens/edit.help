@@ -1,0 +1,20 @@
+LISPF Editor Help
+Edit data directly in the data area. Changes apply on any key press.
+
+COMMANDS (type in command field):
+  SAVE / FILE    Save (and exit)    FIND string   Search text
+  CANCEL         Quit (no save)     CHANGE /a/b/  Replace text
+  TOP / BOTTOM   Go to start/end    LOCATE n      Go to line
+  UP n / DOWN n  Scroll by n        UNDO          Undo change
+  LEFT / RIGHT   Scroll columns     REVERT        Reload file
+  RESET          Clear pending      JUSTIFY (n)   Justify text
+  n              Go to line n
+
+PREFIX COMMANDS (type in line number area):
+  I D R C M A B  Insert/Delete/Repeat/Copy/Move/After/Before
+  DD CC MM RR JJ Block: Delete/Copy/Move/Repeat/Justify
+  UC LC ( )       Uppercase/Lowercase/Shift left/right
+
+For details see:
+  {prefix:Prefix Commands}   {block:Block Commands}
+  {find:Find and Change}     {keys:Function Keys}

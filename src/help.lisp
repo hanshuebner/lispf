@@ -3,9 +3,11 @@
 ;;;; help.lisp
 ;;;;
 ;;;; Help subsystem for lispf applications.
-;;;; Help screens are .screen files following the naming convention help-<name>.
-;;;; PF1 navigates to the help screen for the current screen.
-;;;; The command field in help screens navigates to named help topics.
+;;;; Supports two formats:
+;;;;   1. .help files (hypertext help viewer with links and scrolling)
+;;;;   2. .screen files following the naming convention help-<name> (legacy)
+;;;; PF1 navigates to the help for the current screen, preferring .help files.
+;;;; The command field in legacy help screens navigates to named help topics.
 
 (in-package #:lispf)
 
@@ -32,26 +34,34 @@ Returns the help screen name string if found, NIL otherwise."
 ;;; Help navigation
 
 (defun navigate-to-help (screen-sym app-package)
-  "Navigate to the help screen for SCREEN-SYM.
-Returns the help screen symbol if a help screen exists, NIL otherwise."
-  (let ((help-name (find-help-screen screen-sym)))
-    (when help-name
-      (intern-screen-name help-name app-package))))
+  "Navigate to the help for SCREEN-SYM.
+Prefers .help files (invokes help viewer) over legacy .screen help.
+Returns the help screen symbol for legacy screens, :stay for help viewer,
+or NIL if no help is available."
+  (let ((name (screen-name-string screen-sym)))
+    ;; Try .help file first
+    (when (find-help-file name)
+      (return-from navigate-to-help (show-help name)))
+    ;; Fall back to legacy .screen help
+    (let ((help-name (find-help-screen screen-sym)))
+      (when help-name
+        (intern-screen-name help-name app-package)))))
 
 ;;; Default PF1 handler: show help
 
 (defmethod handle-key (screen-name (aid-key (eql :pf1)))
-  "Default PF1 handler: navigate to help screen for the current screen."
-  (let ((help-sym (navigate-to-help screen-name
-                                     (application-package *application*))))
-    (if help-sym
-        help-sym
+  "Default PF1 handler: navigate to help for the current screen.
+Prefers .help files over legacy .screen help."
+  (let ((result (navigate-to-help screen-name
+                                   (application-package *application*))))
+    (if result
+        result
         (progn
           (setf (gethash "errormsg" (session-context *session*))
                 (msg "No help available"))
           :stay))))
 
-;;; Help topic navigation via command field
+;;; Help topic navigation via command field (legacy .screen help)
 
 (defmethod process-screen-command :around (screen-name (command string))
   "On help screens, treat the command field as a help topic navigator."

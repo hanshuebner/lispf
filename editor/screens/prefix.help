@@ -1,0 +1,18 @@
+Prefix Commands
+Type commands in the line number area.
+
+SINGLE LINE (with optional count n):
+  I(n)   Insert n blank lines     C(n)   Copy (need A/B target)
+  D(n)   Delete n lines           M(n)   Move (need A/B target)
+  R(n)   Repeat line n times      A/B    After/Before target
+
+CASE AND SHIFT:
+  UC(n)  Uppercase n lines        ((n)   Shift left n columns
+  LC(n)  Lowercase n lines        )(n)   Shift right n columns
+
+BLOCK COMMANDS (mark start and end lines):
+  DD     Delete block              CC     Copy block (+ A/B)
+  RR     Repeat block              MM     Move block (+ A/B)
+  JJ     Mark block for JUSTIFY command
+
+See also: {block:Block Commands}  {edit:Editor Help}

@@ -137,6 +137,11 @@ Virtual 0 = Top-of-Data marker, 1..N = file lines, N+1 = Bottom-of-Data marker."
   "File is modified when undo stack is non-empty."
   (plusp (editor-alteration-count session)))
 
+(defmethod help-file-p ((session editor-session))
+  "Return T if the current file has a .help extension."
+  (let ((path (editor-filepath session)))
+    (and path (string-equal "help" (pathname-type path)))))
+
 (defun make-test-session (lines &key layout)
   "Create an editor session for testing (no application binding needed)."
   (let ((s (make-instance 'editor-session)))

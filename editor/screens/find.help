@@ -1,0 +1,18 @@
+Find and Change Commands
+
+FIND string
+  Search for text (case-insensitive). View scrolls to match.
+  Examples:  FIND hello    FIND /hello world/    F 'text'
+
+CHANGE /old/new/ (ALL)
+  Replace text. Without ALL, replaces first from current position.
+  With ALL, replaces every occurrence in the file.
+  Examples:  CHANGE /foo/bar/    CHG /old/new/ ALL
+
+Use / ' or double-quote as delimiters for strings with spaces.
+
+REPEAT:
+  PF5    Repeat last FIND (advance to next match)
+  PF6    Repeat last CHANGE
+
+See also: {edit:Editor Help}  {keys:Function Keys}
