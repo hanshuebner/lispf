@@ -13,6 +13,7 @@
 (ql:quickload :lispf)
 (ql:quickload :lispf-edit)
 (ql:quickload :lispf-test)
+(ql:quickload :lispf-guestbook)
 
 (let ((*default-pathname-defaults* (asdf:system-source-directory :lispf)))
   (load "test/i18n-tests.lisp")
