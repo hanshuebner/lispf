@@ -7,11 +7,12 @@
 
 (in-package #:lispf-test)
 
-(defmacro with-test-app ((session-var app &key (port 13270) (host "127.0.0.1"))
+(defmacro with-test-app ((session-var app &key (port 0) (host "127.0.0.1"))
                           &body body)
   "Run BODY with a test application and s3270 session.
-Starts APP in a background thread on PORT, launches s3270, connects,
-and binds SESSION-VAR to the s3270-session. Cleans up on exit."
+Starts APP in a background thread on PORT (default 0 for auto-assign),
+launches s3270, connects, and binds SESSION-VAR to the s3270-session.
+Cleans up on exit."
   (let ((listener-var (gensym "LISTENER"))
         (ready-lock (gensym "LOCK"))
         (ready-cv (gensym "CV"))
@@ -19,12 +20,14 @@ and binds SESSION-VAR to the s3270-session. Cleans up on exit."
         (app-thread (gensym "THREAD"))
         (s3270-var (gensym "S3270"))
         (port-var (gensym "PORT"))
+        (actual-port-var (gensym "ACTUAL-PORT"))
         (host-var (gensym "HOST")))
     `(let* ((,listener-var nil)
             (,ready-lock (bt:make-lock "test-app-ready"))
             (,ready-cv (bt:make-condition-variable :name "test-app-ready"))
             (,ready-flag nil)
             (,port-var ,port)
+            (,actual-port-var nil)
             (,host-var ,host)
             (,app-thread
               (bt:make-thread
@@ -39,7 +42,8 @@ and binds SESSION-VAR to the s3270-session. Cleans up on exit."
                         :host ,host-var
                         :listener-callback
                         (lambda (listener)
-                          (setf ,listener-var listener)
+                          (setf ,listener-var listener
+                                ,actual-port-var (usocket:get-local-port listener))
                           (bt:with-lock-held (,ready-lock)
                             (setf ,ready-flag t)
                             (bt:condition-notify ,ready-cv))))
@@ -53,7 +57,7 @@ and binds SESSION-VAR to the s3270-session. Cleans up on exit."
        (unwind-protect
             (progn
               (setf ,s3270-var (launch-s3270))
-              (s3270-connect ,s3270-var ,host-var ,port-var)
+              (s3270-connect ,s3270-var ,host-var ,actual-port-var)
               (let ((,session-var ,s3270-var))
                 ,@body))
          ;; Cleanup
