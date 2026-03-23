@@ -65,8 +65,9 @@
   (lispf:load-screen-data screen-path))
 
 (defun field-position (screen-data field-name)
-  "Look up a field's position from screen data.
-Returns (values row col length) with +1 row offset for the framework title row.
+  "Look up a field's content position from screen data.
+Returns (values row col length) where row has +1 offset for the framework title
+row and col has +1 offset to skip the attribute byte.
 FIELD-NAME is a string (case-insensitive)."
   (let ((fields (getf screen-data :fields)))
     (dolist (field fields)
@@ -76,7 +77,7 @@ FIELD-NAME is a string (case-insensitive)."
                 (len (getf field :len)))
             (return-from field-position
               (values (1+ (first from))   ; +1 for framework title row
-                      (second from)
+                      (1+ (second from))  ; +1 to skip attribute byte
                       len)))))))
   (error "Field ~S not found in screen data" field-name))
 
