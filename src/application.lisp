@@ -1436,8 +1436,8 @@ Returns the 3270 response."
                           result)))
               (setf no-clear (or (eq checked-result :stay)
                                   (null checked-result)))
-              ;; Propagate set-cursor from key handler to next iteration
-              (when *next-cursor-row*
+              ;; Propagate set-cursor from key handler to next :stay iteration
+              (when (and no-clear *next-cursor-row*)
                 (setf restored-cursor-row *next-cursor-row*
                       restored-cursor-col *next-cursor-col*))
               (multiple-value-bind (transition-result saved-row saved-col)
