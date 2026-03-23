@@ -58,6 +58,7 @@
            #:session
            #:session-application
            #:session-active-application
+           #:session-last-activity
            #:session-current-screen
            #:session-screen-stack
            #:session-context
@@ -96,6 +97,8 @@
            #:*attribute-intro-char*
            ;; Customization
            #:unknown-key-message
+           ;; Idle timeout
+           #:session-idle-timeout
            ;; Access control
            #:session-authenticated-p
            #:anonymous-access-denied-message

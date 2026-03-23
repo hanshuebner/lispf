@@ -52,6 +52,7 @@ KEY-NAME is the string name of the key (e.g. \"PF5\").")
   ((application :initarg :application :reader session-application)
    (active-application :accessor session-active-application :initform nil)
    (current-screen :accessor session-current-screen)
+   (last-activity :initform (get-universal-time) :accessor session-last-activity)
    (screen-stack :initform nil :accessor session-screen-stack)
    (context :initform (make-hash-table :test 'equal) :accessor session-context)
    (properties :initform (make-hash-table) :accessor session-properties)
@@ -845,6 +846,24 @@ Returns NIL if the thread should exit."
   (or (minute-changed-p ctx)
       (consume-dirty-indicators-p)))
 
+(defgeneric session-idle-timeout (application session)
+  (:documentation "Return the idle timeout in seconds for SESSION, or NIL for no timeout.
+Called by the background update thread. When the session has been idle longer
+than the returned value, the connection is closed.")
+  (:method (application session)
+    (declare (ignore application session))
+    nil))
+
+(defun check-idle-timeout (ctx)
+  "Check if the session has exceeded its idle timeout. Closes the connection if so."
+  (let ((timeout (session-idle-timeout *application* *session*)))
+    (when (and timeout
+               (> (- (get-universal-time) (session-last-activity *session*))
+                  timeout))
+      (setf (update-context-running ctx) nil)
+      (ignore-errors (usocket:socket-close *connection*))
+      t)))
+
 (defun update-thread-fn (ctx)
   "Background thread: pushes title and dynamic area overlays periodically.
 First update fires immediately, subsequent updates wait up to 1 second."
@@ -854,6 +873,7 @@ First update fires immediately, subsequent updates wait up to 1 second."
         (when (update-context-running ctx)
           (send-dynamic-area-overlays ctx))
         (loop while (wait-for-update-signal ctx)
+              when (check-idle-timeout ctx) do (return)
               when (title-needs-update-p ctx)
                 do (send-title-overlay ctx)
               do (send-dynamic-area-overlays ctx)))
@@ -1333,6 +1353,7 @@ Returns the 3270 response."
                                                  :full-control full-control
                                                  :no-clear no-clear)
                              (setf no-clear nil))))
+            (setf (session-last-activity *session*) (get-universal-time))
             (process-response response context dispatch-sym transient-fields
                               repeat-groups has-list-data)
             ;; Temporarily inject transient field values so key handlers can
