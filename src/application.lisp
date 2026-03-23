@@ -759,50 +759,50 @@ Returns (values screen vals)."
     (flet ((add-field (row col name attrs text width)
              (push (apply #'cl3270:make-field :row row :col col :name name attrs) fields)
              (setf (gethash name vals) (pad-or-truncate text width)))
-           (row-attr-col (row)
-             ;; For full-width: place attr at col 79 of previous row,
-             ;; EXCEPT for the last row where it would clobber the next
-             ;; field's attribute byte. Use col 0 of the same row instead.
-             (if (and full-width-p (< row to-row))
-                 (values (1- row) attr-col content-width)
-                 (values row 0 (1- +screen-columns+)))))
+           (attr-row (row)
+             (if full-width-p (1- row) row)))
       (loop for row from from-row to to-row
             for i from 0
             for entry = (if (< i (length content)) (nth i content) nil)
-            do (multiple-value-bind (a-row a-col a-width) (row-attr-col row)
-                 (cond
-                   ;; Plist entry: single field with explicit attributes
-                   ((consp entry)
-                    (let ((name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx)))
-                          (line (or (getf entry :content) ""))
-                          (attrs (remove-from-plist entry :content)))
-                      (add-field a-row a-col name attrs line a-width)))
-                   ;; String entry: parse for inline attribute codes
-                   ((stringp entry)
-                    (let ((segments (parse-attributed-string entry))
-                          (col (if (= a-row row) (1+ a-col) 0))
-                          (remaining a-width)
-                          (first-seg t))
-                      (dolist (seg segments)
-                        (when (plusp remaining)
-                          (let* ((text (car seg))
-                                 (attrs (cdr seg))
-                                 (name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx)))
-                                 (seg-width (min (length text) remaining))
-                                 (field-row (if first-seg a-row row))
-                                 (field-col (if first-seg a-col col)))
-                            (add-field field-row field-col name attrs
-                                       (subseq text 0 seg-width) seg-width)
-                            (setf first-seg nil)
-                            (incf col seg-width)
-                            (decf remaining seg-width))))
+            ;; Last row of full-width area: use 79 chars to preserve the
+            ;; next field's attribute byte at (to-row, 79)
+            for row-width = (if (and full-width-p (= row to-row))
+                                (1- content-width)
+                                content-width)
+            do (cond
+                 ;; Plist entry: single field with explicit attributes
+                 ((consp entry)
+                  (let ((name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx)))
+                        (line (or (getf entry :content) ""))
+                        (attrs (remove-from-plist entry :content)))
+                    (add-field (attr-row row) attr-col name attrs line row-width)))
+                 ;; String entry: parse for inline attribute codes
+                 ((stringp entry)
+                  (let ((segments (parse-attributed-string entry))
+                        (col content-col)
+                        (remaining row-width)
+                        (first-seg t))
+                    (dolist (seg segments)
                       (when (plusp remaining)
-                        (let ((name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx))))
-                          (add-field row col name nil "" remaining)))))
-                   ;; NIL: blank row
-                   (t
-                    (let ((name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx))))
-                      (add-field a-row a-col name nil "" a-width)))))))
+                        (let* ((text (car seg))
+                               (attrs (cdr seg))
+                               (name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx)))
+                               (seg-width (min (length text) remaining))
+                               (field-row (if first-seg (attr-row row) row))
+                               (field-col (if first-seg attr-col col)))
+                          (add-field field-row field-col name attrs
+                                     (subseq text 0 seg-width) seg-width)
+                          (setf first-seg nil)
+                          (incf col seg-width)
+                          (decf remaining seg-width))))
+                    ;; Pad remainder of the row if segments didn't fill it
+                    (when (plusp remaining)
+                      (let ((name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx))))
+                        (add-field row col name nil "" remaining)))))
+                 ;; NIL: blank row
+                 (t
+                  (let ((name (format nil "dyn-~A-~D" (dynamic-area-name area) (incf field-idx))))
+                    (add-field (attr-row row) attr-col name nil "" row-width))))))
     (values (apply #'cl3270:make-screen "dynamic-overlay" (nreverse fields))
             vals)))
 
