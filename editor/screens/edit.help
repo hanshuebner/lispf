@@ -2,7 +2,7 @@ LISPF Editor Help
 Edit data directly in the data area. Changes apply on any key press.
 
 COMMANDS (type in command field):
-  SAVE / FILE    Save (and exit)    FIND string   Search text
+  FILE           Save (and exit)    FIND string   Search text
   CANCEL         Quit (no save)     CHANGE /a/b/  Replace text
   TOP / BOTTOM   Go to start/end    LOCATE n      Go to line
   UP n / DOWN n  Scroll by n        UNDO          Undo change

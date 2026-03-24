@@ -522,11 +522,7 @@ telnet negotiation."
                                   :connection-id conn-id)
               (cl3270:unnegotiate-telnet socket 1))))
       (idle-timeout-error ())
-      ((or end-of-file
-           type-error
-           cl3270::telnet-error
-           usocket:connection-aborted-error
-           stream-error) ()
+      (end-of-file ()
         (log-message :info "client disconnected"))
       (error (e)
         (log-message :error "connection error: ~A" e)))))
@@ -1139,17 +1135,18 @@ cl3270 symbols, adding background update thread support via post-send-callback."
                                  (merge-initial-dynamic-areas screen my-vals update-ctx)
                                  screen)))
         (multiple-value-bind (resp err)
-            (cl3270:show-screen-opts display-screen my-vals conn
-              (cl3270:make-screen-opts
-               :cursor-row cursor-row :cursor-col cursor-col
-               :altscreen devinfo :codepage codepage
-               :no-clear no-clear
-               :post-send-callback (when update-ctx
-                                     (lambda (data)
-                                       (declare (ignore data))
-                                       (start-updates update-ctx)
-                                       nil))))
-          (when update-ctx (stop-updates update-ctx))
+            (unwind-protect
+                 (cl3270:show-screen-opts display-screen my-vals conn
+                   (cl3270:make-screen-opts
+                    :cursor-row cursor-row :cursor-col cursor-col
+                    :altscreen devinfo :codepage codepage
+                    :no-clear no-clear
+                    :post-send-callback (when update-ctx
+                                          (lambda (data)
+                                            (declare (ignore data))
+                                            (start-updates update-ctx)
+                                            nil))))
+              (when update-ctx (stop-updates update-ctx)))
           (when err (return (values resp err)))
           (cond
             ;; Exit key - return without validation
