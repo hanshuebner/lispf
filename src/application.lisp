@@ -521,6 +521,8 @@ telnet negotiation."
                                   :tls-p (or tls-immediate-p starttls-established)
                                   :connection-id conn-id)
               (cl3270:unnegotiate-telnet socket 1))))
+      (idle-timeout-error ()
+        (log-message :info "session timed out"))
       ((or end-of-file
            type-error
            cl3270::telnet-error
@@ -716,10 +718,15 @@ Call from within a define-screen-update body."
 
 ;;; Update context and background thread
 
+(define-condition idle-timeout-error (error)
+  ()
+  (:report "Idle timeout"))
+
 (defstruct update-context
   "State for the background update thread."
   (running nil :type boolean)
   (thread nil)
+  (main-thread nil)
   (screen-sym nil)
   (last-minute -1 :type fixnum))
 
@@ -1025,7 +1032,9 @@ than the returned value, the connection is closed.")
     nil))
 
 (defun check-idle-timeout (ctx)
-  "Check if the session has exceeded its idle timeout. Closes the connection if so."
+  "Check if the session has exceeded its idle timeout.
+Interrupts the main thread with an idle-timeout-error to break out of
+the blocking read-response."
   (let ((timeout (session-idle-timeout *application* *session*)))
     (when (and timeout
                (> (- (get-universal-time) (session-last-activity *session*))
@@ -1033,7 +1042,11 @@ than the returned value, the connection is closed.")
       (log-message :info "idle timeout (~Ds) on screen ~A, closing connection"
                    timeout (session-current-screen *session*))
       (setf (update-context-running ctx) nil)
-      (ignore-errors (usocket:socket-close *connection*))
+      (let ((main (update-context-main-thread ctx)))
+        (when main
+          (ignore-errors
+            (bt:interrupt-thread main
+              (lambda () (error 'idle-timeout-error))))))
       t)))
 
 (defun update-thread-fn (ctx)
@@ -1119,6 +1132,7 @@ cl3270 symbols, adding background update thread support via post-send-callback."
       (let* ((update-ctx (when screen-sym
                            (make-update-context
                             :screen-sym screen-sym
+                            :main-thread (bt:current-thread)
                             :last-minute (nth-value 1
                                            (decode-universal-time
                                             (get-universal-time))))))
