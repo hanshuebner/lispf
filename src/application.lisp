@@ -479,10 +479,49 @@ telnet negotiation."
             (format *error-output* "~&;;; ~A: negotiation error: ~A~%"
                     (application-name application) err)
             (return-from handle-connection))
+          (let* ((addr (ignore-errors (usocket:get-peer-address socket)))
+                 (peer (ignore-errors
+                         (format nil "~{~D~^.~}:~D"
+                                 (coerce addr 'list)
+                                 (usocket:get-peer-port socket))))
+                 (term (cl3270::term-type devinfo))
+                 (model (when (and (>= (length term) 10)
+                                   (char= (char term 8) #\-))
+                          (char term 9))))
+            (multiple-value-bind (pri-rows pri-cols)
+                (case model
+                  (#\2 (values 24 80))
+                  (#\3 (values 32 80))
+                  (#\4 (values 43 80))
+                  (#\5 (values 27 132))
+                  (otherwise (values 24 80)))
+              (format *error-output*
+                      "~&;;; ~A: connection from=~A type=~A size=~Dx~D~@[ alt=~Dx~D~]~@[ codepage=~A~] tls=~A~%"
+                      (application-name application)
+                      (or peer "unknown")
+                      term
+                      pri-rows pri-cols
+                      (when (or (/= (cl3270::rows devinfo) pri-rows)
+                                (/= (cl3270::cols devinfo) pri-cols))
+                        (cl3270::rows devinfo))
+                      (when (or (/= (cl3270::rows devinfo) pri-rows)
+                                (/= (cl3270::cols devinfo) pri-cols))
+                        (cl3270::cols devinfo))
+                      (when (cl3270::codepage devinfo)
+                        (cl3270::codepage-name (cl3270::codepage devinfo)))
+                      (cond (tls-immediate-p "yes")
+                            (starttls-established "starttls")
+                            (t "no")))))
           (unwind-protect
                (run-application application socket devinfo
                                 :tls-p (or tls-immediate-p starttls-established))
             (cl3270:unnegotiate-telnet socket 1))))
+    ((or end-of-file
+         cl3270::telnet-error
+         usocket:connection-aborted-error
+         stream-error) ()
+      (format *error-output* "~&;;; ~A: client disconnected~%"
+              (application-name application)))
     (error (e)
       (format *error-output* "~&;;; ~A: connection error: ~A~%"
               (application-name application) e))))
@@ -1458,14 +1497,12 @@ Returns the 3270 response."
             (*field-attribute-overrides* nil))
         (let ((prep-result (prepare-screen dispatch-sym)))
           (when (and prep-result (symbolp prep-result))
-            (let ((transition (apply-screen-transition
-                               prep-result screen-sym dispatch-sym)))
+            (multiple-value-bind (transition r c)
+                (apply-screen-transition prep-result screen-sym dispatch-sym)
               (when (eq transition :exit)
                 (return-from run-screen-loop))
-              (when transition
-                (multiple-value-bind (tr r c) transition
-                  (declare (ignore tr))
-                  (when r (setf restored-cursor-row r restored-cursor-col c)))))
+              (when r
+                (setf restored-cursor-row r restored-cursor-col c)))
             (return-from next-screen)))
         ;; Menu screens: auto-set cursor to command field
         (when (and is-menu (not *next-cursor-row*))
@@ -1506,15 +1543,16 @@ Returns the 3270 response."
             (let* ((aid-kw (aid-to-keyword (cl3270:response-aid response)))
                    (key-spec (find-key-spec key-specs aid-kw))
                    (resp-command
-                     (let ((rv (cl3270:response-vals response)))
-                       (when rv
-                         (string-trim '(#\Space) (or (gethash "command" rv) "")))))
+                     (string-trim '(#\Space)
+                                  (or (gethash "command"
+                                               (cl3270:response-vals response))
+                                      "")))
                    (result (prog1
                                (dispatch-key context dispatch-sym aid-kw
                                              key-spec has-list-data
                                              repeat-groups list-data-total
                                              app-package
-                                             (or resp-command ""))
+                                             resp-command)
                              (dolist (k transient-fields)
                                (remhash k context)))))
               ;; Check anonymous access before transitioning
