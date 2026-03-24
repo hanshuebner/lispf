@@ -12,7 +12,8 @@
 
 (defpackage #:lispf-editor-tests
   (:use #:cl #:lispf-test)
-  (:local-nicknames (#:ed #:lispf-editor))
+  (:local-nicknames (#:ed #:lispf-editor)
+                    (#:lspf #:lispf))
   (:export #:run-all))
 
 (in-package #:lispf-editor-tests)
@@ -1240,7 +1241,7 @@ MDT-based detection treats all fields as modified (the test default)."
              (setf (nth 0 (ed:editor-lines s)) "changed")
              ;; Revert
              (let ((msg (ed:revert s)))
-               (assert-string-contains msg "Reverted")
+               (assert-string-contains msg "saved")
                (assert-lines s '("original" "content"))
                (assert-nil (ed:editor-modified s) "Modified should be cleared")
                (assert-nil (ed:editor-undo-stack s) "Undo stack should be cleared")
@@ -1667,6 +1668,141 @@ Moves cursor to command field before pressing Enter to avoid auto-insert."
              (let ((saved (ed:read-file-lines path)))
                (assert-equal '("ALPHA" "bravo" "echo" "foxtrot" "golf" "ALPHA" "bravo" "hotel")
                              saved "Saved file should reflect all edits"))))
+      (ignore-errors (delete-file path)))))
+
+;;; ============================================================
+;;; Enter key behavior tests
+;;; ============================================================
+
+(define-test enter-on-last-line-inserts ()
+  ;; Pressing Enter on the last line of the file should insert a new blank line
+  (let ((s (make-session "a" "b" "c")))
+    (setf (ed:editor-top-line s) 0)
+    (let ((lspf:*session* s))
+      ;; Cursor on last line "c" (virtual 3, screen row = data-start(2) + 3 = 5)
+      (setf (lspf:cursor-row) 5)
+      (ed::auto-insert-line s (ed:editor-layout s))
+      (assert-lines s '("a" "b" "c" "")
+                    "Should insert new line after last line"))))
+
+(define-test enter-on-last-line-no-insert-when-disabled ()
+  ;; With AUTOINSERT OFF, Enter on last line should not insert
+  (let ((s (make-session "a" "b" "c")))
+    (setf (ed:editor-top-line s) 0
+          (ed:editor-auto-insert-p s) nil)
+    (let ((lspf:*session* s))
+      (setf (lspf:cursor-row) 5)
+      (ed::auto-insert-line s (ed:editor-layout s))
+      (assert-lines s '("a" "b" "c")
+                    "Should not insert when auto-insert disabled"))))
+
+(define-test enter-on-middle-line-no-insert ()
+  ;; Pressing Enter on a middle line should NOT insert a new line
+  (let ((s (make-session "a" "b" "c" "d" "e")))
+    (setf (ed:editor-top-line s) 0)
+    (let ((lspf:*session* s))
+      ;; Cursor on line "b" (virtual 2, screen row = data-start(2) + 2 = 4)
+      (setf (lspf:cursor-row) 4)
+      (ed::auto-insert-line s (ed:editor-layout s))
+      (assert-lines s '("a" "b" "c" "d" "e")
+                    "Should not insert on middle line"))))
+
+(define-test enter-on-first-line-no-insert ()
+  ;; Pressing Enter on the first line should NOT insert
+  (let ((s (make-session "a" "b" "c")))
+    (setf (ed:editor-top-line s) 0)
+    (let ((lspf:*session* s))
+      ;; Cursor on line "a" (virtual 1, screen row = data-start(2) + 1 = 3)
+      (setf (lspf:cursor-row) 3)
+      (ed::auto-insert-line s (ed:editor-layout s))
+      (assert-lines s '("a" "b" "c")
+                    "Should not insert on first line"))))
+
+(define-test enter-on-middle-line-advances-cursor ()
+  ;; Enter on a middle line should move cursor to next line
+  (let ((s (make-session "a" "b" "c" "d")))
+    (setf (ed:editor-top-line s) 0)
+    (let ((lspf:*session* s))
+      (setf (lspf:cursor-row) 4) ; line "b" at screen row 4
+      (ed::auto-insert-line s (ed:editor-layout s))
+      (assert-true (ed::editor-next-cursor s)
+                   "Should set next cursor position")
+      ;; Next cursor row should be one row down (5 = line "c")
+      (assert-equal 5 (car (ed::editor-next-cursor s))
+                    "Cursor should advance to next row"))))
+
+;;; ============================================================
+;;; SET AUTOINSERT tests
+;;; ============================================================
+
+(define-test set-autoinsert-off ()
+  (let ((s (make-session "a")))
+    (assert-true (ed:editor-auto-insert-p s) "Default should be ON")
+    (let ((msg (ed:handle-primary-command s "SET AUTOINSERT OFF")))
+      (assert-string-contains msg "OFF")
+      (assert-nil (ed:editor-auto-insert-p s)))))
+
+(define-test set-autoinsert-on ()
+  (let ((s (make-session "a")))
+    (setf (ed:editor-auto-insert-p s) nil)
+    (let ((msg (ed:handle-primary-command s "SET AI ON")))
+      (assert-string-contains msg "ON")
+      (assert-true (ed:editor-auto-insert-p s)))))
+
+(define-test set-autoinsert-query ()
+  (let ((s (make-session "a")))
+    (let ((msg (ed:handle-primary-command s "SET AUTOINSERT")))
+      (assert-string-contains msg "ON"))))
+
+;;; ============================================================
+;;; Screen data after delete tests
+;;; ============================================================
+
+(define-test delete-clears-past-eof-screen-data ()
+  ;; After deleting a line, build-screen-data should produce non-empty
+  ;; (space-filled) data for rows past the EOF marker, so that the
+  ;; 3270 terminal clears old content in no-clear mode.
+  (let ((s (make-session "a" "b" "c" "d" "e")))
+    (setf (ed:editor-top-line s) 0)
+    ;; Delete line "e" (real index 4)
+    (ed:execute-prefix-commands s '((4 :d 1 4)))
+    ;; File is now (a b c d), 4 lines
+    (assert-lines s '("a" "b" "c" "d"))
+    ;; Build screen data
+    (multiple-value-bind (prefix-str data-str) (ed::build-screen-data s)
+      (let ((data-lines (split-sequence:split-sequence #\Newline data-str))
+            (prefix-lines (split-sequence:split-sequence #\Newline prefix-str)))
+        ;; Virtual lines: 0=TOP, 1=a, 2=b, 3=c, 4=d, 5=EOF, 6..20=past EOF
+        ;; Lines past EOF (index 6+) should NOT be empty strings
+        ;; They should be space-filled so CL3270 clears them in no-clear mode
+        (loop for i from 6 below (ed:page-size s)
+              for line = (nth i data-lines)
+              do (assert-true (plusp (length line))
+                              (format nil "Data line ~D past EOF should not be empty" i)))
+        (loop for i from 6 below (ed:page-size s)
+              for line = (nth i prefix-lines)
+              do (assert-true (plusp (length line))
+                              (format nil "Prefix line ~D past EOF should not be empty" i)))))))
+
+;;; ============================================================
+;;; Revert message tests
+;;; ============================================================
+
+(define-test revert-message-concise ()
+  ;; Revert message should not include the filename
+  (let ((path (merge-pathnames "lispf-revert-msg-test.txt" (uiop:temporary-directory))))
+    (unwind-protect
+         (progn
+           (ed:write-file-lines path '("original"))
+           (let ((s (make-session "original")))
+             (setf (ed:editor-filepath s) path)
+             (ed:save-undo-state s)
+             (setf (nth 0 (ed:editor-lines s)) "changed")
+             (let ((msg (ed:revert s)))
+               (assert-true (stringp msg))
+               ;; Should NOT contain the filename
+               (assert-nil (search "lispf-revert" msg)
+                           "Revert message should not include filename"))))
       (ignore-errors (delete-file path)))))
 
 ;;; ============================================================

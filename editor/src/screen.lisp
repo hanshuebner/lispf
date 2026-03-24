@@ -67,8 +67,9 @@ suitable for the framework's repeat field split mechanism."
                                            col-offset)
                           data-lines)))
                  (t
-                  (push "" prefix-lines)
-                  (push "" data-lines)))
+                  (push "      " prefix-lines)
+                  (push (make-string +data-width+ :initial-element #\Space)
+                        data-lines)))
                (incf data-slot)
                (incf virtual-idx)))
     (values (format nil "~{~A~^~%~}" (nreverse prefix-lines))
@@ -326,15 +327,19 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
         raw)))
 
 (defun auto-insert-line (session layout)
-  "Insert a blank line after the cursor position and set up cursor for next display."
+  "On Enter: insert blank line if cursor is on the last file line, else advance cursor."
   (let* ((data-row (cursor-data-row (lspf:cursor-row) layout))
          (top (editor-top-line session)))
     (unless (and (>= data-row 0) (< data-row (page-size session)))
       (return-from auto-insert-line))
     (let ((real (virtual-to-real session (+ top data-row))))
       (unless real (return-from auto-insert-line))
-      (save-undo-state session)
-      (insert-lines-after session real (list ""))
+      ;; Only insert when on last line and auto-insert is enabled
+      (when (and (editor-auto-insert-p session)
+                 (= real (1- (line-count session))))
+        (save-undo-state session)
+        (insert-lines-after session real (list "")))
+      ;; Advance cursor to the next line
       (let* ((scale-row (layout-scale-row layout))
              (new-row (1+ (lspf:cursor-row)))
              (new-row (if (and scale-row (= new-row scale-row))
@@ -344,10 +349,12 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
         (if (< (1+ data-row) (page-size session))
             (setf (editor-next-cursor session) (cons new-row data-col))
             (progn
-              (setf (editor-top-line session) (+ top (1- (page-size session))))
+              (incf (editor-top-line session))
               (clamp-top-line session)
               (setf (editor-next-cursor session)
-                    (cons (layout-data-start-row layout) data-col))))))))
+                    (cons (+ (layout-data-start-row layout)
+                             (1- (page-size session)))
+                          data-col))))))))
 (lspf:define-key-handler edit :pf1 ()
   (process-editor-changes lspf:*session* (lspf:session-context lspf:*session*))
   (let ((help-sym (lspf:navigate-to-help 'edit

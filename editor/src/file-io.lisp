@@ -52,5 +52,5 @@ Returns a message string."
           (setf (editor-lines session) (or lines (list ""))
                 (editor-undo-stack session) nil
                 (editor-pending-block session) nil)
-          (format nil "Reverted to ~A" (file-namestring path)))
+          "Last saved version loaded")
         "No file to revert to")))

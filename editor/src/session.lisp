@@ -124,7 +124,9 @@ Virtual 0 = Top-of-Data marker, 1..N = file lines, N+1 = Bottom-of-Data marker."
    (justify-range :initform nil :accessor editor-justify-range
                   :documentation "When set to (start . count), the JJ-marked range for JUSTIFY command.")
    (current-line :initform 0 :accessor editor-current-line
-                 :documentation "0-based real line index of the current (focus) line.")))
+                 :documentation "0-based real line index of the current (focus) line.")
+   (auto-insert :initform t :accessor editor-auto-insert-p
+                :documentation "When T, Enter on the last line inserts a new blank line.")))
 
 (defmethod page-size ((session editor-session))
   (page-size (editor-layout session)))

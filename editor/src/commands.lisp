@@ -155,6 +155,18 @@ Returns a message string or :stay."
                           (layout-data-end-row layout))))
               (setf (layout-scale-row layout) n)
               (format nil "Scale line set to row ~D" n)))))
+      ((:AUTOINSERT :AI)
+       (cond
+         ((null arg) (format nil "AUTOINSERT is ~A"
+                             (if (editor-auto-insert-p session) "ON" "OFF")))
+         ((string-equal arg "ON")
+          (setf (editor-auto-insert-p session) t)
+          "AUTOINSERT ON")
+         ((string-equal arg "OFF")
+          (setf (editor-auto-insert-p session) nil)
+          "AUTOINSERT OFF")
+         (t "SET AUTOINSERT ON/OFF")))
+
       (:TRUNC
        (let ((n (when arg (parse-integer arg :junk-allowed t))))
          (if (and n (> n 0))

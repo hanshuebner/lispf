@@ -141,9 +141,19 @@ Tests are automatically available to run-tests."
      (pushnew ',name (cdr entry))
      ',name))
 
-(defun run-tests (&rest names)
-  "Run the named tests, or all tests in the calling package in definition order."
-  (let* ((entry (package-tests))
+(defun run-tests (&rest args)
+  "Run the named tests, or all tests in definition order.
+When :PACKAGE is given (a package designator), run tests from that package
+instead of the calling package.  Example: (run-tests :package :my-tests)"
+  (let* ((package-pos (position :package args))
+         (pkg (if package-pos
+                  (find-package (nth (1+ package-pos) args))
+                  *package*))
+         (names (if package-pos
+                    (append (subseq args 0 package-pos)
+                            (subseq args (+ package-pos 2)))
+                    args))
+         (entry (package-tests pkg))
          (tests (car entry))
          (test-names (or names (reverse (cdr entry))))
          (pass 0)
