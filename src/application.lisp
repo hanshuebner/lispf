@@ -298,6 +298,18 @@ PREFIX is prepended with a dot for nested items (e.g. \"5.1\")."
 
 ;;; define-application macro
 
+(defun derive-application-name (symbol)
+  "Derive a clean application name from a defvar symbol.
+Strips earmuffs and common suffixes like -app."
+  (let ((s (string-downcase (string symbol))))
+    (when (and (> (length s) 2)
+               (char= (char s 0) #\*)
+               (char= (char s (1- (length s))) #\*))
+      (setf s (subseq s 1 (1- (length s)))))
+    (when (alexandria:ends-with-subseq "-app" s)
+      (setf s (subseq s 0 (- (length s) 4))))
+    s))
+
 (defmacro define-application (name &body options)
   "Define a 3270 application.
 
@@ -306,6 +318,7 @@ define-application is expanded). This means define-key-handler calls
 must be in the same package.
 
 Options:
+  :name string           - application name for logging (default: derived from variable)
   :entry-screen symbol   - first screen to display (required)
   :screen-directory path - directory containing .screen files (required)
   :session-class symbol  - custom session class (default: session)
@@ -319,7 +332,8 @@ Example:
   (let ((entry-screen (getf options :entry-screen))
         (screen-directory (getf options :screen-directory))
         (session-class (getf options :session-class ''session))
-        (title (getf options :title)))
+        (title (getf options :title))
+        (app-name (getf options :name)))
     (unless entry-screen
       (error "define-application requires :entry-screen"))
     (unless screen-directory
@@ -328,7 +342,7 @@ Example:
     (let ((entry-sym (intern (string-upcase (string entry-screen)) *package*)))
       `(defvar ,name
          (make-instance 'application
-                        :name ,(string-downcase (string name))
+                        :name ,(or app-name (derive-application-name name))
                         ,@(when title `(:title ,title))
                         :entry-screen ',entry-sym
                         :screen-directory ,screen-directory
