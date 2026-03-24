@@ -495,6 +495,7 @@
              (press-pf s 1)
              (assert-screen-contains s "Help Index")
              ;; Navigate to keys topic via command field
+             (move-cursor s 21 14)
              (type-text s "keys")
              (press-enter s)
              (assert-screen-contains s "Page 1 of 1  (keys)")
@@ -526,6 +527,7 @@
              (assert-screen-contains s "Help Index")
              (assert-screen-contains s "Choose a topic")
              ;; Navigate to keys topic via command field
+             (move-cursor s 21 14)
              (type-text s "keys")
              (press-enter s)
              (assert-screen-contains s "Function Keys")
