@@ -334,9 +334,8 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
       (return-from auto-insert-line))
     (let ((real (virtual-to-real session (+ top data-row))))
       (unless real (return-from auto-insert-line))
-      ;; Only insert when on last line and auto-insert is enabled
-      (when (and (editor-auto-insert-p session)
-                 (= real (1- (line-count session))))
+      ;; Insert a new line when auto-insert is enabled
+      (when (editor-auto-insert-p session)
         (save-undo-state session)
         (insert-lines-after session real (list "")))
       ;; Advance cursor to the next line

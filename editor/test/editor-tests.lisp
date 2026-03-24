@@ -1696,35 +1696,38 @@ Moves cursor to command field before pressing Enter to avoid auto-insert."
       (assert-lines s '("a" "b" "c")
                     "Should not insert when auto-insert disabled"))))
 
-(define-test enter-on-middle-line-no-insert ()
-  ;; Pressing Enter on a middle line should NOT insert a new line
+(define-test enter-on-middle-line-inserts-when-enabled ()
+  ;; With AUTOINSERT ON, Enter on a middle line should insert a new line
   (let ((s (make-session "a" "b" "c" "d" "e")))
     (setf (ed:editor-top-line s) 0)
     (let ((lspf:*session* s))
       ;; Cursor on line "b" (virtual 2, screen row = data-start(2) + 2 = 4)
       (setf (lspf:cursor-row) 4)
       (ed::auto-insert-line s (ed:editor-layout s))
-      (assert-lines s '("a" "b" "c" "d" "e")
-                    "Should not insert on middle line"))))
+      (assert-lines s '("a" "b" "" "c" "d" "e")
+                    "Should insert on middle line when autoinsert on"))))
 
-(define-test enter-on-first-line-no-insert ()
-  ;; Pressing Enter on the first line should NOT insert
-  (let ((s (make-session "a" "b" "c")))
-    (setf (ed:editor-top-line s) 0)
+(define-test enter-on-middle-line-no-insert-when-disabled ()
+  ;; With AUTOINSERT OFF, Enter on a middle line should NOT insert
+  (let ((s (make-session "a" "b" "c" "d" "e")))
+    (setf (ed:editor-top-line s) 0
+          (ed:editor-auto-insert-p s) nil)
     (let ((lspf:*session* s))
-      ;; Cursor on line "a" (virtual 1, screen row = data-start(2) + 1 = 3)
-      (setf (lspf:cursor-row) 3)
+      (setf (lspf:cursor-row) 4)
       (ed::auto-insert-line s (ed:editor-layout s))
-      (assert-lines s '("a" "b" "c")
-                    "Should not insert on first line"))))
+      (assert-lines s '("a" "b" "c" "d" "e")
+                    "Should not insert on middle line when autoinsert off"))))
 
-(define-test enter-on-middle-line-advances-cursor ()
-  ;; Enter on a middle line should move cursor to next line
+(define-test enter-advances-cursor-when-disabled ()
+  ;; With AUTOINSERT OFF, Enter on a middle line should just advance cursor
   (let ((s (make-session "a" "b" "c" "d")))
-    (setf (ed:editor-top-line s) 0)
+    (setf (ed:editor-top-line s) 0
+          (ed:editor-auto-insert-p s) nil)
     (let ((lspf:*session* s))
       (setf (lspf:cursor-row) 4) ; line "b" at screen row 4
       (ed::auto-insert-line s (ed:editor-layout s))
+      (assert-lines s '("a" "b" "c" "d")
+                    "Should not insert when autoinsert off")
       (assert-true (ed::editor-next-cursor s)
                    "Should set next cursor position")
       ;; Next cursor row should be one row down (5 = line "c")
