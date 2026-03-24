@@ -172,11 +172,21 @@ Returns a string with inline attribute codes."
 
 ;;; Key handlers
 
-(define-key-handler help-viewer :enter ()
+(defmethod process-screen-command ((screen-name (eql 'help-viewer)) (command string))
+  "Handle topic navigation from the command field."
   (let* ((state (ensure-help-viewer-state))
-         (command (string-trim '(#\Space)
-                               (or (gethash "command" (session-context *session*)) ""))))
-    ;; First check for link at cursor
+         (topic (string-downcase (string-trim '(#\Space) command))))
+    (when (plusp (length topic))
+      (if (load-help-topic state topic)
+          :stay
+          (progn
+            (setf (gethash "errormsg" (session-context *session*))
+                  (format nil "~A: help topic not found" topic))
+            :stay)))))
+
+(define-key-handler help-viewer :enter ()
+  (let ((state (ensure-help-viewer-state)))
+    ;; Check for link at cursor
     (when-let (target (find-link-at-cursor state))
       (if (load-help-topic state target)
           (return-from handle-key :stay)
@@ -184,13 +194,6 @@ Returns a string with inline attribute codes."
             (setf (gethash "errormsg" (session-context *session*))
                   (format nil "~A: help topic not found" target))
             (return-from handle-key :stay))))
-    ;; Then check command field
-    (when (plusp (length command))
-      (let ((topic (string-downcase command)))
-        (if (load-help-topic state topic)
-            (return-from handle-key :stay)
-            (setf (gethash "errormsg" (session-context *session*))
-                  (format nil "~A: help topic not found" topic)))))
     :stay))
 
 (define-key-handler help-viewer :pf1 ()
@@ -211,6 +214,8 @@ Returns a string with inline attribute codes."
           :stay)
         :back)))
 
+(define-key-handler help-viewer :pf4 ()
+  :back)
 (define-key-handler help-viewer :pf7 ()
   (let* ((state (ensure-help-viewer-state))
          (offset (hv-scroll-offset state))

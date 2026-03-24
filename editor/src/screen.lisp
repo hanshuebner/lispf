@@ -369,9 +369,7 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
                           data-col))))))))
 (lispf:define-key-handler edit :pf1 ()
   (process-editor-changes lispf:*session* (lispf:session-context lispf:*session*))
-  (let ((help-sym (lispf:navigate-to-help 'edit
-                    (lispf::application-package lispf:*application*))))
-    (or help-sym :stay)))
+  (lispf:show-help "index"))
 
 ;;; Enter key - process prefix commands, edits, and command field
 (lispf:define-key-handler edit :enter ()

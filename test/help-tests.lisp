@@ -491,25 +491,17 @@
              (type-text s "/tmp/lispf-e2e-helpnav.txt")
              (press-enter s)
              (assert-screen-contains s "Size=")
-             ;; Show help via command-line topic navigation
-             ;; Type help topic in command field
-             (move-cursor s 23 6)
-             (type-text s "HELP")
-             (press-enter s)
-             ;; This will try the old help system; the editor HELP command
-             ;; tries help-edit screen. Let's use PF1 instead which goes through
-             ;; navigate-to-help which prefers .help files.
-             ;; Actually, the editor's screen dir has edit.help, so PF1 works.
+             ;; PF1 opens help viewer at the index
              (press-pf s 1)
-             (assert-screen-contains s "LISPF Editor Help")
+             (assert-screen-contains s "Help Index")
              ;; Navigate to keys topic via command field
              (type-text s "keys")
              (press-enter s)
              (assert-screen-contains s "Function Keys")
-             ;; PF3 back to edit help
+             ;; PF3 back to index
              (press-pf s 3)
-             (assert-screen-contains s "LISPF Editor Help")
-             ;; PF3 back to editor
+             (assert-screen-contains s "Help Index")
+             ;; PF3 back to editor (no more history)
              (press-pf s 3)
              (assert-screen-contains s "Size=")
              ;; Clean up
@@ -529,17 +521,22 @@
              (type-text s (namestring path))
              (press-enter s)
              (assert-screen-contains s "Size=")
-             ;; Open help
+             ;; PF1 opens help directly at the index
              (press-pf s 1)
-             (assert-screen-contains s "LISPF Editor Help")
-             ;; PF1 from help viewer should go to index
+             (assert-screen-contains s "Help Index")
+             (assert-screen-contains s "Choose a topic")
+             ;; Navigate to keys topic via command field
+             (type-text s "keys")
+             (press-enter s)
+             (assert-screen-contains s "Function Keys")
+             ;; PF1 from within help viewer should go back to index
              (press-pf-wait-screen s 1 "index")
              (assert-screen-contains s "Choose a topic")
-             ;; PF3 back to edit help
+             ;; PF3 back to keys topic (history)
              (press-pf s 3)
-             (assert-screen-contains s "LISPF Editor Help")
-             ;; PF3 back to editor (poll for screen transition)
-             (press-pf-wait-screen s 3 "Size=")
+             (assert-screen-contains s "Function Keys")
+             ;; PF4 returns directly to editor (skipping history)
+             (press-pf-wait-screen s 4 "Size=")
              (move-cursor s 23 6)
              (type-text s "CANCEL")
              (press-enter s)))

@@ -65,6 +65,7 @@
            #:session-properties
            #:session-property
            #:session-tls-p
+           #:session-connection-id
            #:*application*
            #:*session*
            #:*connection*
@@ -97,6 +98,12 @@
            #:*attribute-intro-char*
            ;; Customization
            #:unknown-key-message
+           ;; Logging
+           #:log-message
+           #:*log-level*
+           #:*log-consumers*
+           #:add-log-consumer
+           #:remove-log-consumer
            ;; Idle timeout
            #:session-idle-timeout
            ;; Access control
@@ -121,10 +128,7 @@
            ;; Title utilities
            #:now-time-hhmm
            ;; Help system
-           #:help-screen-name
-           #:find-help-screen
            #:navigate-to-help
-           #:help-screen-p
            ;; Help viewer
            #:help-page
            #:help-page-title

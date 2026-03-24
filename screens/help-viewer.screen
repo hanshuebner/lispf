@@ -11,6 +11,7 @@
  :dynamic-areas ((:name content :from (1 0) :to (19 79)))
  :keys ((:pf1 "Index")
         (:pf3 "Back")
+        (:pf4 "Return")
         (:pf7 "Up" :hidden t)
         (:pf8 "Down" :hidden t)
         (:enter "")))

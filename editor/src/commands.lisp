@@ -333,7 +333,7 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
          (handle-set-command session parts))
 
         (:HELP
-         (let ((topic (string-downcase (or (second parts) "edit"))))
+         (let ((topic (string-downcase (or (second parts) "index"))))
            (if (lispf:find-help-file topic)
                (lispf:show-help topic)
                (format nil "~A: help topic not found" (string-upcase topic)))))
