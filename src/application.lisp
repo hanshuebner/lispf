@@ -69,7 +69,9 @@ Keys are screen symbols, values are plists of (:offset N :data-count N :cursor-r
    (cursor-row :initform 0 :accessor session-cursor-row)
    (cursor-col :initform 0 :accessor session-cursor-col)
    (tls-p :initform nil :accessor session-tls-p
-          :documentation "True when this session's connection is TLS-encrypted.")))
+          :documentation "True when this session's connection is TLS-encrypted.")
+   (connection-id :initform nil :accessor session-connection-id
+                  :documentation "Unique identifier for this connection.")))
 
 (defun session-property (session key &optional default)
   "Get a session property by key."
@@ -468,63 +470,63 @@ When TLS-IMMEDIATE-P is true, perform TLS handshake immediately (dedicated TLS p
 When TLS-CONFIG is provided without TLS-IMMEDIATE-P, STARTTLS is offered during
 telnet negotiation."
   (declare (type usocket:stream-usocket socket))
-  (handler-case
-      (progn
-        (when tls-immediate-p
-          (cl3270:wrap-socket-with-tls socket tls-config))
-        (multiple-value-bind (devinfo err starttls-established)
-            (cl3270:negotiate-telnet socket
-                                     :tls-config (unless tls-immediate-p tls-config))
-          (when err
-            (format *error-output* "~&;;; ~A: negotiation error: ~A~%"
-                    (application-name application) err)
-            (return-from handle-connection))
-          (let* ((addr (ignore-errors (usocket:get-peer-address socket)))
-                 (peer (ignore-errors
-                         (format nil "~{~D~^.~}:~D"
-                                 (coerce addr 'list)
-                                 (usocket:get-peer-port socket))))
-                 (term (cl3270::term-type devinfo))
-                 (model (when (and (>= (length term) 10)
-                                   (char= (char term 8) #\-))
-                          (char term 9))))
-            (multiple-value-bind (pri-rows pri-cols)
-                (case model
-                  (#\2 (values 24 80))
-                  (#\3 (values 32 80))
-                  (#\4 (values 43 80))
-                  (#\5 (values 27 132))
-                  (otherwise (values 24 80)))
-              (format *error-output*
-                      "~&;;; ~A: connection from=~A type=~A size=~Dx~D~@[ alt=~Dx~D~]~@[ codepage=~A~] tls=~A~%"
-                      (application-name application)
-                      (or peer "unknown")
-                      term
-                      pri-rows pri-cols
-                      (when (or (/= (cl3270::rows devinfo) pri-rows)
-                                (/= (cl3270::cols devinfo) pri-cols))
-                        (cl3270::rows devinfo))
-                      (when (or (/= (cl3270::rows devinfo) pri-rows)
-                                (/= (cl3270::cols devinfo) pri-cols))
-                        (cl3270::cols devinfo))
-                      (when (cl3270::codepage devinfo)
-                        (cl3270::codepage-name (cl3270::codepage devinfo)))
-                      (cond (tls-immediate-p "yes")
-                            (starttls-established "starttls")
-                            (t "no")))))
-          (unwind-protect
-               (run-application application socket devinfo
-                                :tls-p (or tls-immediate-p starttls-established))
-            (cl3270:unnegotiate-telnet socket 1))))
-    ((or end-of-file
-         cl3270::telnet-error
-         usocket:connection-aborted-error
-         stream-error) ()
-      (format *error-output* "~&;;; ~A: client disconnected~%"
-              (application-name application)))
-    (error (e)
-      (format *error-output* "~&;;; ~A: connection error: ~A~%"
-              (application-name application) e))))
+  (let* ((conn-id (next-connection-id))
+         (*application* application)
+         (*connection-id* conn-id))
+    (handler-case
+        (progn
+          (when tls-immediate-p
+            (cl3270:wrap-socket-with-tls socket tls-config))
+          (multiple-value-bind (devinfo err starttls-established)
+              (cl3270:negotiate-telnet socket
+                                       :tls-config (unless tls-immediate-p tls-config))
+            (when err
+              (log-message :warn "negotiation error: ~A" err)
+              (return-from handle-connection))
+            (let* ((addr (ignore-errors (usocket:get-peer-address socket)))
+                   (peer (ignore-errors
+                           (format nil "~{~D~^.~}:~D"
+                                   (coerce addr 'list)
+                                   (usocket:get-peer-port socket))))
+                   (term (cl3270::term-type devinfo))
+                   (model (when (and (>= (length term) 10)
+                                     (char= (char term 8) #\-))
+                            (char term 9))))
+              (multiple-value-bind (pri-rows pri-cols)
+                  (case model
+                    (#\2 (values 24 80))
+                    (#\3 (values 32 80))
+                    (#\4 (values 43 80))
+                    (#\5 (values 27 132))
+                    (otherwise (values 24 80)))
+                (log-message :info "connect from=~A type=~A size=~Dx~D~@[ alt=~Dx~D~]~@[ codepage=~A~] tls=~A"
+                             (or peer "unknown")
+                             term
+                             pri-rows pri-cols
+                             (when (or (/= (cl3270::rows devinfo) pri-rows)
+                                       (/= (cl3270::cols devinfo) pri-cols))
+                               (cl3270::rows devinfo))
+                             (when (or (/= (cl3270::rows devinfo) pri-rows)
+                                       (/= (cl3270::cols devinfo) pri-cols))
+                               (cl3270::cols devinfo))
+                             (when (cl3270::codepage devinfo)
+                               (cl3270::codepage-name (cl3270::codepage devinfo)))
+                             (cond (tls-immediate-p "yes")
+                                   (starttls-established "starttls")
+                                   (t "no")))))
+            (unwind-protect
+                 (run-application application socket devinfo
+                                  :tls-p (or tls-immediate-p starttls-established)
+                                  :connection-id conn-id)
+              (cl3270:unnegotiate-telnet socket 1))))
+      ((or end-of-file
+           type-error
+           cl3270::telnet-error
+           usocket:connection-aborted-error
+           stream-error) ()
+        (log-message :info "client disconnected"))
+      (error (e)
+        (log-message :error "connection error: ~A" e)))))
 
 ;;; Default command processing (menu entries + screen aliases)
 
@@ -1026,28 +1028,26 @@ than the returned value, the connection is closed.")
     (when (and timeout
                (> (- (get-universal-time) (session-last-activity *session*))
                   timeout))
-      (format *error-output* "~&;;; ~A: idle timeout (~Ds) on screen ~A, closing connection~%"
-              (application-name *application*) timeout
-              (session-current-screen *session*))
+      (log-message :info "idle timeout (~Ds) on screen ~A, closing connection"
+                   timeout (session-current-screen *session*))
       (setf (update-context-running ctx) nil)
       (ignore-errors (usocket:socket-close *connection*))
       t)))
 
 (defun update-thread-fn (ctx)
   "Background thread: pushes title and dynamic area overlays periodically.
-First update fires immediately, subsequent updates wait up to 1 second."
+Updates wait up to 1 second between iterations.  The initial dynamic area
+content is already merged into the main screen by merge-initial-dynamic-areas,
+so no immediate first update is needed."
   (handler-case
       (progn
-        ;; Immediate first update for dynamic areas
-        (when (update-context-running ctx)
-          (send-dynamic-area-overlays ctx))
         (loop while (wait-for-update-signal ctx)
               when (check-idle-timeout ctx) do (return)
               when (title-needs-update-p ctx)
                 do (send-title-overlay ctx)
               do (send-dynamic-area-overlays ctx)))
     (error (e)
-      (format *error-output* "~&;;; Update thread error: ~A~%" e))))
+      (log-message :error "update thread error: ~A" e))))
 
 (defun start-updates (ctx)
   "Start the background update thread."
@@ -1594,7 +1594,7 @@ Returns the 3270 response."
                 (when (eq transition-result :exit)
                   (return)))))))))))))
 
-(defun run-application (application conn devinfo &key tls-p)
+(defun run-application (application conn devinfo &key tls-p connection-id)
   "Run an application's main loop for a single connection.
 Binds dynamic variables, creates a session, and loops through screens.
 TLS-P indicates the connection is TLS-encrypted."
@@ -1608,12 +1608,14 @@ TLS-P indicates the connection is TLS-encrypted."
     (bt:with-lock-held ((application-sessions-lock application))
       (push *session* (application-sessions application)))
     (setf (session-active-application *session*) application
-          (session-tls-p *session*) tls-p)
+          (session-tls-p *session*) tls-p
+          (session-connection-id *session*) connection-id)
     (unwind-protect
          (progn
            (setf (session-current-screen *session*)
                  (application-entry-screen application))
            (run-screen-loop app-package))
+      (log-message :info "session ended")
       (bt:with-lock-held ((application-sessions-lock application))
         (setf (application-sessions application)
               (remove *session* (application-sessions application)))))))
