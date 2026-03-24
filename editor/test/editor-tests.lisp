@@ -1808,6 +1808,24 @@ Moves cursor to command field before pressing Enter to avoid auto-insert."
       (ignore-errors (delete-file path)))))
 
 ;;; ============================================================
+;;; Message field padding tests
+;;; ============================================================
+
+(define-test pad-to-field-width ()
+  ;; ed::pad-to-field-width should pad short strings to the given width
+  (assert-equal 79 (length (ed::pad-to-field-width "Short" 79))
+                "Short string should be padded to 79")
+  (assert-equal "Short" (string-right-trim '(#\Space) (ed::pad-to-field-width "Short" 79))
+                "Padded string content should be preserved")
+  ;; A string already at or beyond width should not be truncated
+  (let ((long (make-string 80 :initial-element #\X)))
+    (assert-equal 80 (length (ed::pad-to-field-width long 79))
+                  "Long string should not be truncated"))
+  ;; Empty string should become all spaces
+  (assert-equal 79 (length (ed::pad-to-field-width "" 79))
+                "Empty string should be padded to 79"))
+
+;;; ============================================================
 ;;; Runner
 ;;; ============================================================
 

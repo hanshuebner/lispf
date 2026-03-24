@@ -6,6 +6,15 @@
 
 ;;; ============================================================
 
+(defun pad-to-field-width (string width)
+  "Pad STRING with spaces to at least WIDTH characters.
+Ensures the full field is overwritten in 3270 no-clear mode."
+  (if (>= (length string) width)
+      string
+      (concatenate 'string string
+                   (make-string (- width (length string))
+                                :initial-element #\Space))))
+
 (defun build-screen-data (session)
   "Build prefix and data strings for display.
 Returns (values prefix-string data-string) as newline-joined strings
@@ -206,28 +215,32 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
     (multiple-value-bind (prefix-str data-str) (build-screen-data session)
       (setf prefix prefix-str)
       (setf data data-str))
-    ;; Status line (XEDIT style)
+    ;; Status line (XEDIT style) - pad to field width for no-clear mode
     (setf ed-status
-          (format nil " ~A~20TCol ~5,'0D ~5,'0D  Size=~D  Line=~D  Alt=~D"
-                  (or (editor-display-name session)
-                      (editor-filename session)
-                      "(new)")
-                  col-start col-end
-                  (line-count session)
-                  (max 1 (1+ (max 0 (1- top))))
-                  (editor-alteration-count session)))
-    ;; Message line: show pending info or error
+          (pad-to-field-width
+           (format nil " ~A~20TCol ~5,'0D ~5,'0D  Size=~D  Line=~D  Alt=~D"
+                   (or (editor-display-name session)
+                       (editor-filename session)
+                       "(new)")
+                   col-start col-end
+                   (line-count session)
+                   (max 1 (1+ (max 0 (1- top))))
+                   (editor-alteration-count session))
+           79))
+    ;; Message line: show pending info or error - pad to field width
     (setf ed-message
-          (or (gethash "errormsg" (lispf:session-context lispf:*session*))
-              (if pending
-                  (let* ((cmd-name (string-upcase (symbol-name (first pending))))
-                         (start-line (second pending))
-                         (start-visible (<= top (1+ start-line)
-                                            (+ top (page-size session) -1))))
-                    (if start-visible
-                        (format nil "~A pending" cmd-name)
-                        (format nil "~A pending from line ~D" cmd-name (1+ start-line))))
-                  "")))
+          (pad-to-field-width
+           (or (gethash "errormsg" (lispf:session-context lispf:*session*))
+               (if pending
+                   (let* ((cmd-name (string-upcase (symbol-name (first pending))))
+                          (start-line (second pending))
+                          (start-visible (<= top (1+ start-line)
+                                             (+ top (page-size session) -1))))
+                     (if start-visible
+                         (format nil "~A pending" cmd-name)
+                         (format nil "~A pending from line ~D" cmd-name (1+ start-line))))
+                   ""))
+           79))
     ;; Command prompt (spaces instead of "" to clear on no-clear redisplay)
     (setf ed-cmdlabel (layout-command-prompt layout)
           ed-command (make-string 73 :initial-element #\Space))
