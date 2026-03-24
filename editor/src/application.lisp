@@ -9,6 +9,7 @@
 ;;; ============================================================
 
 (lispf:define-application *editor-app*
+  :name "editor"
   :title "EDIT"
   :entry-screen open
   :screen-directory (merge-pathnames

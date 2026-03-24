@@ -298,18 +298,6 @@ PREFIX is prepended with a dot for nested items (e.g. \"5.1\")."
 
 ;;; define-application macro
 
-(defun derive-application-name (symbol)
-  "Derive a clean application name from a defvar symbol.
-Strips earmuffs and common suffixes like -app."
-  (let ((s (string-downcase (string symbol))))
-    (when (and (> (length s) 2)
-               (char= (char s 0) #\*)
-               (char= (char s (1- (length s))) #\*))
-      (setf s (subseq s 1 (1- (length s)))))
-    (when (alexandria:ends-with-subseq "-app" s)
-      (setf s (subseq s 0 (- (length s) 4))))
-    s))
-
 (defmacro define-application (name &body options)
   "Define a 3270 application.
 
@@ -342,7 +330,7 @@ Example:
     (let ((entry-sym (intern (string-upcase (string entry-screen)) *package*)))
       `(defvar ,name
          (make-instance 'application
-                        :name ,(or app-name (derive-application-name name))
+                        :name ,(or app-name (string-downcase (string name)))
                         ,@(when title `(:title ,title))
                         :entry-screen ',entry-sym
                         :screen-directory ,screen-directory

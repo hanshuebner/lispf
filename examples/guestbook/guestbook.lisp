@@ -47,6 +47,7 @@ with :name, :message, and :date.")
 ;;; Application definition
 
 (lispf:define-application *guestbook-app*
+  :name "guestbook"
   :entry-screen welcome
   :screen-directory (merge-pathnames
                      #P"examples/guestbook/screens/"

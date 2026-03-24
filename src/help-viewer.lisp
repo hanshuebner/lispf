@@ -122,6 +122,7 @@ Returns a string with inline attribute codes."
 ;;; Application definition
 
 (define-application *help-viewer-app*
+  :name "help"
   :title "Help"
   :entry-screen help-viewer
   :screen-directory (merge-pathnames
