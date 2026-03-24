@@ -1399,7 +1399,6 @@ Returns the 3270 response."
                             pf-keys exit-keys "errormsg"
                             cursor-row cursor-col *connection*
                             :screen-sym (unless full-control dispatch-sym)
-                            :devinfo *device-info*
                             :codepage (when *device-info*
                                         (cl3270::codepage *device-info*))
                             :no-clear no-clear)
