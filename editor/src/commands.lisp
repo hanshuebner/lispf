@@ -185,8 +185,8 @@ Returns a message string or :stay."
   "Map the current cursor position to a display column in the file.
 Returns (values real-line-index display-col) or NIL if cursor is not on a data line."
   (let* ((layout (editor-layout session))
-         (cursor-row (lspf:cursor-row))
-         (cursor-col (lspf:cursor-col))
+         (cursor-row (lispf:cursor-row))
+         (cursor-col (lispf:cursor-col))
          (data-row (- cursor-row (layout-data-start-row layout)))
          (scale-row (layout-scale-row layout)))
     ;; Account for scale line
@@ -215,7 +215,7 @@ LINK (no args) - show link target if cursor is on a link."
            (target (second parts)))
       (if target
           ;; LINK target: wrap word at cursor as link
-          (let ((new-line (lspf:wrap-word-as-link raw-line display-col
+          (let ((new-line (lispf:wrap-word-as-link raw-line display-col
                                                    (string-downcase target))))
             (unless new-line
               (return-from handle-link-command
@@ -224,10 +224,10 @@ LINK (no args) - show link target if cursor is on a link."
             (setf (nth real (editor-lines session)) new-line)
             (format nil "Linked to ~A" (string-downcase target)))
           ;; LINK (no args): show link info
-          (let* ((segments (lspf:parse-help-segments raw-line))
-                 (seg (lspf:find-link-segment-at-col segments display-col)))
+          (let* ((segments (lispf:parse-help-segments raw-line))
+                 (seg (lispf:find-link-segment-at-col segments display-col)))
             (if seg
-                (format nil "Link target: ~A" (lspf:help-edit-segment-target seg))
+                (format nil "Link target: ~A" (lispf:help-edit-segment-target seg))
                 "No link at cursor position"))))))
 
 (defun handle-unlink-command (session)
@@ -237,7 +237,7 @@ LINK (no args) - show link target if cursor is on a link."
   (multiple-value-bind (real display-col) (cursor-to-display-col session)
     (unless real
       (return-from handle-unlink-command "Position cursor on a data line"))
-    (let ((new-line (lspf:remove-link-at-col (line-at session real) display-col)))
+    (let ((new-line (lispf:remove-link-at-col (line-at session real) display-col)))
       (unless new-line
         (return-from handle-unlink-command "No link at cursor position"))
       (save-undo-state session)
@@ -333,14 +333,10 @@ Returns :stay, :back, or an error message string. NIL means unrecognized."
          (handle-set-command session parts))
 
         (:HELP
-         (let* ((topic (second parts))
-                (help-name (if topic
-                               (format nil "help-~A" (string-downcase topic))
-                               "help-edit"))
-                (app-package (lspf::application-package lspf:*application*)))
-           (if (lspf::find-screen-file help-name)
-               (lspf::intern-screen-name help-name app-package)
-               (format nil "~A: help topic not found" (or topic "HELP")))))
+         (let ((topic (string-downcase (or (second parts) "edit"))))
+           (if (lispf:find-help-file topic)
+               (lispf:show-help topic)
+               (format nil "~A: help topic not found" (string-upcase topic)))))
 
         (:LINK
          (handle-link-command session parts))

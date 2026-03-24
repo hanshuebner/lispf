@@ -12,8 +12,7 @@
 
 (defpackage #:lispf-editor-tests
   (:use #:cl #:lispf-test)
-  (:local-nicknames (#:ed #:lispf-editor)
-                    (#:lspf #:lispf))
+  (:local-nicknames (#:ed #:lispf-editor))
   (:export #:run-all))
 
 (in-package #:lispf-editor-tests)
@@ -1678,9 +1677,9 @@ Moves cursor to command field before pressing Enter to avoid auto-insert."
   ;; Pressing Enter on the last line of the file should insert a new blank line
   (let ((s (make-session "a" "b" "c")))
     (setf (ed:editor-top-line s) 0)
-    (let ((lspf:*session* s))
+    (let ((lispf:*session* s))
       ;; Cursor on last line "c" (virtual 3, screen row = data-start(2) + 3 = 5)
-      (setf (lspf:cursor-row) 5)
+      (setf (lispf:cursor-row) 5)
       (ed::auto-insert-line s (ed:editor-layout s))
       (assert-lines s '("a" "b" "c" "")
                     "Should insert new line after last line"))))
@@ -1690,8 +1689,8 @@ Moves cursor to command field before pressing Enter to avoid auto-insert."
   (let ((s (make-session "a" "b" "c")))
     (setf (ed:editor-top-line s) 0
           (ed:editor-auto-insert-p s) nil)
-    (let ((lspf:*session* s))
-      (setf (lspf:cursor-row) 5)
+    (let ((lispf:*session* s))
+      (setf (lispf:cursor-row) 5)
       (ed::auto-insert-line s (ed:editor-layout s))
       (assert-lines s '("a" "b" "c")
                     "Should not insert when auto-insert disabled"))))
@@ -1700,9 +1699,9 @@ Moves cursor to command field before pressing Enter to avoid auto-insert."
   ;; With AUTOINSERT ON, Enter on a middle line should insert a new line
   (let ((s (make-session "a" "b" "c" "d" "e")))
     (setf (ed:editor-top-line s) 0)
-    (let ((lspf:*session* s))
+    (let ((lispf:*session* s))
       ;; Cursor on line "b" (virtual 2, screen row = data-start(2) + 2 = 4)
-      (setf (lspf:cursor-row) 4)
+      (setf (lispf:cursor-row) 4)
       (ed::auto-insert-line s (ed:editor-layout s))
       (assert-lines s '("a" "b" "" "c" "d" "e")
                     "Should insert on middle line when autoinsert on"))))
@@ -1712,8 +1711,8 @@ Moves cursor to command field before pressing Enter to avoid auto-insert."
   (let ((s (make-session "a" "b" "c" "d" "e")))
     (setf (ed:editor-top-line s) 0
           (ed:editor-auto-insert-p s) nil)
-    (let ((lspf:*session* s))
-      (setf (lspf:cursor-row) 4)
+    (let ((lispf:*session* s))
+      (setf (lispf:cursor-row) 4)
       (ed::auto-insert-line s (ed:editor-layout s))
       (assert-lines s '("a" "b" "c" "d" "e")
                     "Should not insert on middle line when autoinsert off"))))
@@ -1723,8 +1722,8 @@ Moves cursor to command field before pressing Enter to avoid auto-insert."
   (let ((s (make-session "a" "b" "c" "d")))
     (setf (ed:editor-top-line s) 0
           (ed:editor-auto-insert-p s) nil)
-    (let ((lspf:*session* s))
-      (setf (lspf:cursor-row) 4) ; line "b" at screen row 4
+    (let ((lispf:*session* s))
+      (setf (lispf:cursor-row) 4) ; line "b" at screen row 4
       (ed::auto-insert-line s (ed:editor-layout s))
       (assert-lines s '("a" "b" "c" "d")
                     "Should not insert when autoinsert off")

@@ -93,7 +93,7 @@
 
 ;;; Editor session class
 
-(defclass editor-session (lspf:session)
+(defclass editor-session (lispf:session)
   ((layout :initform (make-default-layout) :accessor editor-layout
            :documentation "Screen layout configuration.")
    (lines :initform (list "") :accessor editor-lines

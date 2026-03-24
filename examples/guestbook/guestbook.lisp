@@ -12,8 +12,7 @@
 
 (defpackage #:lispf-guestbook
   (:use #:cl)
-  (:local-nicknames (#:bt #:bordeaux-threads)
-                    (#:lspf #:lispf))
+  (:local-nicknames (#:bt #:bordeaux-threads))
   (:export #:start))
 
 (in-package #:lispf-guestbook)
@@ -28,7 +27,7 @@ with :name, :message, and :date.")
 
 ;;; Session class
 
-(defclass guestbook-session (lspf:session)
+(defclass guestbook-session (lispf:session)
   ((browse-index :initform 0 :accessor browse-index)
    (login-time :initform (get-universal-time) :reader session-login-time)
    (entries-written :initform 0 :accessor session-entries-written)))
@@ -47,7 +46,7 @@ with :name, :message, and :date.")
 
 ;;; Application definition
 
-(lspf:define-application *guestbook-app*
+(lispf:define-application *guestbook-app*
   :entry-screen welcome
   :screen-directory (merge-pathnames
                      #P"examples/guestbook/screens/"
@@ -59,12 +58,12 @@ with :name, :message, and :date.")
 (defun entry-count-text ()
   (format nil "~D entr~:@P" (length *guestbook-entries*)))
 
-(lspf:define-screen-update welcome ()
-  (lspf:set-indicator "entries" (entry-count-text)))
+(lispf:define-screen-update welcome ()
+  (lispf:set-indicator "entries" (entry-count-text)))
 
 ;;; Entry list screen
 
-(lspf:define-list-data-getter entry-list (start end)
+(lispf:define-list-data-getter entry-list (start end)
   (let* ((entries *guestbook-entries*)
          (total (length entries))
          (page (subseq entries start (min end total))))
@@ -75,20 +74,20 @@ with :name, :message, and :date.")
                                                      (getf e :message))))
             total)))
 
-(lspf:define-screen-update entry-list ()
-  (lspf:set-indicator "entries" (entry-count-text))
-  (lspf:clear-indicator "new-data"))
+(lispf:define-screen-update entry-list ()
+  (lispf:set-indicator "entries" (entry-count-text))
+  (lispf:clear-indicator "new-data"))
 
-(lspf:define-key-handler entry-list :enter ()
-  (let ((index (lspf:selected-list-index)))
+(lispf:define-key-handler entry-list :enter ()
+  (let ((index (lispf:selected-list-index)))
     (when index
-      (setf (browse-index lspf:*session*) index)
+      (setf (browse-index lispf:*session*) index)
       'browse)))
 
 ;;; Browse screen
 
-(lspf:define-screen-update browse (author date message entry-counter)
-  (let ((index (browse-index lspf:*session*))
+(lispf:define-screen-update browse (author date message entry-counter)
+  (let ((index (browse-index lispf:*session*))
         (entry-count (length *guestbook-entries*)))
     (let ((entry (nth index *guestbook-entries*)))
       (setf author (getf entry :name)
@@ -96,48 +95,48 @@ with :name, :message, and :date.")
             message (getf entry :message)
             entry-counter (format nil "Entry ~D of ~D" (1+ index) entry-count)))
     (when (> index 0)
-      (lspf:show-key :pf7 "Prev"))
+      (lispf:show-key :pf7 "Prev"))
     (when (< index (1- entry-count))
-      (lspf:show-key :pf8 "Next"))))
+      (lispf:show-key :pf8 "Next"))))
 
-(lspf:define-key-handler browse :pf7 ()
-  (when (> (browse-index lspf:*session*) 0)
-    (decf (browse-index lspf:*session*)))
+(lispf:define-key-handler browse :pf7 ()
+  (when (> (browse-index lispf:*session*) 0)
+    (decf (browse-index lispf:*session*)))
   :stay)
 
-(lspf:define-key-handler browse :pf8 ()
-  (when (< (browse-index lspf:*session*) (1- (max 1 (length *guestbook-entries*))))
-    (incf (browse-index lspf:*session*)))
+(lispf:define-key-handler browse :pf8 ()
+  (when (< (browse-index lispf:*session*) (1- (max 1 (length *guestbook-entries*))))
+    (incf (browse-index lispf:*session*)))
   :stay)
 
 ;;; New entry screen
 
-(lspf:define-key-handler new-entry :pf5 (name message)
+(lispf:define-key-handler new-entry :pf5 (name message)
   (bt:with-lock-held (*guestbook-lock*)
     (push (list :name name
                 :message message
                 :date (concatenate 'string (cl3270:today-date) " " (cl3270:now-time)))
           *guestbook-entries*))
-  (incf (session-entries-written lspf:*session*))
-  (lspf:broadcast (lambda ()
-                    (lspf:set-indicator "entries" (entry-count-text))
-                    (lspf:set-indicator "new-data" "NEW")))
-  (setf (browse-index lspf:*session*) 0)
+  (incf (session-entries-written lispf:*session*))
+  (lispf:broadcast (lambda ()
+                    (lispf:set-indicator "entries" (entry-count-text))
+                    (lispf:set-indicator "new-data" "NEW")))
+  (setf (browse-index lispf:*session*) 0)
   (setf name "" message "")
   :back)
 
 ;;; Bye screen
 
-(lspf:define-screen-update bye (session-time entries-written)
-  (let ((elapsed (- (get-universal-time) (session-login-time lspf:*session*))))
+(lispf:define-screen-update bye (session-time entries-written)
+  (let ((elapsed (- (get-universal-time) (session-login-time lispf:*session*))))
     (setf session-time (format-duration elapsed)
-          entries-written (format nil "~D" (session-entries-written lspf:*session*)))))
+          entries-written (format nil "~D" (session-entries-written lispf:*session*)))))
 
-(lspf:define-key-handler bye :enter ()
+(lispf:define-key-handler bye :enter ()
   :logoff)
 
 ;;; Server entry point
 
 (defun start (&key (port 3270) (host "127.0.0.1"))
   "Start the guestbook application on PORT."
-  (lspf:start-application *guestbook-app* :port port :host host))
+  (lispf:start-application *guestbook-app* :port port :host host))

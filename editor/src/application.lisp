@@ -8,7 +8,7 @@
 ;;; Application definition
 ;;; ============================================================
 
-(lspf:define-application *editor-app*
+(lispf:define-application *editor-app*
   :title "EDIT"
   :entry-screen open
   :screen-directory (merge-pathnames
@@ -20,32 +20,32 @@
 ;;; Customization
 ;;; ============================================================
 
-(defmethod lspf:default-command-label ((app (eql *editor-app*)))
+(defmethod lispf:default-command-label ((app (eql *editor-app*)))
   "Command ===>")
 
-(defmethod lspf:paging-labels ((app (eql *editor-app*)))
+(defmethod lispf:paging-labels ((app (eql *editor-app*)))
   (values "Up" "Down"))
 
 ;;; ============================================================
 ;;; Open screen handlers
 ;;; ============================================================
 
-(lspf:define-key-handler open :enter (filename)
+(lispf:define-key-handler open :enter (filename)
   (let* ((trimmed (string-trim '(#\Space) filename))
          (path (parse-namestring trimmed)))
     (unless path
-      (lspf:application-error "Invalid file path"))
-    (open-file lspf:*session* path)
+      (lispf:application-error "Invalid file path"))
+    (open-file lispf:*session* path)
     'edit))
 
 ;;; ============================================================
 ;;; Command processing (for primary commands on edit screen)
 ;;; ============================================================
 
-(defmethod lspf:process-screen-command ((screen-name (eql 'edit)) (command string))
+(defmethod lispf:process-screen-command ((screen-name (eql 'edit)) (command string))
   "Process primary commands on the edit screen."
-  (let ((msg (process-editor-changes lspf:*session* (lspf:session-context lspf:*session*)))
-        (result (handle-primary-command lspf:*session* command)))
+  (let ((msg (process-editor-changes lispf:*session* (lispf:session-context lispf:*session*)))
+        (result (handle-primary-command lispf:*session* command)))
     (cond
       ;; Primary command returned a navigation result
       ((and result (symbolp result) (not (eq result :stay)))
@@ -53,11 +53,11 @@
       ;; Primary command was handled (returned :stay)
       ((eq result :stay)
        (when msg
-         (setf (gethash "errormsg" (lspf:session-context lspf:*session*)) msg))
+         (setf (gethash "errormsg" (lispf:session-context lispf:*session*)) msg))
        :stay)
       ;; Primary command returned a message string (info or error)
       ((stringp result)
-       (setf (gethash "errormsg" (lspf:session-context lspf:*session*)) result)
+       (setf (gethash "errormsg" (lispf:session-context lispf:*session*)) result)
        :stay)
       ;; Unknown command - fall through to app-level process-command
       (t nil))))
@@ -79,10 +79,10 @@ Example:
     (lispf-editor:edit-file (pathname filename)
                             :display-name \"New Message\"
                             :restricted t))"
-  (open-file lspf:*session* path
+  (open-file lispf:*session* path
              :display-name display-name
              :restricted restricted)
-  (lspf:invoke-subapplication *editor-app* 'edit))
+  (lispf:invoke-subapplication *editor-app* 'edit))
 
 ;;; ============================================================
 ;;; Server entry point
@@ -90,4 +90,4 @@ Example:
 
 (defun start (&key (port 3270) (host "127.0.0.1"))
   "Start the editor application on PORT."
-  (lspf:start-application *editor-app* :port port :host host))
+  (lispf:start-application *editor-app* :port port :host host))

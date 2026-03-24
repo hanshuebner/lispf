@@ -11,8 +11,7 @@
 
 (defpackage #:lispf-help-tests
   (:use #:cl #:lispf-test)
-  (:local-nicknames (#:lspf #:lispf)
-                    (#:ed #:lispf-editor))
+  (:local-nicknames (#:ed #:lispf-editor))
   (:export #:run-all))
 
 (in-package #:lispf-help-tests)
@@ -67,41 +66,41 @@
 ;;; ============================================================
 
 (define-test parse-plain-line ()
-  (let ((segments (lspf:parse-help-line "Hello world")))
+  (let ((segments (lispf:parse-help-line "Hello world")))
     (assert-equal 1 (length segments))
     (assert-true (stringp (first segments)))
     (assert-string= "Hello world" (first segments))))
 
 (define-test parse-link-with-text ()
-  (let ((segments (lspf:parse-help-line "See {edit:Editor Help} for info.")))
+  (let ((segments (lispf:parse-help-line "See {edit:Editor Help} for info.")))
     (assert-equal 3 (length segments))
     (assert-string= "See " (first segments))
-    (assert-true (typep (second segments) 'lspf:help-link))
-    (assert-string= "edit" (lspf:help-link-target (second segments)))
-    (assert-string= "Editor Help" (lspf:help-link-text (second segments)))
+    (assert-true (typep (second segments) 'lispf:help-link))
+    (assert-string= "edit" (lispf:help-link-target (second segments)))
+    (assert-string= "Editor Help" (lispf:help-link-text (second segments)))
     (assert-string= " for info." (third segments))))
 
 (define-test parse-shorthand-link ()
-  (let ((segments (lspf:parse-help-line "See {edit} for info.")))
+  (let ((segments (lispf:parse-help-line "See {edit} for info.")))
     (assert-equal 3 (length segments))
     (let ((link (second segments)))
-      (assert-string= "edit" (lspf:help-link-target link))
-      (assert-string= "edit" (lspf:help-link-text link)))))
+      (assert-string= "edit" (lispf:help-link-target link))
+      (assert-string= "edit" (lispf:help-link-text link)))))
 
 (define-test parse-multiple-links ()
-  (let ((segments (lspf:parse-help-line "{a:alpha} and {b:beta}")))
+  (let ((segments (lispf:parse-help-line "{a:alpha} and {b:beta}")))
     (assert-equal 3 (length segments))
-    (assert-string= "alpha" (lspf:help-link-text (first segments)))
+    (assert-string= "alpha" (lispf:help-link-text (first segments)))
     (assert-string= " and " (second segments))
-    (assert-string= "beta" (lspf:help-link-text (third segments)))))
+    (assert-string= "beta" (lispf:help-link-text (third segments)))))
 
 (define-test parse-unclosed-brace ()
-  (let ((segments (lspf:parse-help-line "Text with {unclosed")))
+  (let ((segments (lispf:parse-help-line "Text with {unclosed")))
     (assert-equal 1 (length segments))
     (assert-string= "Text with {unclosed" (first segments))))
 
 (define-test parse-empty-line ()
-  (let ((segments (lspf:parse-help-line "")))
+  (let ((segments (lispf:parse-help-line "")))
     (assert-equal 0 (length segments))))
 
 (define-test parse-help-file-basic ()
@@ -112,11 +111,11 @@
                             "First line."
                             "# comment line"
                             "Third {topic:line}.")
-           (let ((page (lspf:parse-help-file path)))
+           (let ((page (lispf:parse-help-file path)))
              (assert-true page)
-             (assert-string= "Test Title" (lspf:help-page-title page))
+             (assert-string= "Test Title" (lispf:help-page-title page))
              ;; Comment should be stripped, leaving 2 body lines
-             (assert-equal 2 (length (lspf:help-page-lines page)))))
+             (assert-equal 2 (length (lispf:help-page-lines page)))))
       (ignore-errors (delete-file path)))))
 
 ;;; ============================================================
@@ -125,26 +124,26 @@
 
 (define-test strip-plain-text ()
   (assert-string= "Hello world"
-                   (lspf:strip-help-markup "Hello world")))
+                   (lispf:strip-help-markup "Hello world")))
 
 (define-test strip-link-with-text ()
   (assert-string= "See Editor Help for info."
-                   (lspf:strip-help-markup "See {edit:Editor Help} for info.")))
+                   (lispf:strip-help-markup "See {edit:Editor Help} for info.")))
 
 (define-test strip-shorthand-link ()
   (assert-string= "See edit for info."
-                   (lspf:strip-help-markup "See {edit} for info.")))
+                   (lispf:strip-help-markup "See {edit} for info.")))
 
 (define-test strip-multiple-links ()
   (assert-string= "alpha and beta"
-                   (lspf:strip-help-markup "{a:alpha} and {b:beta}")))
+                   (lispf:strip-help-markup "{a:alpha} and {b:beta}")))
 
 (define-test strip-unclosed-brace ()
   (assert-string= "Text with {unclosed"
-                   (lspf:strip-help-markup "Text with {unclosed")))
+                   (lispf:strip-help-markup "Text with {unclosed")))
 
 (define-test strip-empty ()
-  (assert-string= "" (lspf:strip-help-markup "")))
+  (assert-string= "" (lispf:strip-help-markup "")))
 
 ;;; ============================================================
 ;;; Help page rendering tests
@@ -157,18 +156,18 @@
            (write-help-file path "Title"
                             "Plain line."
                             "{edit:A Link} here.")
-           (let ((page (lspf:parse-help-file path)))
-             (multiple-value-bind (lines link-map) (lspf:render-help-page page)
+           (let ((page (lispf:parse-help-file path)))
+             (multiple-value-bind (lines link-map) (lispf:render-help-page page)
                (assert-equal 2 (length lines))
                (assert-string= "Plain line." (first lines))
                (assert-string= "A Link here." (second lines))
                ;; One link on line 1
                (assert-equal 1 (length link-map))
                (let ((lp (first link-map)))
-                 (assert-equal 1 (lspf::link-position-line lp))
-                 (assert-equal 0 (lspf::link-position-col-start lp))
-                 (assert-equal 6 (lspf::link-position-col-end lp))
-                 (assert-string= "edit" (lspf::link-position-target lp))))))
+                 (assert-equal 1 (lispf::link-position-line lp))
+                 (assert-equal 0 (lispf::link-position-col-start lp))
+                 (assert-equal 6 (lispf::link-position-col-end lp))
+                 (assert-string= "edit" (lispf::link-position-target lp))))))
       (ignore-errors (delete-file path)))))
 
 (define-test render-multiple-links-same-line ()
@@ -177,16 +176,16 @@
          (progn
            (write-help-file path "Title"
                             "{a:alpha} and {b:beta}")
-           (let ((page (lspf:parse-help-file path)))
-             (multiple-value-bind (lines link-map) (lspf:render-help-page page)
+           (let ((page (lispf:parse-help-file path)))
+             (multiple-value-bind (lines link-map) (lispf:render-help-page page)
                (assert-string= "alpha and beta" (first lines))
                (assert-equal 2 (length link-map))
                ;; First link: cols 0-5
-               (assert-equal 0 (lspf::link-position-col-start (first link-map)))
-               (assert-equal 5 (lspf::link-position-col-end (first link-map)))
+               (assert-equal 0 (lispf::link-position-col-start (first link-map)))
+               (assert-equal 5 (lispf::link-position-col-end (first link-map)))
                ;; Second link: cols 10-14
-               (assert-equal 10 (lspf::link-position-col-start (second link-map)))
-               (assert-equal 14 (lspf::link-position-col-end (second link-map))))))
+               (assert-equal 10 (lispf::link-position-col-start (second link-map)))
+               (assert-equal 14 (lispf::link-position-col-end (second link-map))))))
       (ignore-errors (delete-file path)))))
 
 ;;; ============================================================
@@ -194,38 +193,38 @@
 ;;; ============================================================
 
 (define-test segments-plain-text ()
-  (let ((segs (lspf:parse-help-segments "Hello world")))
+  (let ((segs (lispf:parse-help-segments "Hello world")))
     (assert-equal 1 (length segs))
-    (assert-equal :text (lspf:help-edit-segment-kind (first segs)))
-    (assert-string= "Hello world" (lspf:help-edit-segment-text (first segs)))
-    (assert-equal 0 (lspf:help-edit-segment-display-start (first segs)))
-    (assert-equal 11 (lspf:help-edit-segment-display-end (first segs)))))
+    (assert-equal :text (lispf:help-edit-segment-kind (first segs)))
+    (assert-string= "Hello world" (lispf:help-edit-segment-text (first segs)))
+    (assert-equal 0 (lispf:help-edit-segment-display-start (first segs)))
+    (assert-equal 11 (lispf:help-edit-segment-display-end (first segs)))))
 
 (define-test segments-with-link ()
-  (let ((segs (lspf:parse-help-segments "See {edit:Editor} more.")))
+  (let ((segs (lispf:parse-help-segments "See {edit:Editor} more.")))
     (assert-equal 3 (length segs))
     ;; "See "
-    (assert-equal :text (lspf:help-edit-segment-kind (first segs)))
-    (assert-equal 0 (lspf:help-edit-segment-display-start (first segs)))
-    (assert-equal 4 (lspf:help-edit-segment-display-end (first segs)))
+    (assert-equal :text (lispf:help-edit-segment-kind (first segs)))
+    (assert-equal 0 (lispf:help-edit-segment-display-start (first segs)))
+    (assert-equal 4 (lispf:help-edit-segment-display-end (first segs)))
     ;; Link: "Editor"
-    (assert-equal :link (lspf:help-edit-segment-kind (second segs)))
-    (assert-string= "Editor" (lspf:help-edit-segment-text (second segs)))
-    (assert-string= "edit" (lspf:help-edit-segment-target (second segs)))
-    (assert-equal 4 (lspf:help-edit-segment-display-start (second segs)))
-    (assert-equal 10 (lspf:help-edit-segment-display-end (second segs)))
+    (assert-equal :link (lispf:help-edit-segment-kind (second segs)))
+    (assert-string= "Editor" (lispf:help-edit-segment-text (second segs)))
+    (assert-string= "edit" (lispf:help-edit-segment-target (second segs)))
+    (assert-equal 4 (lispf:help-edit-segment-display-start (second segs)))
+    (assert-equal 10 (lispf:help-edit-segment-display-end (second segs)))
     ;; " more."
-    (assert-equal :text (lspf:help-edit-segment-kind (third segs)))
-    (assert-equal 10 (lspf:help-edit-segment-display-start (third segs)))
-    (assert-equal 16 (lspf:help-edit-segment-display-end (third segs)))))
+    (assert-equal :text (lispf:help-edit-segment-kind (third segs)))
+    (assert-equal 10 (lispf:help-edit-segment-display-start (third segs)))
+    (assert-equal 16 (lispf:help-edit-segment-display-end (third segs)))))
 
 (define-test segments-shorthand-link ()
-  (let ((segs (lspf:parse-help-segments "Visit {help} now.")))
+  (let ((segs (lispf:parse-help-segments "Visit {help} now.")))
     (assert-equal 3 (length segs))
     (let ((link (second segs)))
-      (assert-equal :link (lspf:help-edit-segment-kind link))
-      (assert-string= "help" (lspf:help-edit-segment-text link))
-      (assert-string= "help" (lspf:help-edit-segment-target link)))))
+      (assert-equal :link (lispf:help-edit-segment-kind link))
+      (assert-string= "help" (lispf:help-edit-segment-text link))
+      (assert-string= "help" (lispf:help-edit-segment-target link)))))
 
 ;;; ============================================================
 ;;; Help line edit reconstruction tests
@@ -233,39 +232,39 @@
 
 (define-test reconstruct-unchanged ()
   (let* ((raw "See {edit:Editor Help} for info.")
-         (segs (lspf:parse-help-segments raw))
-         (display (lspf:strip-help-markup raw))
-         (result (lspf:reconstruct-help-line segs display)))
+         (segs (lispf:parse-help-segments raw))
+         (display (lispf:strip-help-markup raw))
+         (result (lispf:reconstruct-help-line segs display)))
     (assert-string= raw result)))
 
 (define-test reconstruct-changed-link-text ()
   (let* ((raw "See {edit:Editor Help} for info.")
-         (segs (lspf:parse-help-segments raw))
+         (segs (lispf:parse-help-segments raw))
          (new-display "See EDITOR HELP for info."))
     (assert-string= "See {edit:EDITOR HELP} for info."
-                     (lspf:reconstruct-help-line segs new-display))))
+                     (lispf:reconstruct-help-line segs new-display))))
 
 (define-test reconstruct-changed-plain-text ()
   (let* ((raw "See {edit:Editor Help} for info.")
-         (segs (lspf:parse-help-segments raw))
+         (segs (lispf:parse-help-segments raw))
          (new-display "XXX Editor Help for info."))
     (assert-string= "XXX {edit:Editor Help} for info."
-                     (lspf:reconstruct-help-line segs new-display))))
+                     (lispf:reconstruct-help-line segs new-display))))
 
 (define-test reconstruct-preserves-unchanged-shorthand ()
   (let* ((raw "Visit {help} now.")
-         (segs (lspf:parse-help-segments raw))
-         (display (lspf:strip-help-markup raw))
-         (result (lspf:reconstruct-help-line segs display)))
+         (segs (lispf:parse-help-segments raw))
+         (display (lispf:strip-help-markup raw))
+         (result (lispf:reconstruct-help-line segs display)))
     (assert-string= raw result)))
 
 (define-test reconstruct-changed-shorthand-becomes-full ()
   (let* ((raw "Visit {help} now.")
-         (segs (lspf:parse-help-segments raw))
+         (segs (lispf:parse-help-segments raw))
          (new-display "Visit HELP now."))
     ;; Shorthand {help} becomes {help:HELP} when text changes
     (assert-string= "Visit {help:HELP} now."
-                     (lspf:reconstruct-help-line segs new-display))))
+                     (lispf:reconstruct-help-line segs new-display))))
 
 ;;; ============================================================
 ;;; apply-help-line-edit tests
@@ -274,20 +273,20 @@
 (define-test help-edit-preserves-link ()
   (let* ((raw "Hello {edit:test link} world.")
          (new-data (format nil "~72A" "Hello TEST LINK world."))
-         (result (lspf:apply-help-line-edit raw 0 72 new-data)))
+         (result (lispf:apply-help-line-edit raw 0 72 new-data)))
     (assert-string= "Hello {edit:TEST LINK} world." result)))
 
 (define-test help-edit-no-change ()
   (let* ((raw "Hello {edit:test link} world.")
-         (stripped (lspf:strip-help-markup raw))
+         (stripped (lispf:strip-help-markup raw))
          (new-data (format nil "~72A" stripped))
-         (result (lspf:apply-help-line-edit raw 0 72 new-data)))
+         (result (lispf:apply-help-line-edit raw 0 72 new-data)))
     (assert-string= raw result)))
 
 (define-test help-edit-plain-text-only ()
   (let* ((raw "Just plain text.")
          (new-data (format nil "~72A" "JUST PLAIN TEXT."))
-         (result (lspf:apply-help-line-edit raw 0 72 new-data)))
+         (result (lispf:apply-help-line-edit raw 0 72 new-data)))
     (assert-string= "JUST PLAIN TEXT." result)))
 
 ;;; ============================================================
@@ -295,47 +294,47 @@
 ;;; ============================================================
 
 (define-test wrap-word-as-link-basic ()
-  (let ((result (lspf:wrap-word-as-link "hello world" 6 "topic")))
+  (let ((result (lispf:wrap-word-as-link "hello world" 6 "topic")))
     (assert-true result)
     (assert-true (search "{topic:world}" result))))
 
 (define-test wrap-word-as-link-first-word ()
-  (let ((result (lspf:wrap-word-as-link "hello world" 0 "greet")))
+  (let ((result (lispf:wrap-word-as-link "hello world" 0 "greet")))
     (assert-true result)
     (assert-true (search "{greet:hello}" result))))
 
 (define-test wrap-word-on-space-returns-nil ()
-  (assert-nil (lspf:wrap-word-as-link "hello world" 5 "topic")))
+  (assert-nil (lispf:wrap-word-as-link "hello world" 5 "topic")))
 
 (define-test wrap-word-past-end-returns-nil ()
-  (assert-nil (lspf:wrap-word-as-link "hello" 10 "topic")))
+  (assert-nil (lispf:wrap-word-as-link "hello" 10 "topic")))
 
 (define-test wrap-word-already-linked-returns-nil ()
-  (assert-nil (lspf:wrap-word-as-link "See {edit:Editor} here." 5 "other")))
+  (assert-nil (lispf:wrap-word-as-link "See {edit:Editor} here." 5 "other")))
 
 (define-test remove-link-basic ()
-  (let ((result (lspf:remove-link-at-col "See {edit:Editor} here." 5)))
+  (let ((result (lispf:remove-link-at-col "See {edit:Editor} here." 5)))
     (assert-true result)
     (assert-string= "See Editor here." result)))
 
 (define-test remove-link-preserves-other-links ()
-  (let ((result (lspf:remove-link-at-col "{a:alpha} and {b:beta}" 11)))
+  (let ((result (lispf:remove-link-at-col "{a:alpha} and {b:beta}" 11)))
     (assert-true result)
     (assert-true (search "{a:alpha}" result))
     (assert-true (not (search "{b:" result)))))
 
 (define-test remove-link-no-link-at-col ()
-  (assert-nil (lspf:remove-link-at-col "plain text here" 5)))
+  (assert-nil (lispf:remove-link-at-col "plain text here" 5)))
 
 (define-test find-link-segment-at-col ()
-  (let* ((segs (lspf:parse-help-segments "See {edit:Editor Help} more."))
-         (found (lspf:find-link-segment-at-col segs 5)))
+  (let* ((segs (lispf:parse-help-segments "See {edit:Editor Help} more."))
+         (found (lispf:find-link-segment-at-col segs 5)))
     (assert-true found)
-    (assert-string= "edit" (lspf:help-edit-segment-target found))))
+    (assert-string= "edit" (lispf:help-edit-segment-target found))))
 
 (define-test find-link-segment-on-plain-text ()
-  (let* ((segs (lspf:parse-help-segments "See {edit:Editor Help} more."))
-         (found (lspf:find-link-segment-at-col segs 1)))
+  (let* ((segs (lispf:parse-help-segments "See {edit:Editor Help} more."))
+         (found (lispf:find-link-segment-at-col segs 1)))
     (assert-nil found)))
 
 ;;; ============================================================
@@ -375,73 +374,73 @@
 ;;; ============================================================
 
 (define-test help-viewer-state-creation ()
-  (let ((state (make-instance 'lspf::help-viewer-state)))
-    (assert-nil (lspf::hv-topic state))
-    (assert-nil (lspf::hv-history state))
-    (assert-equal 0 (lspf::hv-scroll-offset state))))
+  (let ((state (make-instance 'lispf::help-viewer-state)))
+    (assert-nil (lispf::hv-topic state))
+    (assert-nil (lispf::hv-history state))
+    (assert-equal 0 (lispf::hv-scroll-offset state))))
 
 (define-test help-viewer-load-topic ()
   (let ((path #P"/tmp/lispf-test-viewer.help")
-        (state (make-instance 'lspf::help-viewer-state)))
+        (state (make-instance 'lispf::help-viewer-state)))
     (unwind-protect
          (progn
            (write-help-file path "Viewer Test"
                             "Line one."
                             "Line {topic:two}.")
-           (setf (lspf::hv-help-directories state)
+           (setf (lispf::hv-help-directories state)
                  (list #P"/tmp/"))
-           (assert-true (lspf::load-help-topic state "lispf-test-viewer" :no-history t))
-           (assert-string= "lispf-test-viewer" (lspf::hv-topic state))
-           (assert-equal 2 (length (lspf::hv-rendered-lines state)))
-           (assert-string= "Line one." (first (lspf::hv-rendered-lines state)))
-           (assert-string= "Line two." (second (lspf::hv-rendered-lines state)))
+           (assert-true (lispf::load-help-topic state "lispf-test-viewer" :no-history t))
+           (assert-string= "lispf-test-viewer" (lispf::hv-topic state))
+           (assert-equal 2 (length (lispf::hv-rendered-lines state)))
+           (assert-string= "Line one." (first (lispf::hv-rendered-lines state)))
+           (assert-string= "Line two." (second (lispf::hv-rendered-lines state)))
            ;; Link map should have one entry
-           (assert-equal 1 (length (lspf::hv-link-map state))))
+           (assert-equal 1 (length (lispf::hv-link-map state))))
       (ignore-errors (delete-file path)))))
 
 (define-test help-viewer-history-stack ()
   (let ((dir #P"/tmp/")
-        (state (make-instance 'lspf::help-viewer-state)))
-    (setf (lspf::hv-help-directories state) (list dir))
+        (state (make-instance 'lispf::help-viewer-state)))
+    (setf (lispf::hv-help-directories state) (list dir))
     (unwind-protect
          (progn
            (write-help-file (merge-pathnames "hv-a.help" dir) "Page A" "Content A.")
            (write-help-file (merge-pathnames "hv-b.help" dir) "Page B" "Content B.")
            ;; Load first topic
-           (lspf::load-help-topic state "hv-a" :no-history t)
-           (assert-string= "hv-a" (lspf::hv-topic state))
-           (assert-equal 0 (length (lspf::hv-history state)))
+           (lispf::load-help-topic state "hv-a" :no-history t)
+           (assert-string= "hv-a" (lispf::hv-topic state))
+           (assert-equal 0 (length (lispf::hv-history state)))
            ;; Load second topic (should push first to history)
-           (lspf::load-help-topic state "hv-b")
-           (assert-string= "hv-b" (lspf::hv-topic state))
-           (assert-equal 1 (length (lspf::hv-history state)))
-           (assert-string= "hv-a" (car (first (lspf::hv-history state)))))
+           (lispf::load-help-topic state "hv-b")
+           (assert-string= "hv-b" (lispf::hv-topic state))
+           (assert-equal 1 (length (lispf::hv-history state)))
+           (assert-string= "hv-a" (car (first (lispf::hv-history state)))))
       (ignore-errors (delete-file (merge-pathnames "hv-a.help" dir)))
       (ignore-errors (delete-file (merge-pathnames "hv-b.help" dir))))))
 
 (define-test help-viewer-nonexistent-topic ()
-  (let ((state (make-instance 'lspf::help-viewer-state)))
-    (setf (lspf::hv-help-directories state) (list #P"/nonexistent/"))
+  (let ((state (make-instance 'lispf::help-viewer-state)))
+    (setf (lispf::hv-help-directories state) (list #P"/nonexistent/"))
     ;; find-help-file-in-directories should return nil for missing topic
-    (assert-nil (lspf::find-help-file-in-directories "no-such-topic"
-                                                      (lspf::hv-help-directories state)))))
+    (assert-nil (lispf::find-help-file-in-directories "no-such-topic"
+                                                      (lispf::hv-help-directories state)))))
 
 (define-test help-viewer-scroll-offset ()
   (let ((dir #P"/tmp/")
-        (state (make-instance 'lspf::help-viewer-state)))
-    (setf (lspf::hv-help-directories state) (list dir))
+        (state (make-instance 'lispf::help-viewer-state)))
+    (setf (lispf::hv-help-directories state) (list dir))
     (unwind-protect
          (progn
            ;; Create a file with 30 lines (more than one page of 20)
            (apply #'write-help-file
                   (merge-pathnames "hv-scroll.help" dir) "Scroll Test"
                   (loop for i from 1 to 30 collect (format nil "Line ~D" i)))
-           (lspf::load-help-topic state "hv-scroll" :no-history t)
-           (assert-equal 30 (length (lspf::hv-rendered-lines state)))
-           (assert-equal 0 (lspf::hv-scroll-offset state))
+           (lispf::load-help-topic state "hv-scroll" :no-history t)
+           (assert-equal 30 (length (lispf::hv-rendered-lines state)))
+           (assert-equal 0 (lispf::hv-scroll-offset state))
            ;; Simulate scroll down
-           (setf (lspf::hv-scroll-offset state) 19)
-           (assert-equal 19 (lspf::hv-scroll-offset state)))
+           (setf (lispf::hv-scroll-offset state) 19)
+           (assert-equal 19 (lispf::hv-scroll-offset state)))
       (ignore-errors (delete-file (merge-pathnames "hv-scroll.help" dir))))))
 
 ;;; ============================================================
