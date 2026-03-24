@@ -78,6 +78,14 @@ Each 3270 connection runs in its own thread. Per-session state belongs on the se
 - **when-let** (from alexandria) for bind-and-test patterns
 - **Top-Level form separation**: Top level forms and comment blocks are separated by empty lines
 
+## CI and Testing
+
+**Verifying before push:** Run `scripts/test-committed.sh` to test the committed state in an isolated git worktree. This reproduces exactly what CI sees — no uncommitted files, no stale ASDF cache.
+
+**Do not trust eval_swank for CI validation:** The running Lisp image retains stale definitions. A clean build may fail even if eval_swank works.
+
+**ASDF picks up untracked files:** Uncommitted source files or `.asd` files are loaded locally but absent in CI. The worktree test script catches this.
+
 ## MCP Integration
 
 The lisp-mcp tool provides `eval_swank` and `eval_host_cl` for evaluating Lisp expressions in a running image. The parameter name is `expression` (not `code`). Use `edit_lisp` for paredit-safe structural editing of Lisp source files.
