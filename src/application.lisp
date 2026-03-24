@@ -987,6 +987,9 @@ than the returned value, the connection is closed.")
     (when (and timeout
                (> (- (get-universal-time) (session-last-activity *session*))
                   timeout))
+      (format *error-output* "~&;;; ~A: idle timeout (~Ds) on screen ~A, closing connection~%"
+              (application-name *application*) timeout
+              (session-current-screen *session*))
       (setf (update-context-running ctx) nil)
       (ignore-errors (usocket:socket-close *connection*))
       t)))
