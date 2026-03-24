@@ -10,4 +10,6 @@ Scrolling past end of file is allowed.
 
 SHORTCUT: Type a line number in the command field to jump there.
 
-See also: {edit:Editor Help}  {find:Find and Change}  {prefix:Prefix Commands}
+See also: {edit:Editor Help}
+          {find:Find and Change}
+          {prefix:Prefix Commands}

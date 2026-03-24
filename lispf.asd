@@ -5,6 +5,7 @@
   :serial t
   :pathname "src/"
   :components ((:file "screen")
+               (:file "log")
                (:file "variables")
                (:file "i18n")
                (:file "registry")
