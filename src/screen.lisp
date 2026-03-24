@@ -218,9 +218,11 @@
          (end (if attributes
                   (attribute-change-position row-map (1+ col) attributes)
                   (static-text-end-position row-map col)))
+         (len (- end col))
          (content (map 'string #'car (subseq row-map col end))))
     (values `(cl3270:make-field :row ,(if (> col 0) row (mod (1- row) +screen-rows+))
                                 :col ,(1- (if (> col 0) col +screen-columns+))
+                                :len ,len
                                 ,@(unless (every (lambda (c) (eql c #\Space)) content) `(:content ,content))
                                 ,@attributes)
             row
