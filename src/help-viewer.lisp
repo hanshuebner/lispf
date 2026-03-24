@@ -208,10 +208,13 @@ Returns a string with inline attribute codes."
 (define-key-handler help-viewer :pf3 ()
   (let ((state (ensure-help-viewer-state)))
     (if (hv-history state)
-        (let ((prev (pop (hv-history state))))
-          (load-help-topic state (car prev) :no-history t)
-          (setf (hv-scroll-offset state) (cdr prev))
-          :stay)
+        (let ((prev (first (hv-history state))))
+          (if (load-help-topic state (car prev) :no-history t)
+              (progn
+                (pop (hv-history state))
+                (setf (hv-scroll-offset state) (cdr prev))
+                :stay)
+              :back))
         :back)))
 
 (define-key-handler help-viewer :pf4 ()

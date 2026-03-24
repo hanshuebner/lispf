@@ -497,10 +497,10 @@
              ;; Navigate to keys topic via command field
              (type-text s "keys")
              (press-enter s)
-             (assert-screen-contains s "Function Keys")
+             (assert-screen-contains s "Page 1 of 1  (keys)")
              ;; PF3 back to index
              (press-pf s 3)
-             (assert-screen-contains s "Help Index")
+             (assert-screen-contains s "Page 1 of 1  (index)")
              ;; PF3 back to editor (no more history)
              (press-pf s 3)
              (assert-screen-contains s "Size=")
