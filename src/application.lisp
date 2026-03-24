@@ -521,8 +521,7 @@ telnet negotiation."
                                   :tls-p (or tls-immediate-p starttls-established)
                                   :connection-id conn-id)
               (cl3270:unnegotiate-telnet socket 1))))
-      (idle-timeout-error ()
-        (log-message :info "session timed out"))
+      (idle-timeout-error ())
       ((or end-of-file
            type-error
            cl3270::telnet-error
@@ -1631,7 +1630,6 @@ TLS-P indicates the connection is TLS-encrypted."
            (setf (session-current-screen *session*)
                  (application-entry-screen application))
            (run-screen-loop app-package))
-      (log-message :info "session ended")
       (bt:with-lock-held ((application-sessions-lock application))
         (setf (application-sessions application)
               (remove *session* (application-sessions application)))))))
