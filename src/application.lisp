@@ -720,13 +720,15 @@ Call from within a define-screen-update body."
   ()
   (:report "Idle timeout"))
 
-(defstruct update-context
-  "State for the background update thread."
-  (running nil :type boolean)
-  (thread nil)
-  (main-thread nil)
-  (screen-sym nil)
-  (last-minute -1 :type fixnum))
+(defclass update-context ()
+  ((running :initform nil :accessor update-context-running)
+   (thread :initform nil :accessor update-context-thread)
+   (main-thread :initarg :main-thread :reader update-context-main-thread)
+   (screen-sym :initarg :screen-sym :reader update-context-screen-sym)
+   (last-minute :initarg :last-minute :accessor update-context-last-minute)
+   (last-dynamic-content :initform (make-hash-table :test 'equal)
+                         :reader update-context-last-dynamic-content))
+  (:documentation "State for the background update thread."))
 
 (defun merge-field-values (original current)
   "Merge two field-value hash tables. CURRENT values take precedence over ORIGINAL."
@@ -976,22 +978,38 @@ so everything is sent in a single 3270 write. Returns the merged screen."
                (append (cl3270:screen-fields screen) (nreverse extra-fields)))
         screen)))
 
+(defun dynamic-content-equal (a b)
+  "Compare two dynamic area content lists for equality.
+Each element may be a string, a plist, or NIL."
+  (and (= (length a) (length b))
+       (every (lambda (x y)
+                (cond
+                  ((and (stringp x) (stringp y)) (string= x y))
+                  ((and (consp x) (consp y)) (equal x y))
+                  ((and (null x) (null y)) t)
+                  (t nil)))
+              a b)))
+
 (defun send-dynamic-area-overlays (ctx)
-  "Call dynamic area updaters for the current screen and send overlays."
+  "Call dynamic area updaters and send overlays only when content has changed."
   (unless (update-context-running ctx)
     (return-from send-dynamic-area-overlays))
   (let* ((screen-sym (update-context-screen-sym ctx))
          (areas (get-screen-dynamic-areas screen-sym))
-         (app-package (application-package *application*)))
+         (app-package (application-package *application*))
+         (cache (update-context-last-dynamic-content ctx)))
     (dolist (area areas)
       (unless (update-context-running ctx) (return))
-      (let ((area-sym (intern (string-upcase (dynamic-area-name area)) app-package)))
+      (let* ((area-name (dynamic-area-name area))
+             (area-sym (intern (string-upcase area-name) app-package)))
         (when-let (content (update-dynamic-area screen-sym area-sym))
-          (multiple-value-bind (screen vals) (build-dynamic-area-overlay area content)
-            (bt:with-lock-held ((session-write-lock *session*))
-              (when (update-context-running ctx)
-                (cl3270:show-screen-opts screen vals *connection*
-                  (cl3270:make-screen-opts :no-clear t :no-response t))))))))))
+          (unless (dynamic-content-equal content (gethash area-name cache))
+            (setf (gethash area-name cache) content)
+            (multiple-value-bind (screen vals) (build-dynamic-area-overlay area content)
+              (bt:with-lock-held ((session-write-lock *session*))
+                (when (update-context-running ctx)
+                  (cl3270:show-screen-opts screen vals *connection*
+                                           (cl3270:make-screen-opts :no-clear t :no-response t)))))))))))
 
 (defun wait-for-update-signal (ctx)
   "Block until the update thread is signaled or 1 second elapses.
@@ -1109,8 +1127,8 @@ unlock the 3270 keyboard)."
 ;;; display-and-read: validation loop with background update support
 
 (defun display-and-read (screen rules vals pf-keys exit-keys error-field
-                          cursor-row cursor-col conn
-                          &key screen-sym devinfo codepage no-clear)
+                         cursor-row cursor-col conn
+                         &key screen-sym devinfo codepage no-clear)
   "Display a screen and read response with field validation.
 Reimplements cl3270:handle-screen-alt's validation loop using only exported
 cl3270 symbols, adding background update thread support via post-send-callback."
@@ -1138,12 +1156,12 @@ cl3270 symbols, adding background update thread support via post-send-callback."
       ;; Merge dynamic area content into the main screen for the initial display,
       ;; so the complete screen arrives in a single write (no race with the client).
       (let* ((update-ctx (when screen-sym
-                           (make-update-context
-                            :screen-sym screen-sym
-                            :main-thread (bt:current-thread)
-                            :last-minute (nth-value 1
-                                           (decode-universal-time
-                                            (get-universal-time))))))
+                           (make-instance 'update-context
+                                          :screen-sym screen-sym
+                                          :main-thread (bt:current-thread)
+                                          :last-minute (nth-value 1
+                                                                  (decode-universal-time
+                                                                   (get-universal-time))))))
              (display-screen (if update-ctx
                                  (merge-initial-dynamic-areas screen my-vals update-ctx)
                                  screen)))
@@ -1151,26 +1169,22 @@ cl3270 symbols, adding background update thread support via post-send-callback."
             (handler-case
                 (unwind-protect
                      (cl3270:show-screen-opts display-screen my-vals conn
-                       (cl3270:make-screen-opts
-                        :cursor-row cursor-row :cursor-col cursor-col
-                    :altscreen devinfo :codepage codepage
-                    :no-clear no-clear
-                    :post-send-callback (when update-ctx
-                                          (lambda (data)
-                                            (declare (ignore data))
-                                            (start-updates update-ctx)
-                                            nil))))
-              (when update-ctx (stop-updates update-ctx)))
+                                              (cl3270:make-screen-opts
+                                               :cursor-row cursor-row :cursor-col cursor-col
+                                               :altscreen devinfo :codepage codepage
+                                               :no-clear no-clear
+                                               :post-send-callback (when update-ctx
+                                                                     (lambda (data)
+                                                                       (declare (ignore data))
+                                                                       (start-updates update-ctx)
+                                                                       nil))))
+                  (when update-ctx (stop-updates update-ctx)))
               (dynamic-area-error ()
-                ;; Error message was already set by the update thread.
-                ;; Return to the screen loop for redisplay.
                 (return (values nil nil))))
           (when err (return (values resp err)))
           (cond
-            ;; Exit key - return without validation
             ((cl3270:aid-in-set (cl3270:response-aid resp) exit-keys)
              (return (values resp nil)))
-            ;; Unexpected key - show error, loop
             ((not (cl3270:aid-in-set (cl3270:response-aid resp) pf-keys))
              (unless (or (cl3270:is-clear-key (cl3270:response-aid resp))
                          (cl3270:is-key (cl3270:response-aid resp) cl3270:+aid-pa1+)
@@ -1180,13 +1194,11 @@ cl3270 symbols, adding background update thread support via post-send-callback."
              (setf (gethash error-field my-vals)
                    (unknown-key-message *application*
                                         (cl3270:aid-to-string (cl3270:response-aid resp)))))
-            ;; Clear/PA in expected set - return immediately
             ((or (cl3270:is-clear-key (cl3270:response-aid resp))
                  (cl3270:is-key (cl3270:response-aid resp) cl3270:+aid-pa1+)
                  (cl3270:is-key (cl3270:response-aid resp) cl3270:+aid-pa2+)
                  (cl3270:is-key (cl3270:response-aid resp) cl3270:+aid-pa3+))
              (return (values resp nil)))
-            ;; Normal key - merge values and validate
             (t
              (setq my-vals (merge-field-values my-vals (cl3270:response-vals resp)))
              (remhash error-field my-vals)
