@@ -45,10 +45,13 @@ Leading zeros indicate line number remnants, not a count."
 (defun parse-single-char-command (char raw)
   "Parse a single-character prefix command with optional count.
 CHAR is the command character, RAW is the full trimmed uppercase input.
-Returns (values command count), where COMMAND can be nil."
+Returns (values command count), where COMMAND can be nil.
+A trailing digit is only treated as a count when the command character is at
+position 0 (the user typed e.g. \"D3\"); otherwise the digit is a remnant of
+the overwritten line number."
   (let* ((cmd-pos (position char raw))
-         (count (or (when cmd-pos
-                      (let ((next-pos (1+ cmd-pos)))
+         (count (or (when (and cmd-pos (zerop cmd-pos))
+                      (let ((next-pos 1))
                         (when (and (< next-pos (length raw))
                                    (digit-char-p (char raw next-pos))
                                    (char/= (char raw next-pos) #\0))
@@ -355,7 +358,8 @@ batch, they are executed immediately without pending."
                    (when (plusp actual-count)
                      (delete-line-range session adjusted actual-count)
                      (decf offset actual-count)
-                     (setf did-modify t))))
+                     (setf did-modify t
+                           result-message (format nil "~D line~:P deleted" actual-count)))))
                 (:r
                  (let ((line (line-at session adjusted)))
                    (when line
