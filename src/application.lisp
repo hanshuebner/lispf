@@ -1235,6 +1235,30 @@ Otherwise return SCREEN unchanged."
                              f)))
                      (cl3270:screen-fields screen)))))
 
+;;; Overlay support
+
+(defun make-clearing-fields (overlay)
+  "Generate fields that clear the overlay row range.
+OVERLAY is (start end) in screen content coordinates.
+Returns a list of fields that write spaces across each row in the range.
+Each field's attribute byte sits at col 79 of the previous row, with 80
+columns of spaces covering the target row."
+  (destructuring-bind (start end) overlay
+    (loop for content-row from start to end
+          for physical-row = (1+ content-row)
+          collect (cl3270:make-field :row (mod (1- physical-row) 24)
+                                     :col 79
+                                     :len 80
+                                     :content (make-string 80 :initial-element #\Space)))))
+
+(defun add-overlay-clearing (screen overlay)
+  "Return a new screen with clearing fields prepended for the overlay range.
+Existing fields in the overlay rows follow and overwrite the cleared area."
+  (apply #'cl3270:make-screen
+         (cl3270:screen-name screen)
+         (append (make-clearing-fields overlay)
+                 (cl3270:screen-fields screen))))
+
 ;;; Main application loop — helper functions
 
 (defun ensure-key-handlers-validated (dispatch-sym key-specs)
@@ -1584,6 +1608,7 @@ Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
                    (no-command (screen-info-no-command screen-info))
                    (is-menu (screen-info-menu screen-info))
                    (full-control (screen-info-full-control screen-info))
+                   (overlay (screen-info-overlay screen-info))
                    (context (session-context *session*))
                    (dispatch-sym
                      (intern-screen-name (screen-name-string screen-sym)
@@ -1628,18 +1653,22 @@ Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
                     (set-framework-fields screen-sym field-values
                                           :no-command no-command :is-menu is-menu
                                           :full-control full-control)
-                    (let* ((display-screen
+                    (let* ((base-screen
                              (apply-field-attribute-overrides
                               (if has-list-data
                                   (filter-screen-fields screen repeat-groups list-data-count)
                                   screen)))
+                           (display-screen
+                             (if overlay
+                                 (add-overlay-clearing base-screen overlay)
+                                 base-screen))
                            (response
                              (prog1 (show-screen-and-read
                                      screen display-screen screen-rules key-specs
                                      field-values dispatch-sym repeat-groups
                                      has-list-data list-data-count
                                      :no-command no-command :full-control full-control
-                                     :no-clear no-clear)
+                                     :no-clear (or no-clear (and overlay t)))
                                (setf no-clear nil))))
                       (unless response (return-from next-screen))
                       (setf (session-last-activity *session*) (get-universal-time)

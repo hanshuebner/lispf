@@ -31,6 +31,7 @@
   (navigable nil)
   (handler-package nil)
   (full-control nil)
+  (overlay nil)
   (file-timestamp 0))
 
 (defstruct dynamic-area
@@ -65,11 +66,12 @@
 
 ;;; Framework row management
 
-(defun pad-screen-string (screen-string &key no-command full-control)
+(defun pad-screen-string (screen-string &key no-command full-control start-row)
   "Wrap application screen content with framework rows.
 Without NO-COMMAND: up to 20 app rows + command line (row 21).
 With NO-COMMAND: up to 21 app rows, no command line.
 With FULL-CONTROL: all 24 rows (0-23) belong to the application.
+START-ROW: when set, prepend blank rows so content begins at this row number.
 Always adds title (row 0), error (row 22), and keys (row 23) unless FULL-CONTROL."
   (let* ((max-rows (cond (full-control 24)
                          (no-command 21)
@@ -78,6 +80,9 @@ Always adds title (row 0), error (row 22), and keys (row 23) unless FULL-CONTROL
          (app-rows (rest parts))
          (app-rows (if (and app-rows (string= "" (car (last app-rows))))
                        (butlast app-rows)
+                       app-rows))
+         (app-rows (if start-row
+                       (append (make-list start-row :initial-element "") app-rows)
                        app-rows))
          (n (length app-rows)))
     (when (> n max-rows)
@@ -345,9 +350,12 @@ when keys are shown or hidden at runtime."
          (handler-package (let ((hp (getf data :handler-package)))
                             (when hp (find-package (string-upcase (string hp))))))
          (full-control (getf data :full-control))
+         (overlay (getf data :overlay))
+         (start-row (getf data :start-row))
          (screen-string (pad-screen-string (getf data :screen)
                                             :no-command no-command
-                                            :full-control full-control))
+                                            :full-control full-control
+                                            :start-row start-row))
          (raw-fields (getf data :fields))
          (raw-keys (getf data :keys))
          (raw-dynamic-areas (getf data :dynamic-areas)))
@@ -381,7 +389,8 @@ when keys are shown or hidden at runtime."
            :anonymous anonymous
            :navigable navigable
            :handler-package handler-package
-           :full-control full-control))))))
+           :full-control full-control
+           :overlay overlay))))))
 
 ;;; Registry operations
 
