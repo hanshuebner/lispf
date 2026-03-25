@@ -16,6 +16,7 @@
            #:merge-screen-rules
            #:check-field-names
            #:display-screen
+           #:read-single-form
            #:load-screen-data
            ;; Field binding macros
            #:with-field-values
@@ -289,8 +290,20 @@
 
 ;;; Screen data file loading
 
-(defun load-screen-data (path)
-  "Read a screen definition plist from PATH."
+(defun read-single-form (path)
+  "Read exactly one s-expression from PATH.
+Signals an error if the file contains trailing forms or has a syntax error."
   (with-open-file (s path)
     (let ((*package* (find-package :lispf)))
-      (read s))))
+      (handler-case
+          (let ((form (read s)))
+            (let ((extra (read s nil s)))
+              (unless (eq extra s)
+                (error "~A: unexpected trailing form after main definition" path)))
+            form)
+        (reader-error (c)
+          (error "~A: syntax error: ~A" path c))))))
+
+(defun load-screen-data (path)
+  "Read a screen definition plist from PATH."
+  (read-single-form path))

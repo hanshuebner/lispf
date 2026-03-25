@@ -223,9 +223,7 @@ Returns a screen symbol or NIL. Lazily loads screens from disk."
 
 (defun load-menu-file (path)
   "Load a .menu file and return the data plist."
-  (with-open-file (s path)
-    (let ((*package* (find-package :lispf)))
-      (read s))))
+  (read-single-form path))
 
 (defun collect-menu-entries (items pkg &optional prefix)
   "Recursively collect (key . screen-symbol) pairs from menu ITEMS.
@@ -482,12 +480,14 @@ telnet negotiation."
         (progn
           (when tls-immediate-p
             (cl3270:wrap-socket-with-tls socket tls-config))
-          (multiple-value-bind (devinfo err starttls-established)
+          (multiple-value-bind (devinfo err)
               (cl3270:negotiate-telnet socket
                                        :tls-config (unless tls-immediate-p tls-config))
             (when err
               (log-message :warn "negotiation error: ~A" err)
               (return-from handle-connection))
+            (when tls-immediate-p
+              (setf (cl3270:tls-p devinfo) t))
             (let* ((addr (ignore-errors (usocket:get-peer-address socket)))
                    (peer (ignore-errors
                            (format nil "~{~D~^.~}:~D"
@@ -516,12 +516,10 @@ telnet negotiation."
                                (cl3270::cols devinfo))
                              (when (cl3270::codepage devinfo)
                                (cl3270::codepage-name (cl3270::codepage devinfo)))
-                             (cond (tls-immediate-p "yes")
-                                   (starttls-established "starttls")
-                                   (t "no")))))
+                             (if (cl3270:tls-p devinfo) "yes" "no"))))
             (unwind-protect
                  (run-application application socket devinfo
-                                  :tls-p (or tls-immediate-p starttls-established)
+                                  :tls-p (cl3270:tls-p devinfo)
                                   :connection-id conn-id)
               (cl3270:unnegotiate-telnet socket 1))))
       (idle-timeout-error ())
