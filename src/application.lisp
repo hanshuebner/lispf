@@ -1060,7 +1060,17 @@ so no immediate first update is needed."
                 do (send-title-overlay ctx)
               do (send-dynamic-area-overlays ctx)))
     (error (e)
-      (log-message :error "update thread error: ~A" e))))
+      (let ((id (generate-incident-id)))
+        (log-incident id e)
+        (setf (update-context-running ctx) nil)
+        ;; Notify user by setting error message and interrupting main thread
+        (setf (gethash "errormsg" (session-context *session*))
+              (format nil "Internal error. Incident: ~A" id))
+        (let ((main (update-context-main-thread ctx)))
+          (when main
+            (ignore-errors
+              (bt:interrupt-thread main
+                (lambda () (error 'dynamic-area-error))))))))))
 
 (defun start-updates (ctx)
   "Start the background update thread."
@@ -1138,10 +1148,11 @@ cl3270 symbols, adding background update thread support via post-send-callback."
                                  (merge-initial-dynamic-areas screen my-vals update-ctx)
                                  screen)))
         (multiple-value-bind (resp err)
-            (unwind-protect
-                 (cl3270:show-screen-opts display-screen my-vals conn
-                   (cl3270:make-screen-opts
-                    :cursor-row cursor-row :cursor-col cursor-col
+            (handler-case
+                (unwind-protect
+                     (cl3270:show-screen-opts display-screen my-vals conn
+                       (cl3270:make-screen-opts
+                        :cursor-row cursor-row :cursor-col cursor-col
                     :altscreen devinfo :codepage codepage
                     :no-clear no-clear
                     :post-send-callback (when update-ctx
@@ -1150,6 +1161,10 @@ cl3270 symbols, adding background update thread support via post-send-callback."
                                             (start-updates update-ctx)
                                             nil))))
               (when update-ctx (stop-updates update-ctx)))
+              (dynamic-area-error ()
+                ;; Error message was already set by the update thread.
+                ;; Return to the screen loop for redisplay.
+                (return (values nil nil))))
           (when err (return (values resp err)))
           (cond
             ;; Exit key - return without validation
@@ -1473,164 +1488,164 @@ Returns the 3270 response."
     (setf (list-state-value *session* dispatch-sym :cursor-row) (cursor-row))
     (setf (list-state-value *session* dispatch-sym :cursor-col) (cursor-col))))
 
+(defun check-anonymous-access (result context)
+  "Check if a screen transition target requires authentication.
+Returns the original RESULT if access is allowed, or :stay with an error message
+if the target screen requires authentication and the session is not authenticated."
+  (let ((target-sym (cond ((and (consp result) (eq (car result) :jump))
+                           (cdr result))
+                          ((symbolp result) result))))
+    (if (and target-sym
+             (not (eq target-sym :stay))
+             (not (eq target-sym :back))
+             (not (eq target-sym :logoff))
+             (not (session-authenticated-p *application* *session*)))
+        (let* ((target-name (screen-name-string target-sym))
+               (target-info (gethash target-name (app-screens)))
+               (target-info (or target-info
+                                (when (find-screen-file target-name)
+                                  (load-and-register-screen target-name)))))
+          (if (and target-info
+                   (not (screen-info-anonymous target-info)))
+              (progn
+                (setf (gethash "errormsg" context)
+                      (anonymous-access-denied-message *application*))
+                :stay)
+              result))
+        result)))
+
+(defun handle-screen-render-error (c)
+  "Handle an error during screen rendering by restoring to the last successful
+screen with an incident message. Called from handler-bind."
+  (let ((last (session-last-successful-screen *session*)))
+    (when last
+      (let ((id (generate-incident-id)))
+        (log-incident id c)
+        (setf (session-current-screen *session*) last
+              (session-context *session*) (make-hash-table :test 'equal))
+        (setf (gethash "errormsg" (session-context *session*))
+              (format nil "Internal error. Incident: ~A" id))))))
+
+(defun dispatch-and-transition (response dispatch-sym has-list-data
+                                list-data-total app-package)
+  "Process user input: dispatch to key handler, check access, apply transition.
+Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
+  (let* ((screen-sym (session-current-screen *session*))
+         (context (session-context *session*))
+         (screen-info (ensure-screen-loaded screen-sym))
+         (key-specs (screen-info-keys screen-info))
+         (transient-fields (screen-info-transient-fields screen-info))
+         (repeat-groups (screen-info-repeat-groups screen-info)))
+    (process-response response context dispatch-sym transient-fields
+                      repeat-groups has-list-data)
+    ;; Temporarily inject transient field values for key handlers
+    (let ((resp-vals (cl3270:response-vals response)))
+      (when resp-vals
+        (dolist (k transient-fields)
+          (multiple-value-bind (v present-p) (gethash k resp-vals)
+            (when present-p (setf (gethash k context) v))))))
+    (let* ((aid-kw (aid-to-keyword (cl3270:response-aid response)))
+           (key-spec (find-key-spec key-specs aid-kw))
+           (resp-command
+             (string-trim '(#\Space)
+                          (or (gethash "command" (cl3270:response-vals response)) "")))
+           (result
+             (prog1 (dispatch-key context dispatch-sym aid-kw key-spec has-list-data
+                                  repeat-groups list-data-total app-package resp-command)
+               (dolist (k transient-fields) (remhash k context))))
+           (checked (check-anonymous-access result context))
+           (no-clear (and (or (eq checked :stay) (null checked))
+                          (not (session-property *session* :force-redraw)))))
+      (setf (session-property *session* :force-redraw) nil)
+      (multiple-value-bind (transition saved-row saved-col)
+          (apply-screen-transition checked screen-sym dispatch-sym)
+        (values transition no-clear saved-row saved-col)))))
+
 (defun run-screen-loop (app-package)
   "Execute the main screen loop. Returns when the session ends."
-  (let ((restored-cursor-row nil)
-        (restored-cursor-col nil)
-        (no-clear nil))
-  (loop
-    (block next-screen
-    (let* ((screen-sym (session-current-screen *session*))
-           (name-string (screen-name-string screen-sym))
-           (screen-info (ensure-screen-loaded screen-sym))
-           (screen (screen-info-screen screen-info))
-           (screen-rules (screen-info-rules screen-info))
-           (key-specs (screen-info-keys screen-info))
-           (transient-fields (screen-info-transient-fields screen-info))
-           (repeat-groups (screen-info-repeat-groups screen-info))
-           (no-command (screen-info-no-command screen-info))
-           (is-menu (screen-info-menu screen-info))
-           (handler-package (screen-info-handler-package screen-info))
-           (full-control (screen-info-full-control screen-info))
-           (context (session-context *session*))
-           (dispatch-sym (intern-screen-name name-string
-                                             (or handler-package app-package)))
-           (field-values (cl3270:make-dict :test #'equal)))
-      (ensure-key-handlers-validated dispatch-sym key-specs)
-      ;; Clear cmdlabel from context so stale overrides don't persist
-      (remhash "cmdlabel" context)
-      (let ((*current-screen-keys*
-              (mapcar (lambda (spec)
-                        (destructuring-bind (aid-kw label &rest rest) spec
-                          (list aid-kw (if (getf rest :hidden) "" label))))
-                      key-specs))
-            (*current-key-layout* (get-screen-key-layout screen-sym))
-            (*next-cursor-row* (prog1 restored-cursor-row
-                                  (setf restored-cursor-row nil)))
-            (*next-cursor-col* (prog1 restored-cursor-col
-                                  (setf restored-cursor-col nil)))
-            (*field-attribute-overrides* nil))
-        (let ((prep-result
-                (handler-case (prepare-screen dispatch-sym)
-                  (error (c)
-                    (let ((last (session-last-successful-screen *session*)))
-                      (when last
-                        (let ((id (generate-incident-id)))
-                          (log-incident id c)
-                          (setf (session-current-screen *session*) last
-                                (session-context *session*) (make-hash-table :test 'equal))
-                          (setf (gethash "errormsg" (session-context *session*))
-                                (format nil "Internal error. Incident: ~A" id))
-                          (return-from next-screen))))))))
-          (when (and prep-result (symbolp prep-result))
-            (multiple-value-bind (transition r c)
-                (apply-screen-transition prep-result screen-sym dispatch-sym)
-              (when (eq transition :exit)
-                (return-from run-screen-loop))
-              (when r
-                (setf restored-cursor-row r restored-cursor-col c)))
-            (return-from next-screen)))
-        ;; Menu screens: auto-set cursor to command field
-        (when (and is-menu (not *next-cursor-row*))
-          (setf *next-cursor-row* 21
-                *next-cursor-col* 14))
-        (multiple-value-bind (list-data-count list-data-total has-list-data)
-            (handler-case
-                (populate-field-values context field-values screen
-                                       dispatch-sym repeat-groups)
-              (error (c)
-                (let ((last (session-last-successful-screen *session*)))
-                  (when last
-                    (let ((id (generate-incident-id)))
-                      (log-incident id c)
-                      (setf (session-current-screen *session*) last
-                            (session-context *session*) (make-hash-table :test 'equal))
-                      (setf (gethash "errormsg" (session-context *session*))
-                            (format nil "Internal error. Incident: ~A" id))
-                      (return-from next-screen))))))
-          (set-framework-fields screen-sym field-values
-                                :no-command no-command :is-menu is-menu
-                                :full-control full-control)
-          (let* ((display-screen (apply-field-attribute-overrides
-                                 (if has-list-data
-                                     (filter-screen-fields screen repeat-groups
-                                                           list-data-count)
-                                     screen)))
-                 (response (prog1
-                               (show-screen-and-read screen display-screen
-                                                 screen-rules key-specs
-                                                 field-values dispatch-sym
-                                                 repeat-groups has-list-data
-                                                 list-data-count
-                                                 :no-command no-command
-                                                 :full-control full-control
-                                                 :no-clear no-clear)
-                             (setf no-clear nil))))
-            (setf (session-last-activity *session*) (get-universal-time)
-                  (session-last-successful-screen *session*) screen-sym)
-            (process-response response context dispatch-sym transient-fields
-                              repeat-groups has-list-data)
-            ;; Temporarily inject transient field values so key handlers can
-            ;; access them, then remove after dispatch so they don't persist.
-            (let ((resp-vals (cl3270:response-vals response)))
-              (when resp-vals
-                (dolist (k transient-fields)
-                  (multiple-value-bind (v present-p) (gethash k resp-vals)
-                    (when present-p
-                      (setf (gethash k context) v))))))
-            (let* ((aid-kw (aid-to-keyword (cl3270:response-aid response)))
-                   (key-spec (find-key-spec key-specs aid-kw))
-                   (resp-command
-                     (string-trim '(#\Space)
-                                  (or (gethash "command"
-                                               (cl3270:response-vals response))
-                                      "")))
-                   (result (prog1
-                               (dispatch-key context dispatch-sym aid-kw
-                                             key-spec has-list-data
-                                             repeat-groups list-data-total
-                                             app-package
-                                             resp-command)
-                             (dolist (k transient-fields)
-                               (remhash k context)))))
-              ;; Check anonymous access before transitioning
-              (let* ((target-sym (cond ((and (consp result) (eq (car result) :jump))
-                                        (cdr result))
-                                       ((symbolp result) result)))
-                     (checked-result
-                      (if (and target-sym
-                               (not (eq target-sym :stay))
-                               (not (eq target-sym :back))
-                               (not (eq target-sym :logoff))
-                               (not (session-authenticated-p *application* *session*)))
-                          (let* ((target-name (screen-name-string target-sym))
-                                 (target-info (gethash target-name (app-screens)))
-                                 (target-info (or target-info
-                                                  (when (find-screen-file target-name)
-                                                    (load-and-register-screen target-name)))))
-                            (if (and target-info
-                                     (not (screen-info-anonymous target-info)))
-                                (progn
-                                  (setf (gethash "errormsg" context)
-                                        (anonymous-access-denied-message *application*))
-                                  :stay)
-                                result))
-                          result)))
-              (setf no-clear (and (or (eq checked-result :stay)
-                                       (null checked-result))
-                                   (not (session-property *session* :force-redraw))))
-              (setf (session-property *session* :force-redraw) nil)
-              ;; Propagate set-cursor from key handler to next :stay iteration
-              (when (and no-clear *next-cursor-row*)
-                (setf restored-cursor-row *next-cursor-row*
-                      restored-cursor-col *next-cursor-col*))
-              (multiple-value-bind (transition-result saved-row saved-col)
-                  (apply-screen-transition checked-result screen-sym dispatch-sym)
-                (when saved-row
-                  (setf restored-cursor-row saved-row
-                        restored-cursor-col saved-col))
-                (when (eq transition-result :exit)
-                  (return)))))))))))))
+  (let (restored-cursor-row restored-cursor-col no-clear)
+    (loop (block next-screen
+            (let* ((screen-sym (session-current-screen *session*))
+                   (screen-info (ensure-screen-loaded screen-sym))
+                   (screen (screen-info-screen screen-info))
+                   (screen-rules (screen-info-rules screen-info))
+                   (key-specs (screen-info-keys screen-info))
+                   (repeat-groups (screen-info-repeat-groups screen-info))
+                   (no-command (screen-info-no-command screen-info))
+                   (is-menu (screen-info-menu screen-info))
+                   (full-control (screen-info-full-control screen-info))
+                   (context (session-context *session*))
+                   (dispatch-sym
+                     (intern-screen-name (screen-name-string screen-sym)
+                                         (or (screen-info-handler-package screen-info)
+                                             app-package)))
+                   (field-values (cl3270:make-dict :test #'equal)))
+              (ensure-key-handlers-validated dispatch-sym key-specs)
+              (remhash "cmdlabel" context)
+              (let ((*current-screen-keys*
+                      (mapcar (lambda (spec)
+                                (destructuring-bind (aid-kw label &rest rest) spec
+                                  (list aid-kw (if (getf rest :hidden) "" label))))
+                              key-specs))
+                    (*current-key-layout* (get-screen-key-layout screen-sym))
+                    (*next-cursor-row* (prog1 restored-cursor-row
+                                         (setf restored-cursor-row nil)))
+                    (*next-cursor-col* (prog1 restored-cursor-col
+                                         (setf restored-cursor-col nil)))
+                    (*field-attribute-overrides* nil))
+                ;; Error handler for screen rendering (prepare, populate, display).
+                ;; Restores to last successful screen with incident message.
+                (handler-bind
+                    (((and error (not end-of-file) (not idle-timeout-error)
+                           (not dynamic-area-error))
+                       (lambda (c)
+                         (handle-screen-render-error c)
+                         (return-from next-screen))))
+                  ;; Prepare
+                  (let ((prep-result (prepare-screen dispatch-sym)))
+                    (when (and prep-result (symbolp prep-result))
+                      (multiple-value-bind (transition r c)
+                          (apply-screen-transition prep-result screen-sym dispatch-sym)
+                        (when (eq transition :exit) (return-from run-screen-loop))
+                        (when r (setf restored-cursor-row r restored-cursor-col c)))
+                      (return-from next-screen)))
+                  (when (and is-menu (not *next-cursor-row*))
+                    (setf *next-cursor-row* 21 *next-cursor-col* 14))
+                  ;; Populate and display
+                  (multiple-value-bind (list-data-count list-data-total has-list-data)
+                      (populate-field-values context field-values screen
+                                             dispatch-sym repeat-groups)
+                    (set-framework-fields screen-sym field-values
+                                          :no-command no-command :is-menu is-menu
+                                          :full-control full-control)
+                    (let* ((display-screen
+                             (apply-field-attribute-overrides
+                              (if has-list-data
+                                  (filter-screen-fields screen repeat-groups list-data-count)
+                                  screen)))
+                           (response
+                             (prog1 (show-screen-and-read
+                                     screen display-screen screen-rules key-specs
+                                     field-values dispatch-sym repeat-groups
+                                     has-list-data list-data-count
+                                     :no-command no-command :full-control full-control
+                                     :no-clear no-clear)
+                               (setf no-clear nil))))
+                      (unless response (return-from next-screen))
+                      (setf (session-last-activity *session*) (get-universal-time)
+                            (session-last-successful-screen *session*) screen-sym)
+                      ;; Dispatch and transition
+                      (multiple-value-bind (transition new-no-clear saved-row saved-col)
+                          (dispatch-and-transition response dispatch-sym has-list-data
+                                                   list-data-total app-package)
+                        (setf no-clear new-no-clear)
+                        (when (and new-no-clear *next-cursor-row*)
+                          (setf restored-cursor-row *next-cursor-row*
+                                restored-cursor-col *next-cursor-col*))
+                        (when saved-row
+                          (setf restored-cursor-row saved-row
+                                restored-cursor-col saved-col))
+                        (when (eq transition :exit) (return))))))))))))
 
 (defun run-application (application conn devinfo &key tls-p connection-id)
   "Run an application's main loop for a single connection.

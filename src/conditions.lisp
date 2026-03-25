@@ -19,6 +19,12 @@
 Use this in key handlers for user-facing errors (e.g. validation failures)."
   (error 'application-error :message (apply #'format nil format-string args)))
 
+;;; Dynamic area error (signaled from update thread to main thread)
+
+(define-condition dynamic-area-error (error)
+  ()
+  (:report (lambda (c s) (declare (ignore c)) (write-string "Dynamic area update error" s))))
+
 ;;; Incident ID generation
 
 (defvar *incident-adjectives*
