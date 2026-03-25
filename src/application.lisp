@@ -52,6 +52,9 @@ KEY-NAME is the string name of the key (e.g. \"PF5\").")
   ((application :initarg :application :reader session-application)
    (active-application :accessor session-active-application :initform nil)
    (current-screen :accessor session-current-screen)
+   (last-successful-screen :initform nil :accessor session-last-successful-screen
+                           :documentation "Screen symbol that was last successfully displayed
+and accepted user input. Set after show-screen-and-read returns.")
    (last-activity :initform (get-universal-time) :accessor session-last-activity)
    (screen-stack :initform nil :accessor session-screen-stack)
    (context :initform (make-hash-table :test 'equal) :accessor session-context)
@@ -1507,7 +1510,18 @@ Returns the 3270 response."
             (*next-cursor-col* (prog1 restored-cursor-col
                                   (setf restored-cursor-col nil)))
             (*field-attribute-overrides* nil))
-        (let ((prep-result (prepare-screen dispatch-sym)))
+        (let ((prep-result
+                (handler-case (prepare-screen dispatch-sym)
+                  (error (c)
+                    (let ((last (session-last-successful-screen *session*)))
+                      (when last
+                        (let ((id (generate-incident-id)))
+                          (log-incident id c)
+                          (setf (session-current-screen *session*) last
+                                (session-context *session*) (make-hash-table :test 'equal))
+                          (setf (gethash "errormsg" (session-context *session*))
+                                (format nil "Internal error. Incident: ~A" id))
+                          (return-from next-screen))))))))
           (when (and prep-result (symbolp prep-result))
             (multiple-value-bind (transition r c)
                 (apply-screen-transition prep-result screen-sym dispatch-sym)
@@ -1521,8 +1535,19 @@ Returns the 3270 response."
           (setf *next-cursor-row* 21
                 *next-cursor-col* 14))
         (multiple-value-bind (list-data-count list-data-total has-list-data)
-            (populate-field-values context field-values screen
-                                   dispatch-sym repeat-groups)
+            (handler-case
+                (populate-field-values context field-values screen
+                                       dispatch-sym repeat-groups)
+              (error (c)
+                (let ((last (session-last-successful-screen *session*)))
+                  (when last
+                    (let ((id (generate-incident-id)))
+                      (log-incident id c)
+                      (setf (session-current-screen *session*) last
+                            (session-context *session*) (make-hash-table :test 'equal))
+                      (setf (gethash "errormsg" (session-context *session*))
+                            (format nil "Internal error. Incident: ~A" id))
+                      (return-from next-screen))))))
           (set-framework-fields screen-sym field-values
                                 :no-command no-command :is-menu is-menu
                                 :full-control full-control)
@@ -1541,7 +1566,8 @@ Returns the 3270 response."
                                                  :full-control full-control
                                                  :no-clear no-clear)
                              (setf no-clear nil))))
-            (setf (session-last-activity *session*) (get-universal-time))
+            (setf (session-last-activity *session*) (get-universal-time)
+                  (session-last-successful-screen *session*) screen-sym)
             (process-response response context dispatch-sym transient-fields
                               repeat-groups has-list-data)
             ;; Temporarily inject transient field values so key handlers can

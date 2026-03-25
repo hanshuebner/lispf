@@ -60,6 +60,7 @@
            #:session-active-application
            #:session-last-activity
            #:session-current-screen
+           #:session-last-successful-screen
            #:session-screen-stack
            #:session-context
            #:session-properties

@@ -50,4 +50,5 @@
            #:run-tests
            #:run-all-suites
            ;; Harness
-           #:with-test-app))
+           #:with-test-app
+           #:*test-app-port*))

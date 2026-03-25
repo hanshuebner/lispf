@@ -7,6 +7,9 @@
 
 (in-package #:lispf-test)
 
+(defvar *test-app-port* nil
+  "Port the test application is listening on. Set by with-test-app.")
+
 (defmacro with-test-app ((session-var app &key (port 0) (host "127.0.0.1"))
                           &body body)
   "Run BODY with a test application and s3270 session.
@@ -55,16 +58,26 @@ Cleans up on exit."
          (loop until ,ready-flag
                do (bt:condition-wait ,ready-cv ,ready-lock)))
        (unwind-protect
-            (progn
+            (let ((*test-app-port* ,actual-port-var))
               (setf ,s3270-var (launch-s3270))
               (s3270-connect ,s3270-var ,host-var ,actual-port-var)
               (let ((,session-var ,s3270-var))
                 ,@body))
-         ;; Cleanup
+         ;; Cleanup: disconnect clients, close listener, wait for sessions to drain
          (when ,s3270-var
            (ignore-errors (s3270-disconnect ,s3270-var))
            (ignore-errors (close-s3270 ,s3270-var)))
          (when ,listener-var
            (ignore-errors (usocket:socket-close ,listener-var)))
+         ;; Wait for session threads to exit (they remove themselves from the list)
+         (loop repeat 100
+               while (bt:with-lock-held ((lispf::application-sessions-lock ,app))
+                       (lispf::application-sessions ,app))
+               do (bt:thread-yield))
+         (let ((remaining (bt:with-lock-held ((lispf::application-sessions-lock ,app))
+                            (lispf::application-sessions ,app))))
+           (when remaining
+             (error "~D session thread~:P still alive after test cleanup"
+                    (length remaining))))
          (when (bt:thread-alive-p ,app-thread)
            (ignore-errors (bt:destroy-thread ,app-thread)))))))
