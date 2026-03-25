@@ -107,6 +107,7 @@
            #:remove-log-consumer
            ;; Idle timeout
            #:session-idle-timeout
+           #:session-cleanup
            ;; Access control
            #:session-authenticated-p
            #:anonymous-access-denied-message

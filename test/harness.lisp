@@ -70,9 +70,11 @@ Cleans up on exit."
          (when ,listener-var
            (ignore-errors (usocket:socket-close ,listener-var)))
          ;; Wait for session threads to exit (they remove themselves from the list)
-         (loop repeat 100
-               while (bt:with-lock-held ((lispf::application-sessions-lock ,app))
-                       (lispf::application-sessions ,app))
+         (loop with deadline = (+ (get-internal-real-time)
+                                  (* 5 internal-time-units-per-second))
+               while (and (bt:with-lock-held ((lispf::application-sessions-lock ,app))
+                            (lispf::application-sessions ,app))
+                          (< (get-internal-real-time) deadline))
                do (bt:thread-yield))
          (let ((remaining (bt:with-lock-held ((lispf::application-sessions-lock ,app))
                             (lispf::application-sessions ,app))))

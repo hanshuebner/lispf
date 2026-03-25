@@ -1659,6 +1659,14 @@ Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
                                 restored-cursor-col saved-col))
                         (when (eq transition :exit) (return))))))))))))
 
+(defgeneric session-cleanup (application session)
+  (:documentation "Called when a session ends, regardless of how it ended
+(normal logout, connection drop, error). Runs in the session's thread
+with *session* and *application* bound. The default method does nothing.")
+  (:method (application session)
+    (declare (ignore application session))
+    nil))
+
 (defun run-application (application conn devinfo &key tls-p connection-id)
   "Run an application's main loop for a single connection.
 Binds dynamic variables, creates a session, and loops through screens.
@@ -1680,6 +1688,7 @@ TLS-P indicates the connection is TLS-encrypted."
            (setf (session-current-screen *session*)
                  (application-entry-screen application))
            (run-screen-loop app-package))
+      (ignore-errors (session-cleanup application *session*))
       (bt:with-lock-held ((application-sessions-lock application))
         (setf (application-sessions application)
               (remove *session* (application-sessions application)))))))
