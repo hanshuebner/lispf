@@ -448,14 +448,18 @@ blank space. Keys not in the layout (added at runtime) are appended."
 (defun check-screen-key-handlers (screen-sym key-specs)
   "Check that all key-specs without :back or :goto have a matching handle-key method.
 Signals a warning for any key that would fall through to the default handler."
-  (let ((default-method (find-method #'handle-key '()
-                                     (list (find-class t) (find-class t))))
-        (list-screen-p (has-list-data-getter-p screen-sym)))
+  (let* ((default-method (find-method #'handle-key '()
+                                      (list (find-class t) (find-class t))))
+         (list-screen-p (has-list-data-getter-p screen-sym))
+         (name-string (screen-name-string screen-sym))
+         (info (gethash name-string (app-screens)))
+         (menu-p (and info (screen-info-menu info))))
     (dolist (spec key-specs)
       (destructuring-bind (aid-keyword label &rest rest) spec
         (declare (ignore label))
         (unless (or (getf rest :back) (getf rest :goto)
-                    (and list-screen-p (member aid-keyword '(:pf7 :pf8))))
+                    (and list-screen-p (member aid-keyword '(:pf7 :pf8)))
+                    (and menu-p (eq aid-keyword :enter)))
           (let* ((methods (compute-applicable-methods
                            #'handle-key (list screen-sym aid-keyword)))
                  (has-specific (find-if (lambda (m) (not (eq m default-method)))
