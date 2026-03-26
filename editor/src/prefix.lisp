@@ -4,71 +4,18 @@
 
 (in-package #:lispf-editor)
 
-(defun parse-count (text start)
-  "Parse a numeric count from TEXT starting at START. Returns 1 if no digits."
-  (let ((digits (subseq text start)))
-    (if (and (plusp (length digits)) (every #'digit-char-p digits))
-        (parse-integer digits)
-        1)))
-
-(defun strip-line-number-suffix (text cmd-len)
-  "Extract the command portion from TEXT, ignoring trailing remnants of line numbers.
-In a 3270 overtype field, the user types over the start of '000123', leaving
-digits from the old value after the command. CMD-LEN is the length of the
-command prefix. Returns the meaningful part after the command (spaces + digits
-that are part of the command, not remnants)."
-  (let ((rest (subseq text cmd-len)))
-    ;; If rest starts with a space, the user explicitly separated command from count
-    ;; If rest is all digits, it could be a count OR leftover line number digits
-    ;; We treat digits immediately after the command letter as a count only if
-    ;; they are followed by non-digits or the string is short enough to be intentional
-    rest))
-
-(defun parse-prefix-count (text cmd-len)
-  "Parse a count from TEXT after CMD-LEN characters of command.
-Handles the 3270 overtype case where old line number digits remain.
-A count is a non-zero digit (1-9) immediately after the command letter.
-Leading zeros indicate line number remnants, not a count."
-  (let ((rest (subseq text cmd-len)))
-    (cond
-      ;; Nothing after command
-      ((zerop (length rest)) 1)
-      ;; Spaces after command (user cleared the rest)
-      ((char= (char rest 0) #\Space) 1)
-      ;; Non-zero digit = explicit count
-      ((and (digit-char-p (char rest 0))
-            (char/= (char rest 0) #\0))
-       (digit-char-p (char rest 0)))
-      ;; Zero or non-digit = no explicit count (line number remnant)
-      (t 1))))
-
-(defun parse-single-char-command (char raw)
-  "Parse a single-character prefix command with optional count.
-CHAR is the command character, RAW is the full trimmed uppercase input.
-Returns (values command count), where COMMAND can be nil.
-A trailing digit is only treated as a count when the command character is at
-position 0 (the user typed e.g. \"D3\"); otherwise the digit is a remnant of
-the overwritten line number."
-  (let* ((cmd-pos (position char raw))
-         (count (or (when (and cmd-pos (zerop cmd-pos))
-                      (let ((next-pos 1))
-                        (when (and (< next-pos (length raw))
-                                   (digit-char-p (char raw next-pos))
-                                   (char/= (char raw next-pos) #\0))
-                          (digit-char-p (char raw next-pos)))))
-                    1))
-         (cmd (case char
-                (#\I :i) (#\D :d) (#\R :r) (#\C :c) (#\M :m)
-                (#\( :shift-left) (#\) :shift-right))))
-    (values cmd count)))
-
-(defun parse-prefix-command (text)
+(defun parse-prefix-command (cursor-col text)
   "Parse a prefix command from a 3270 prefix field value.
-Handles overtype mode where the user types over an existing line number.
-Non-digit characters are extracted from the field since line numbers are
-all digits - the user's typed command is whatever isn't a digit.
+CURSOR-COL is the cursor column within this field (0-based) when the cursor
+is in this field, or NIL for fields without the cursor.
+For non-cursor fields, all digits are stripped as line number remnants.
+For the cursor field, only text up to the cursor position is considered;
+digits between the command and cursor are the count argument.
 Returns (values command count) or nil."
-  (let* ((raw (string-trim '(#\Space) (string-upcase text)))
+  (let* ((effective (if cursor-col
+                        (subseq text 0 (min cursor-col (length text)))
+                        text))
+         (raw (string-trim '(#\Space) (string-upcase effective)))
          (command-chars (remove-if #'digit-char-p raw))
          (trimmed (string-trim '(#\Space) command-chars)))
     (when (plusp (length trimmed))
@@ -81,7 +28,20 @@ Returns (values command count) or nil."
           ((:a :b) (values sym 0))
           (otherwise
            (when (= (length trimmed) 1)
-             (parse-single-char-command (char trimmed 0) raw))))))))
+             (let* ((char (char trimmed 0))
+                    (cmd (case char
+                           (#\I :i) (#\D :d) (#\R :r) (#\C :c) (#\M :m)
+                           (#\( :shift-left) (#\) :shift-right))))
+               (when cmd
+                 (values cmd
+                         (if cursor-col
+                             (let* ((cmd-pos (position char raw))
+                                    (after (when cmd-pos (subseq raw (1+ cmd-pos))))
+                                    (digits (when after (remove-if-not #'digit-char-p after))))
+                               (if (and digits (plusp (length digits)))
+                                   (parse-integer digits)
+                                   1))
+                             1)))))))))))
 
 ;;; ============================================================
 ;;; Prefix command execution
@@ -193,42 +153,52 @@ batch, they are executed immediately without pending."
         (did-modify nil)
         (result-message nil)
         (navigate-to nil))
+    ;; Check for error entries from process-data-edits
+    (let ((err (find :error commands :key #'first)))
+      (when err
+        (return-from execute-prefix-commands (second err))))
+
     ;; Save undo state before any modifications
     (save-undo-state session)
 
-    ;; First pass: validate and handle block commands
-    ;; Check for too many markers or mixed block types
-    (let ((block-types-found '()))
+    ;; First pass: validate prefix commands
+    ;; Check for too many markers, mixed block types, or mixed single/double
+    (let ((block-types-found '())
+          (has-single-cmd (some (lambda (entry)
+                                  (member (second entry)
+                                          '(:i :d :r :c :m :uc :lc
+                                            :shift-left :shift-right)))
+                                commands)))
       (dolist (block-cmd '(:dd :cc :mm :rr :jj))
         (let ((count (length (find-block-markers commands block-cmd))))
           (when (> count 2)
             (unless did-modify (pop (editor-undo-stack session)))
             (return-from execute-prefix-commands
-              (format nil "Too many ~A markers - use at most two"
-                      (string-upcase (symbol-name block-cmd)))))
+              (format nil "Too many ~A markers" (symbol-name block-cmd))))
           (when (plusp count)
             (push block-cmd block-types-found))))
       (when (> (length block-types-found) 1)
         (unless did-modify (pop (editor-undo-stack session)))
         (return-from execute-prefix-commands
-          "Cannot mix different block commands - use RESET")))
+          "Cannot mix different block commands"))
+      (when (and has-single-cmd block-types-found)
+        (unless did-modify (pop (editor-undo-stack session)))
+        (return-from execute-prefix-commands
+          "Cannot mix single and block prefix commands")))
 
     (dolist (block-cmd '(:dd :cc :mm :rr :jj))
       (let ((markers (find-block-markers commands block-cmd)))
         (when (>= (length markers) 2)
           ;; Two markers + pending = too many
           (when (and pending (eq block-cmd (first pending)))
-            (setf (editor-pending-block session) nil)
             (unless did-modify (pop (editor-undo-stack session)))
             (return-from execute-prefix-commands
-              (format nil "Too many ~A markers - use RESET"
-                      (string-upcase (symbol-name block-cmd)))))
+              (format nil "Too many ~A markers" (symbol-name block-cmd))))
           ;; Two markers in same batch - check for conflicts with pending
           (when (and pending (not (eq block-cmd (first pending))))
-            (setf (editor-pending-block session) nil)
             (unless did-modify (pop (editor-undo-stack session)))
             (return-from execute-prefix-commands
-              "Conflicting pending command - use RESET"))
+              "Conflicting block command"))
           (let* ((first-marker (first markers))
                  (second-marker (second markers))
                  (idx1 (first first-marker))
@@ -343,12 +313,11 @@ batch, they are executed immediately without pending."
                             (return-from execute-prefix-commands
                               (format nil "~A block marked - enter A or B target"
                                       (if (eq block-cmd :cc) "Copy" "Move"))))))))))
-              ;; Conflicting type
+              ;; Conflicting type — keep pending, report error
               (t
-               (setf (editor-pending-block session) nil)
                (unless did-modify (pop (editor-undo-stack session)))
                (return-from execute-prefix-commands
-                 "Conflicting pending command - use RESET")))))))
+                 "Conflicting block command")))))))
 
     ;; Second pass: handle A/B targets for pending copy/move
     (when (and pending (member (first pending) '(:cc :mm :c :m)))

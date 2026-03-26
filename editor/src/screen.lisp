@@ -109,6 +109,13 @@ Returns a list of (real-index cmd count row)."
          (top (editor-top-line session))
          (col-offset (editor-col-offset session))
          (response (lispf:current-response))
+         (response-cursor-row (if response
+                                   (cl3270:response-row response)
+                                   (lispf:cursor-row)))
+         (response-cursor-col (if response
+                                   (cl3270:response-col response)
+                                   (lispf:cursor-col)))
+         (cursor-slot (cursor-data-row response-cursor-row layout))
          ;; Scale is at a fixed screen row within the data area
          (scale-slot (when (layout-scale-row layout)
                        (let ((slot (- (layout-scale-row layout)
@@ -157,24 +164,30 @@ Returns a list of (real-index cmd count row)."
         ;; Parse prefix commands only from modified prefix fields
         (when prefix-modified
           (unless (pending-prefix-for-line-p session real prefix-val)
-            (multiple-value-bind (cmd count) (parse-prefix-command prefix-val)
-              (when cmd
-                (cond
-                  ;; Top-of-Data marker: allow I (insert at top), A/B targets
-                  ((and is-marker (= virtual 0))
-                   (when (member cmd '(:i :a :b))
-                     (push (list -1 cmd count i) commands)))
-                  ;; Bottom-of-Data marker: allow I (append), A/B targets
-                  ((and is-marker (= virtual (1+ (line-count session))))
-                   (when (member cmd '(:i :a :b))
-                     (push (list (1- (line-count session)) cmd count i) commands)))
-                  ;; Regular file line
-                  (real
-                   (push (list real cmd count i) commands))
-                  ;; Empty row past EOF
-                  (t
-                   (when (member cmd '(:a :b))
-                     (push (list (line-count session) cmd count i) commands))))))))))))
+            (let* ((prefix-cursor-col
+                     (when (and (= i cursor-slot)
+                                (< response-cursor-col (layout-data-col-start layout)))
+                       response-cursor-col)))
+              (multiple-value-bind (cmd count) (parse-prefix-command prefix-cursor-col prefix-val)
+                (when cmd
+                  (cond
+                    ;; Top-of-Data marker: allow I (insert at top), A/B targets
+                    ((and is-marker (= virtual 0))
+                     (if (member cmd '(:i :a :b))
+                         (push (list -1 cmd count i) commands)
+                         (push (list :error "Command not valid on marker line") commands)))
+                    ;; Bottom-of-Data marker: allow I (append), A/B targets
+                    ((and is-marker (= virtual (1+ (line-count session))))
+                     (if (member cmd '(:i :a :b))
+                         (push (list (1- (line-count session)) cmd count i) commands)
+                         (push (list :error "Command not valid on marker line") commands)))
+                    ;; Regular file line
+                    (real
+                     (push (list real cmd count i) commands))
+                    ;; Empty row past EOF
+                    (t
+                     (when (member cmd '(:a :b))
+                       (push (list (line-count session) cmd count i) commands)))))))))))))
     (nreverse commands)))
 
 (defun process-editor-changes (session context)

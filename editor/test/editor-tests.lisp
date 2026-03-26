@@ -268,119 +268,135 @@
 ;;; ============================================================
 
 (define-test parse-prefix-insert ()
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "I")
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command nil "I")
     (assert-equal :i cmd)
     (assert-equal 1 count))
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "i5")
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command 6 "i5")
     (assert-equal :i cmd)
-    (assert-equal 5 count)))
+    (assert-equal 5 count))
+  ;; Multi-digit count
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command 6 "I10")
+    (assert-equal :i cmd)
+    (assert-equal 10 count)))
 
 (define-test parse-prefix-delete ()
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "D")
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command nil "D")
     (assert-equal :d cmd)
     (assert-equal 1 count))
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "D3")
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command 6 "D3")
     (assert-equal :d cmd)
     (assert-equal 3 count)))
 
 (define-test parse-prefix-block-delete ()
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "DD")
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command nil "DD")
     (assert-equal :dd cmd)
     (assert-equal 0 count)))
 
 (define-test parse-prefix-repeat ()
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "R")
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command nil "R")
     (assert-equal :r cmd)
     (assert-equal 1 count))
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "R3")
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command 6 "R3")
     (assert-equal :r cmd)
     (assert-equal 3 count)))
 
 (define-test parse-prefix-block-repeat ()
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "RR")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command nil "RR")
     (assert-equal :rr cmd)))
 
 (define-test parse-prefix-copy-move ()
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "C")
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command nil "C")
     (assert-equal :c cmd)
     (assert-equal 1 count))
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "M2")
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command 6 "M2")
     (assert-equal :m cmd)
     (assert-equal 2 count)))
 
 (define-test parse-prefix-block-copy-move ()
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "CC")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command nil "CC")
     (assert-equal :cc cmd))
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "MM")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command nil "MM")
     (assert-equal :mm cmd)))
 
 (define-test parse-prefix-targets ()
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "A")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command nil "A")
     (assert-equal :a cmd))
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "B")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command nil "B")
     (assert-equal :b cmd)))
 
 (define-test parse-prefix-case ()
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "UC")
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command nil "UC")
     (assert-equal :uc cmd)
     (assert-equal 1 count))
   ;; LC with digits stripped (digits are line number remnants)
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "LC0001")
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command nil "LC0001")
     (assert-equal :lc cmd)
     (assert-equal 1 count))
   ;; UC typed anywhere in the field
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "00UC01")
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command nil "00UC01")
     (assert-equal :uc cmd)
     (assert-equal 1 count)))
 
 (define-test parse-prefix-shift ()
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "(")
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command nil "(")
     (assert-equal :shift-left cmd)
     (assert-equal 1 count))
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command ")5")
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command 6 ")5")
     (assert-equal :shift-right cmd)
     (assert-equal 5 count)))
 
 (define-test parse-prefix-empty ()
-  (assert-nil (ed:parse-prefix-command ""))
-  (assert-nil (ed:parse-prefix-command "   ")))
+  (assert-nil (ed:parse-prefix-command nil ""))
+  (assert-nil (ed:parse-prefix-command nil "   ")))
 
 (define-test parse-prefix-unknown ()
-  (assert-nil (ed:parse-prefix-command "X"))
-  (assert-nil (ed:parse-prefix-command "ZZ")))
+  (assert-nil (ed:parse-prefix-command nil "X"))
+  (assert-nil (ed:parse-prefix-command nil "ZZ")))
 
 (define-test parse-prefix-overtyped-line-number ()
   ;; Commands typed at start of field
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "DD0001")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command nil "DD0001")
     (assert-equal :dd cmd "DD at start"))
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "CC0001")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command nil "CC0001")
     (assert-equal :cc cmd "CC at start"))
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "MM0001")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command nil "MM0001")
     (assert-equal :mm cmd "MM at start"))
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "RR0001")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command nil "RR0001")
     (assert-equal :rr cmd "RR at start"))
   ;; Commands typed in middle of field (digits stripped)
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "000D01")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command nil "000D01")
     (assert-equal :d cmd "D in middle"))
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "00DD01")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command nil "00DD01")
     (assert-equal :dd cmd "DD in middle"))
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "000I01")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command nil "000I01")
     (assert-equal :i cmd "I in middle"))
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "000A01")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command nil "000A01")
     (assert-equal :a cmd "A in middle"))
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "00B001")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command nil "00B001")
     (assert-equal :b cmd "B in middle"))
-  ;; Single command with count (I5 typed at start)
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "I50001")
-    (assert-equal :i cmd "I5 at start")
-    (assert-equal 5 count "I5 count"))
+  ;; Single command without cursor: digits are line number remnants, count=1
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command nil "I50001")
+    (assert-equal :i cmd "I at start, no cursor")
+    (assert-equal 1 count "no cursor = count 1"))
+  ;; With cursor at col 2: text up to cursor is "I5" → count 5
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command 2 "I50001")
+    (assert-equal :i cmd "cursor at col 2")
+    (assert-equal 5 count "I5 = count 5"))
+  ;; With cursor at col 3: text up to cursor is "I50" → count 50
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command 3 "I50001")
+    (assert-equal :i cmd "cursor at col 3")
+    (assert-equal 50 count "I50 = count 50"))
+  ;; D12345 with cursor at col 3: text up to cursor is "D12" → count 12
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command 3 "D12345")
+    (assert-equal :d cmd "D with cursor at 3")
+    (assert-equal 12 count "D12 = count 12"))
   ;; UC/LC overtyped
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "UC0001")
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command nil "UC0001")
     (assert-equal :uc cmd "UC overtyped")
     (assert-equal 1 count)))
 
 (define-test parse-prefix-with-spaces ()
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "  D3  ")
+  (multiple-value-bind (cmd count) (ed:parse-prefix-command 6 "  D3  ")
     (assert-equal :d cmd)
     (assert-equal 3 count)))
 
@@ -631,10 +647,10 @@
 
 (define-test parse-prefix-jj ()
   ;; JJ is a simple block marker (no width)
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "JJ")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command nil "JJ")
     (assert-equal :jj cmd))
   ;; Overtyped: JJ over 000001
-  (multiple-value-bind (cmd) (ed:parse-prefix-command "JJ0001")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command nil "JJ0001")
     (assert-equal :jj cmd)))
 
 ;;; --- JJ marks region, JUSTIFY command executes ---
@@ -870,14 +886,14 @@ MDT-based detection treats all fields as modified (the test default)."
     (setf (ed:editor-pending-block s) nil)
     (assert-nil (ed:editor-pending-block s))))
 
-(define-test conflicting-block-resets ()
+(define-test conflicting-block-preserves-pending ()
   (let ((s (make-session "a" "b" "c")))
     ;; Start DD block
     (ed:execute-prefix-commands s '((0 :dd 0 0)))
-    ;; Try CC instead of DD
+    ;; Try CC instead of DD — error but DD stays pending
     (let ((msg (ed:execute-prefix-commands s '((2 :cc 0 2)))))
       (assert-string-contains msg "Conflicting")
-      (assert-nil (ed:editor-pending-block s)))))
+      (assert-true (ed:editor-pending-block s) "DD should still be pending"))))
 
 (define-test three-markers-same-type-error ()
   ;; Three DD markers on one screen should be an error
@@ -922,6 +938,45 @@ MDT-based detection treats all fields as modified (the test default)."
     (assert-true (ed:editor-pending-block s))
     (let ((msg (ed:execute-prefix-commands s '((3 :a 0 3)))))
       (assert-string-contains msg "copied"))))
+
+(define-test prefix-on-marker-rejected ()
+  ;; Error entries from process-data-edits for invalid commands on markers
+  (let ((s (make-session "a" "b")))
+    (let ((msg (ed:execute-prefix-commands s '((:error "Command not valid on marker line")))))
+      (assert-string-contains msg "marker")))
+  ;; Valid marker commands should still work (I on TOF)
+  (let ((s (make-session "a" "b")))
+    (let ((msg (ed:execute-prefix-commands s '((-1 :i 1 0)))))
+      (assert-string-contains msg "inserted"))))
+
+(define-test mixed-single-and-double-error ()
+  ;; D and DD on the same screen should be an error
+  (let ((s (make-session "a" "b" "c" "d")))
+    (let ((msg (ed:execute-prefix-commands s '((0 :d 1 0) (2 :dd 0 2)))))
+      (assert-string-contains msg "Cannot mix")))
+  ;; I and CC on the same screen should be an error
+  (let ((s (make-session "a" "b" "c" "d")))
+    (let ((msg (ed:execute-prefix-commands s '((0 :i 1 0) (2 :cc 0 2)))))
+      (assert-string-contains msg "Cannot mix"))))
+
+(define-test conflicting-command-preserves-pending ()
+  ;; Set DD pending, then enter a conflicting CC → error but DD stays pending
+  (let ((s (make-session "a" "b" "c" "d")))
+    (ed:execute-prefix-commands s '((0 :dd 0 0)))
+    (assert-true (ed:editor-pending-block s) "DD should be pending")
+    (let ((msg (ed:execute-prefix-commands s '((2 :cc 0 2)))))
+      (assert-string-contains msg "Conflicting")
+      (assert-true (ed:editor-pending-block s) "DD should still be pending"))))
+
+(define-test single-command-error-preserves-pending ()
+  ;; Set DD pending, then enter D → error but DD stays pending
+  (let ((s (make-session "a" "b" "c" "d")))
+    (ed:execute-prefix-commands s '((0 :dd 0 0)))
+    (assert-true (ed:editor-pending-block s))
+    (let ((msg (ed:execute-prefix-commands s '((2 :d 1 2)))))
+      (assert-string-contains msg "pending")
+      (assert-true (ed:editor-pending-block s) "DD should still be pending")
+      (assert-lines s '("a" "b" "c" "d") "no changes made"))))
 
 ;;; ============================================================
 ;;; Primary command tests
@@ -1647,6 +1702,56 @@ Moves cursor to command field before pressing Enter to avoid auto-insert."
   (move-cursor s 22 7)
   (press-enter s))
 
+(define-test e2e-prefix-delete-cursor-in-prefix ()
+  ;; Type "d" in prefix field with cursor staying in the prefix area, press Enter.
+  ;; Should delete the line, NOT insert a new one.
+  (let ((path #P"/tmp/lispf-e2e-delete-prefix.txt"))
+    (unwind-protect
+         (progn
+           (ed:write-file-lines path '("alpha" "bravo" "charlie" "delta"))
+           (with-test-app (s ed::*editor-app* :port 13283)
+             (type-text s (namestring path))
+             (press-enter s)
+             (assert-screen-contains s "Size=4")
+             ;; Type d on line 3 (screen row 4), keep cursor in prefix field
+             (move-cursor s 4 1)
+             (type-text s "d")
+             ;; Do NOT move cursor — cursor stays at prefix col 2
+             (press-enter s)
+             (assert-screen-contains s "1 line deleted")
+             (assert-screen-contains s "Size=3")
+             ;; Cancel
+             (move-cursor s 22 6)
+             (type-text s "CANCEL")
+             (press-enter s)
+             (assert-on-screen s "OPEN")))
+      (ignore-errors (delete-file path)))))
+
+(define-test e2e-prefix-insert-with-count ()
+  ;; Type "i20" in a prefix field with cursor staying in the prefix area.
+  ;; Should insert 20 lines.
+  (let ((path #P"/tmp/lispf-e2e-insert-count.txt"))
+    (unwind-protect
+         (progn
+           (ed:write-file-lines path '("alpha" "bravo" "charlie"))
+           (with-test-app (s ed::*editor-app* :port 13282)
+             (type-text s (namestring path))
+             (press-enter s)
+             (assert-screen-contains s "Size=3")
+             ;; Type i20 on line 1 (screen row 3), keep cursor in prefix field
+             (move-cursor s 3 1)
+             (type-text s "i20")
+             ;; Do NOT move cursor to command field — cursor stays at prefix col 4
+             (press-enter s)
+             (assert-screen-contains s "20 lines inserted")
+             (assert-screen-contains s "Size=23")
+             ;; Cancel
+             (move-cursor s 22 6)
+             (type-text s "CANCEL")
+             (press-enter s)
+             (assert-on-screen s "OPEN")))
+      (ignore-errors (delete-file path)))))
+
 (define-test e2e-comprehensive-editing ()
   ;; Comprehensive test exercising: inline edit, prefix commands (i, d, dd, cc, a),
   ;; primary commands (FIND, CHANGE, UNDO, SAVE, TOP, BOTTOM), PF3 exit with
@@ -1704,6 +1809,7 @@ Moves cursor to command field before pressing Enter to avoid auto-insert."
              (type-text s "dd")
              (move-cursor s 6 1)
              (type-text s "dd")
+             (move-cursor s 22 7)
              (press-enter s)
              (assert-screen-contains s "deleted")
              (assert-screen-contains s "Size=6")
@@ -1716,6 +1822,7 @@ Moves cursor to command field before pressing Enter to avoid auto-insert."
              (type-text s "cc")
              (move-cursor s 7 1)
              (type-text s "a")
+             (move-cursor s 22 7)
              (press-enter s)
              (assert-screen-contains s "copied")
              (assert-screen-contains s "Size=8")
