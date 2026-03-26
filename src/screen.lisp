@@ -128,6 +128,8 @@
            #:load-application-menus
            #:application-menus
            #:application-menu-entries
+           ;; Key labels
+           #:format-key-labels
            ;; Field attribute overrides
            #:set-field-attribute
            ;; Title utilities

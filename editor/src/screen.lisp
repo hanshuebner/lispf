@@ -193,7 +193,7 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
 ;;; ============================================================
 
 (lispf:define-screen-update edit (ed-status ed-message ed-cmdlabel ed-command
-                                             prefix data)
+                                             prefix data ed-keys)
   (let* ((session lispf:*session*)
          (layout (editor-layout session))
          (top (editor-top-line session))
@@ -303,6 +303,11 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
             (setf (editor-next-cursor session) nil))
           (lispf:set-cursor (layout-command-row layout)
                            (1+ (length (layout-command-prompt layout))))))
+    ;; Show repeat keys when a find/change has been done
+    (when (editor-last-find session)
+      (lispf:show-key :pf5 "RFnd"))
+    (when (editor-last-change session)
+      (lispf:show-key :pf6 "RChg"))
     ;; Show scroll keys
     (when (> top 0)
       (lispf:show-key :pf7 "Up"))
@@ -310,7 +315,9 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
       (lispf:show-key :pf8 "Down"))
     (when (> (editor-col-offset session) 0)
       (lispf:show-key :pf10 "Left"))
-    (lispf:show-key :pf11 "Right")))
+    (lispf:show-key :pf11 "Rght")
+    ;; Render key labels
+    (setf ed-keys (or (lispf:format-key-labels) ""))))
 
 ;;; ============================================================
 ;;; Edit screen - key handlers

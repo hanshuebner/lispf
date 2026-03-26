@@ -5,20 +5,20 @@
 
 
 
-
 "
  :fields ((:from (0 0) :len 79 :name ed-status :intense t)
           (:from (1 0) :len 79 :name ed-message :color red)
-          (:from (2 0) :len 6 :name prefix :write t :color green :repeat 21)
-          (:from (2 7) :len 72 :name data :write t :color green :repeat 21)
-          (:from (23 0) :len 5 :name ed-cmdlabel :color turquoise)
-          (:from (23 6) :len 73 :name ed-command :write t :highlighting underscore))
+          (:from (2 0) :len 6 :name prefix :write t :color green :repeat 20)
+          (:from (2 7) :len 72 :name data :write t :color green :repeat 20)
+          (:from (22 0) :len 5 :name ed-cmdlabel :color turquoise)
+          (:from (22 6) :len 73 :name ed-command :write t :highlighting underscore)
+          (:from (23 0) :len 79 :name ed-keys))
  :keys ((:enter "")
         (:pf1 "Help" :hidden t)
         (:pf3 "Exit")
-        (:pf5 "RFind" :hidden t)
+        (:pf5 "RFnd" :hidden t)
         (:pf6 "RChg" :hidden t)
         (:pf7 "Up" :hidden t)
         (:pf8 "Down" :hidden t)
         (:pf10 "Left" :hidden t)
-        (:pf11 "Right" :hidden t)))
+        (:pf11 "Rght" :hidden t)))

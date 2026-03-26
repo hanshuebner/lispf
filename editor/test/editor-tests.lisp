@@ -122,11 +122,11 @@
 (define-test layout-default-page-size ()
   (let ((layout (ed:make-default-layout)))
     ;; Default: rows 2-22 = 21 data lines
-    (assert-equal 21 (ed:page-size layout))))
+    (assert-equal 20 (ed:page-size layout))))
 
 (define-test layout-session-page-size ()
   (let ((s (make-session "a")))
-    (assert-equal 21 (ed:page-size s))))
+    (assert-equal 20 (ed:page-size s))))
 
 (define-test layout-validation-overlap ()
   ;; Message row inside data area should error
@@ -1452,8 +1452,8 @@ Returns T if the file was falsely marked as modified."
              :actual (string-right-trim '(#\Space) status)))))
 
 (defun assert-command-field-clean (session description)
-  "Assert the command field area (row 23) contains no spurious text."
-  (let* ((cmd-area (screen-text-at session 23 6 73))
+  "Assert the command field area (row 22) contains no spurious text."
+  (let* ((cmd-area (screen-text-at session 22 6 73))
          (trimmed (string-right-trim '(#\Space) cmd-area)))
     (when (plusp (length trimmed))
       (error 'test-failure :description description
@@ -1559,7 +1559,7 @@ Returns T if the file was falsely marked as modified."
              ;; Cursor should be on the new line (row 5 = second data line, col 7 = data start)
              (assert-cursor-at s 4 7)
              ;; Cancel to exit without saving
-             (move-cursor s 23 6)
+             (move-cursor s 22 6)
              (type-text s "CANCEL")
              (press-enter s)
              (assert-on-screen s "OPEN")))
@@ -1591,7 +1591,7 @@ Returns T if the file was falsely marked as modified."
 
 (defun e2e-type-command (s command)
   "Type a command in the editor command field and press Enter."
-  (move-cursor s 23 7)
+  (move-cursor s 22 7)
   (erase-eof s)
   (type-text s command)
   (press-enter s))
@@ -1601,7 +1601,7 @@ Returns T if the file was falsely marked as modified."
 Moves cursor to command field before pressing Enter to avoid auto-insert."
   (move-cursor s (+ 2 row) 1)
   (type-text s text)
-  (move-cursor s 23 7)
+  (move-cursor s 22 7)
   (press-enter s))
 
 (define-test e2e-comprehensive-editing ()
@@ -1623,7 +1623,7 @@ Moves cursor to command field before pressing Enter to avoid auto-insert."
              ;; Move cursor to command field before Enter to avoid auto-insert
              (move-cursor s 3 7)
              (type-text s "ALPHA")
-             (move-cursor s 23 7)
+             (move-cursor s 22 7)
              (press-enter s)
              (assert-screen-contains s "ALPHA")
 

@@ -424,6 +424,12 @@ blank space. Keys not in the layout (added at runtime) are appended."
     (unless (every (lambda (c) (char= c #\Space)) line)
       line)))
 
+(defun format-key-labels ()
+  "Return the current key labels string for display.
+Call from within a define-screen-update body. Useful for full-control screens
+that need to render key labels themselves."
+  (format-key-labels-from-specs *current-screen-keys* *current-key-layout*))
+
 (defun find-key-spec (key-specs aid-keyword)
   "Find the key spec for AID-KEYWORD in KEY-SPECS. Returns the spec or nil."
   (find aid-keyword key-specs :key #'first))

@@ -24,9 +24,9 @@
                 :documentation "Screen row for error/info messages.")
    (data-start-row :initarg :data-start-row :initform 2 :accessor layout-data-start-row
                    :documentation "First screen row with file data.")
-   (data-end-row :initarg :data-end-row :initform 22 :accessor layout-data-end-row
+   (data-end-row :initarg :data-end-row :initform 21 :accessor layout-data-end-row
                  :documentation "Last screen row with file data.")
-   (command-row :initarg :command-row :initform 23 :accessor layout-command-row
+   (command-row :initarg :command-row :initform 22 :accessor layout-command-row
                 :documentation "Screen row for command input.")
    (command-prompt :initarg :command-prompt :initform "====>" :accessor layout-command-prompt
                    :documentation "Command prompt string.")
