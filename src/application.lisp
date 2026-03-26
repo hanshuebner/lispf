@@ -745,6 +745,40 @@ Call from within a define-screen-update body."
   (setf *next-cursor-row* row
         *next-cursor-col* col))
 
+(defun writable-field-positions (screen-name)
+  "Return a sorted list of (row col) data-start positions for writable fields.
+SCREEN-NAME is a symbol. Uses the screen template definition."
+  (let ((info (ensure-screen-loaded screen-name))
+        (positions nil))
+    (dolist (field (cl3270:screen-fields (screen-info-screen info)))
+      (when (cl3270::field-write field)
+        (let ((attr-row (cl3270:field-row field))
+              (attr-col (cl3270:field-col field)))
+          (if (>= attr-col 79)
+              (push (list (mod (1+ attr-row) 24) 0) positions)
+              (push (list attr-row (1+ attr-col)) positions)))))
+    (sort positions (lambda (a b)
+                      (or (< (first a) (first b))
+                          (and (= (first a) (first b))
+                               (< (second a) (second b))))))))
+
+(defun next-input-field (&optional (screen-name (session-current-screen *session*)))
+  "Move cursor to the next writable field after the current cursor position.
+Wraps around to the first field if at or past the last one. Returns :stay.
+Call from a key handler."
+  (let* ((positions (writable-field-positions screen-name))
+         (row (cursor-row))
+         (col (cursor-col))
+         (next (or (find-if (lambda (pos)
+                              (or (> (first pos) row)
+                                  (and (= (first pos) row)
+                                       (> (second pos) col))))
+                            positions)
+                   (first positions))))
+    (when next
+      (set-cursor (first next) (second next)))
+    :stay))
+
 ;;; Update context and background thread
 
 (define-condition idle-timeout-error (error)
@@ -1336,7 +1370,7 @@ Returns (values list-data-count list-data-total has-list-data)."
        field-values))
     (values list-data-count list-data-total has-list-data)))
 
-(defun set-framework-fields (screen-sym field-values &key no-command is-menu
+(defun set-framework-fields (screen-sym field-values &key has-command is-menu
                                                               full-control)
   "Set title, command line, errormsg, and key label fields in FIELD-VALUES.
 With FULL-CONTROL, do nothing (app manages all fields)."
@@ -1345,7 +1379,7 @@ With FULL-CONTROL, do nothing (app manages all fields)."
   (setf (gethash "title" field-values)
         (format-title-line screen-sym (session-indicator-texts)))
   ;; Command line (only on screens with command field)
-  (unless no-command
+  (when has-command
     (unless (gethash "cmdlabel" field-values)
       (setf (gethash "cmdlabel" field-values)
             (if is-menu
@@ -1455,8 +1489,8 @@ Returns a navigation result."
       ;; Empty command with Enter key handler
       (key-spec
        (handle-key dispatch-sym :enter))
-      ;; No handler
-      (t :stay))))
+      ;; No handler: advance to next input field
+      (t (next-input-field)))))
 
 (defun dispatch-key (context dispatch-sym aid-kw key-spec
                      has-list-data repeat-groups list-data-total app-package
@@ -1543,7 +1577,7 @@ Screen stack entries are (symbol cursor-row . cursor-col) to restore cursor on :
 (defun show-screen-and-read (screen display-screen screen-rules key-specs
                              field-values dispatch-sym repeat-groups
                              has-list-data list-data-count
-                             &key no-command full-control no-clear)
+                             &key has-command full-control no-clear)
   "Prepare the display screen, compute cursor, and read user input.
 When NO-CLEAR is true, the screen is rewritten without erasing first.
 Returns the 3270 response."
@@ -1552,9 +1586,8 @@ Returns the 3270 response."
                                repeat-groups has-list-data list-data-count)
     (multiple-value-bind (pf-keys exit-keys)
         (build-key-vectors key-specs)
-      ;; Command screens always accept Enter (for the command field)
-      (unless (or no-command
-                  (find cl3270:+aid-enter+ pf-keys)
+      ;; Always accept Enter (command field or field advancement)
+      (unless (or (find cl3270:+aid-enter+ pf-keys)
                   (find cl3270:+aid-enter+ exit-keys))
         (setf pf-keys (concatenate 'vector pf-keys
                                     (vector cl3270:+aid-enter+))))
@@ -1673,7 +1706,7 @@ Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
                    (screen-rules (screen-info-rules screen-info))
                    (key-specs (screen-info-keys screen-info))
                    (repeat-groups (screen-info-repeat-groups screen-info))
-                   (no-command (screen-info-no-command screen-info))
+                   (has-command (screen-info-has-command screen-info))
                    (is-menu (screen-info-menu screen-info))
                    (full-control (screen-info-full-control screen-info))
                    (overlay (screen-info-overlay screen-info))
@@ -1723,7 +1756,7 @@ Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
                       (populate-field-values context field-values screen
                                              dispatch-sym repeat-groups)
                     (set-framework-fields screen-sym field-values
-                                          :no-command no-command :is-menu is-menu
+                                          :has-command has-command :is-menu is-menu
                                           :full-control full-control)
                     (let* ((base-screen
                              (apply-field-attribute-overrides
@@ -1739,7 +1772,7 @@ Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
                                      screen display-screen screen-rules key-specs
                                      field-values dispatch-sym repeat-groups
                                      has-list-data list-data-count
-                                     :no-command no-command :full-control full-control
+                                     :has-command has-command :full-control full-control
                                      :no-clear (or no-clear (and overlay t)))
                                (setf no-clear nil))))
                       (unless response (return-from next-screen))

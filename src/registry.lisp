@@ -24,7 +24,7 @@
   transient-fields
   repeat-groups
   (dynamic-areas nil)
-  (no-command nil)
+  (has-command nil)
   (menu nil)
   (aliases nil)
   (anonymous nil)
@@ -67,15 +67,15 @@
 
 ;;; Framework row management
 
-(defun pad-screen-string (screen-string &key no-command full-control start-row)
+(defun pad-screen-string (screen-string &key has-command full-control start-row)
   "Wrap application screen content with framework rows.
-Without NO-COMMAND: up to 20 app rows + command line (row 21).
-With NO-COMMAND: up to 21 app rows, no command line.
+With HAS-COMMAND: up to 20 app rows + command line (row 21).
+Without: up to 21 app rows, no command line.
 With FULL-CONTROL: all 24 rows (0-23) belong to the application.
 START-ROW: when set, prepend blank rows so content begins at this row number.
 Always adds title (row 0), error (row 22), and keys (row 23) unless FULL-CONTROL."
   (let* ((max-rows (cond (full-control 24)
-                         (no-command 21)
+                         ((not has-command) 21)
                          (t +app-rows+)))
          (parts (split-sequence:split-sequence #\Newline screen-string))
          (app-rows (rest parts))
@@ -104,7 +104,7 @@ Always adds title (row 0), error (row 22), and keys (row 23) unless FULL-CONTROL
               (write-string row s) (terpri s))  ; app rows
             (dotimes (i (- max-rows n))
               (terpri s))                       ; padding to max app rows
-            (unless no-command
+            (when has-command
               (terpri s))                       ; row 21: blank (command)
             (terpri s))))))
 
@@ -200,15 +200,15 @@ distributes to \"name.0\" ... \"name.N-1\", removes base key."
   ;; Fallback
   80)
 
-(defun make-framework-fields (&key no-command full-control)
-  "Create framework-managed fields: title, command line (unless NO-COMMAND), errormsg, keys.
+(defun make-framework-fields (&key has-command full-control)
+  "Create framework-managed fields: title, command line (when HAS-COMMAND), errormsg, keys.
 With FULL-CONTROL, no framework fields are created (app manages all rows)."
   (when full-control
     (return-from make-framework-fields '()))
   (append
    (list (cl3270:make-field :row 0 :col 0 :name "title" :position-only t)
          (cl3270:make-field :row 0 :col 79 :name ""))
-   (unless no-command
+   (when has-command
      (list (cl3270:make-field :row 21 :col 0 :name "cmdlabel"
                               :content "Command ==>" :color cl3270:+turquoise+)
            (cl3270:make-field :row 21 :col 13 :name "command"
@@ -343,8 +343,7 @@ when keys are shown or hidden at runtime."
   "Compile a screen data plist into a screen-info struct."
   (let* ((menu-name (let ((m (getf data :menu)))
                       (when m (string-downcase (string m)))))
-         (has-command (getf data :command))
-         (no-command (and (not has-command) (not menu-name)))
+         (has-command (or (getf data :command) menu-name))
          (aliases (mapcar (lambda (a) (string-downcase (string a)))
                           (getf data :aliases)))
          (anonymous (getf data :anonymous))
@@ -357,7 +356,7 @@ when keys are shown or hidden at runtime."
          (overlay (getf data :overlay))
          (start-row (getf data :start-row))
          (screen-string (pad-screen-string (getf data :screen)
-                                            :no-command no-command
+                                            :has-command has-command
                                             :full-control full-control
                                             :start-row start-row))
          (raw-fields (getf data :fields))
@@ -374,7 +373,7 @@ when keys are shown or hidden at runtime."
                (field-forms (parse-screen screen-string mapped-fields))
                (app-fields (mapcar #'eval field-forms))
                (all-fields (append app-fields
-                                   (make-framework-fields :no-command no-command
+                                   (make-framework-fields :has-command has-command
                                                           :full-control full-control)))
                (keys (when raw-keys (normalize-key-specs raw-keys)))
                (key-layout (when keys (compute-key-layout keys))))
@@ -387,7 +386,7 @@ when keys are shown or hidden at runtime."
            :repeat-groups repeat-groups
            :dynamic-areas (when raw-dynamic-areas
                             (compile-dynamic-areas raw-dynamic-areas))
-           :no-command no-command
+           :has-command has-command
            :menu menu-name
            :aliases aliases
            :anonymous anonymous

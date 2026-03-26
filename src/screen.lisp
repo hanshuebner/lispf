@@ -48,6 +48,7 @@
            #:show-key
            #:hide-key
            #:set-cursor
+           #:next-input-field
            ;; Application framework
            #:application
            #:application-name
