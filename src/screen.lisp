@@ -55,6 +55,7 @@
            #:application-entry-screen
            #:application-screen-directory
            #:application-session-class
+           #:application-test-force-tls
            #:invoke-subapplication
            #:session
            #:session-application

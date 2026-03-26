@@ -33,7 +33,9 @@
                  :documentation "Alist of (key-string . screen-symbol) from all loaded menus.")
    (sessions :initform '() :accessor application-sessions
              :documentation "List of active sessions (one per connection).")
-   (sessions-lock :initform (bt:make-lock "sessions") :reader application-sessions-lock)))
+   (sessions-lock :initform (bt:make-lock "sessions") :reader application-sessions-lock)
+   (test-force-tls :initform nil :accessor application-test-force-tls
+                   :documentation "When true, all connections appear TLS-encrypted. For testing.")))
 
 (defgeneric unknown-key-message (application key-name)
   (:documentation "Return the error message to display when an unknown key is pressed.
@@ -1777,7 +1779,7 @@ TLS-P indicates the connection is TLS-encrypted."
     (bt:with-lock-held ((application-sessions-lock application))
       (push *session* (application-sessions application)))
     (setf (session-active-application *session*) application
-          (session-tls-p *session*) tls-p
+          (session-tls-p *session*) (or tls-p (application-test-force-tls application))
           (session-connection-id *session*) connection-id)
     (unwind-protect
          (progn
