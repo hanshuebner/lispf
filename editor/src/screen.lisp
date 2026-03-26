@@ -109,13 +109,7 @@ Returns a list of (real-index cmd count row)."
          (top (editor-top-line session))
          (col-offset (editor-col-offset session))
          (response (lispf:current-response))
-         (response-cursor-row (if response
-                                   (cl3270:response-row response)
-                                   (lispf:cursor-row)))
-         (response-cursor-col (if response
-                                   (cl3270:response-col response)
-                                   (lispf:cursor-col)))
-         (cursor-slot (cursor-data-row response-cursor-row layout))
+         (cursor-slot (cursor-data-row (lispf:cursor-row) layout))
          ;; Scale is at a fixed screen row within the data area
          (scale-slot (when (layout-scale-row layout)
                        (let ((slot (- (layout-scale-row layout)
@@ -166,8 +160,8 @@ Returns a list of (real-index cmd count row)."
           (unless (pending-prefix-for-line-p session real prefix-val)
             (let* ((prefix-cursor-col
                      (when (and (= i cursor-slot)
-                                (< response-cursor-col (layout-data-col-start layout)))
-                       response-cursor-col)))
+                                (< (lispf:cursor-col) (layout-data-col-start layout)))
+                       (lispf:cursor-col))))
               (multiple-value-bind (cmd count) (parse-prefix-command prefix-cursor-col prefix-val)
                 (when cmd
                   (cond

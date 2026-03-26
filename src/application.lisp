@@ -1210,6 +1210,9 @@ cl3270 symbols, adding background update thread support via post-send-callback."
               (dynamic-area-error ()
                 (return (values nil nil))))
           (when err (return (values resp err)))
+          ;; Update cursor position immediately so key handlers see it
+          (setf (cursor-row) (cl3270:response-row resp)
+                (cursor-col) (cl3270:response-col resp))
           (cond
             ((cl3270:aid-in-set (cl3270:response-aid resp) exit-keys)
              (return (values resp nil)))
