@@ -400,6 +400,18 @@
     (assert-equal :d cmd)
     (assert-equal 3 count)))
 
+(define-test parse-prefix-dd-cursor-on-second-d ()
+  ;; User types "dd" over line number "00003", cursor on second d (col 1).
+  ;; Should parse as DD block command, not single D delete.
+  (multiple-value-bind (cmd) (ed:parse-prefix-command 1 "dd0003")
+    (assert-equal :dd cmd "dd with cursor on second d"))
+  ;; Same for CC
+  (multiple-value-bind (cmd) (ed:parse-prefix-command 1 "cc0003")
+    (assert-equal :cc cmd "cc with cursor on second c"))
+  ;; Cursor past the command (col 2) should also work
+  (multiple-value-bind (cmd) (ed:parse-prefix-command 2 "dd0003")
+    (assert-equal :dd cmd "dd with cursor past command")))
+
 ;;; ============================================================
 ;;; Prefix command execution tests
 ;;; ============================================================

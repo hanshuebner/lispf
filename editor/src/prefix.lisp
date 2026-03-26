@@ -12,10 +12,15 @@ For non-cursor fields, all digits are stripped as line number remnants.
 For the cursor field, only text up to the cursor position is considered;
 digits between the command and cursor are the count argument.
 Returns (values command count) or nil."
-  (let* ((effective (if cursor-col
-                        (subseq text 0 (min cursor-col (length text)))
-                        text))
-         (raw (string-trim '(#\Space) (string-upcase effective)))
+  (let* ((upper (string-upcase text))
+         (effective (if cursor-col
+                        (subseq upper 0 (min (max cursor-col
+                                                  (1+ (or (position-if-not #'digit-char-p upper
+                                                                           :from-end t)
+                                                          -1)))
+                                             (length upper)))
+                        upper))
+         (raw (string-trim '(#\Space) effective))
          (command-chars (remove-if #'digit-char-p raw))
          (trimmed (string-trim '(#\Space) command-chars)))
     (when (plusp (length trimmed))
