@@ -297,7 +297,7 @@
     (assert-equal 3 count)))
 
 (define-test parse-prefix-block-repeat ()
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "RR")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command "RR")
     (assert-equal :rr cmd)))
 
 (define-test parse-prefix-copy-move ()
@@ -631,11 +631,10 @@
 
 (define-test parse-prefix-jj ()
   ;; JJ is a simple block marker (no width)
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ")
-    (assert-equal :jj cmd)
-    (assert-equal 0 count))
+  (multiple-value-bind (cmd) (ed:parse-prefix-command "JJ")
+    (assert-equal :jj cmd))
   ;; Overtyped: JJ over 000001
-  (multiple-value-bind (cmd count) (ed:parse-prefix-command "JJ0001")
+  (multiple-value-bind (cmd) (ed:parse-prefix-command "JJ0001")
     (assert-equal :jj cmd)))
 
 ;;; --- JJ marks region, JUSTIFY command executes ---
@@ -879,6 +878,50 @@ MDT-based detection treats all fields as modified (the test default)."
     (let ((msg (ed:execute-prefix-commands s '((2 :cc 0 2)))))
       (assert-string-contains msg "Conflicting")
       (assert-nil (ed:editor-pending-block s)))))
+
+(define-test three-markers-same-type-error ()
+  ;; Three DD markers on one screen should be an error
+  (let ((s (make-session "a" "b" "c" "d" "e")))
+    (let ((msg (ed:execute-prefix-commands s '((0 :dd 0 0) (2 :dd 0 2) (4 :dd 0 4)))))
+      (assert-string-contains msg "Too many DD"))))
+
+(define-test three-markers-with-pending-error ()
+  ;; One pending DD + two new DD on next screen = error
+  (let ((s (make-session "a" "b" "c" "d" "e")))
+    (ed:execute-prefix-commands s '((0 :dd 0 0)))  ; pending
+    (let ((msg (ed:execute-prefix-commands s '((2 :dd 0 2) (4 :dd 0 4)))))
+      (assert-string-contains msg "Too many DD"))))
+
+(define-test mixed-block-types-error ()
+  ;; DD and CC on the same screen should be an error
+  (let ((s (make-session "a" "b" "c" "d")))
+    (let ((msg (ed:execute-prefix-commands s '((0 :dd 0 0) (2 :cc 0 2)))))
+      (assert-string-contains msg "Cannot mix"))))
+
+(define-test single-command-blocked-by-pending ()
+  ;; Single D should be rejected when DD is pending
+  (let ((s (make-session "a" "b" "c")))
+    (ed:execute-prefix-commands s '((0 :dd 0 0)))  ; pending
+    (let ((msg (ed:execute-prefix-commands s '((2 :d 1 2)))))
+      (assert-string-contains msg "pending")
+      (assert-lines s '("a" "b" "c")))))  ; no deletion happened
+
+(define-test single-command-blocked-by-pending-after-scroll ()
+  ;; Scroll (no commands) should preserve pending, then D should be rejected
+  (let ((s (make-session "a" "b" "c" "d" "e")))
+    (ed:execute-prefix-commands s '((0 :dd 0 0)))  ; pending
+    (ed:execute-prefix-commands s nil)  ; scroll - no commands
+    (assert-true (ed:editor-pending-block s) "Pending should survive scroll")
+    (let ((msg (ed:execute-prefix-commands s '((3 :i 1 3)))))
+      (assert-string-contains msg "pending"))))
+
+(define-test a-b-allowed-with-pending-copy ()
+  ;; A/B targets should still work with pending CC
+  (let ((s (make-session "a" "b" "c" "d")))
+    (ed:execute-prefix-commands s '((1 :cc 0 1) (2 :cc 0 2)))  ; CC block
+    (assert-true (ed:editor-pending-block s))
+    (let ((msg (ed:execute-prefix-commands s '((3 :a 0 3)))))
+      (assert-string-contains msg "copied"))))
 
 ;;; ============================================================
 ;;; Primary command tests

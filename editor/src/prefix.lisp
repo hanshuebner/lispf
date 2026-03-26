@@ -196,11 +196,33 @@ batch, they are executed immediately without pending."
     ;; Save undo state before any modifications
     (save-undo-state session)
 
-    ;; First pass: handle block commands
-    ;; Check for paired block markers within this batch
+    ;; First pass: validate and handle block commands
+    ;; Check for too many markers or mixed block types
+    (let ((block-types-found '()))
+      (dolist (block-cmd '(:dd :cc :mm :rr :jj))
+        (let ((count (length (find-block-markers commands block-cmd))))
+          (when (> count 2)
+            (unless did-modify (pop (editor-undo-stack session)))
+            (return-from execute-prefix-commands
+              (format nil "Too many ~A markers - use at most two"
+                      (string-upcase (symbol-name block-cmd)))))
+          (when (plusp count)
+            (push block-cmd block-types-found))))
+      (when (> (length block-types-found) 1)
+        (unless did-modify (pop (editor-undo-stack session)))
+        (return-from execute-prefix-commands
+          "Cannot mix different block commands - use RESET")))
+
     (dolist (block-cmd '(:dd :cc :mm :rr :jj))
       (let ((markers (find-block-markers commands block-cmd)))
         (when (>= (length markers) 2)
+          ;; Two markers + pending = too many
+          (when (and pending (eq block-cmd (first pending)))
+            (setf (editor-pending-block session) nil)
+            (unless did-modify (pop (editor-undo-stack session)))
+            (return-from execute-prefix-commands
+              (format nil "Too many ~A markers - use RESET"
+                      (string-upcase (symbol-name block-cmd)))))
           ;; Two markers in same batch - check for conflicts with pending
           (when (and pending (not (eq block-cmd (first pending))))
             (setf (editor-pending-block session) nil)
@@ -351,6 +373,18 @@ batch, they are executed immediately without pending."
                                                    "copied" "moved")))))))))
 
     ;; Third pass: single-line commands (process in order, tracking index shifts)
+    ;; Reject single-line commands when a block command is pending
+    (when (editor-pending-block session)
+      (let ((single-cmds (remove-if (lambda (entry)
+                                      (member (second entry)
+                                              '(:dd :cc :mm :rr :jj :a :b)))
+                                    commands)))
+        (when single-cmds
+          (unless did-modify (pop (editor-undo-stack session)))
+          (return-from execute-prefix-commands
+            (format nil "~A pending - clear with RESET before using other commands"
+                    (string-upcase (symbol-name (first (editor-pending-block session)))))))))
+
     (let ((offset 0))
       (dolist (cmd-entry commands)
         (destructuring-bind (real-index cmd count screen-row) cmd-entry
