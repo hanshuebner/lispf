@@ -1358,8 +1358,9 @@ With FULL-CONTROL, do nothing (app manages all fields)."
     (when confirm-msg
       (setf (gethash "errormsg" field-values) confirm-msg)
       (set-field-attribute "errormsg" :color cl3270:+yellow+)
-      (setf *current-screen-keys*
-            (list (list :pf5 "Bestaetigen") (list :pf3 "Zurueck")))))
+      (let ((confirm-keys '((:pf3 "Zurueck") (:pf5 "Bestaetigen"))))
+        (setf *current-screen-keys* confirm-keys
+              *current-key-layout* (compute-key-layout confirm-keys)))))
   (unless (gethash "errormsg" field-values)
     (setf (gethash "errormsg" field-values) ""))
   (let ((key-labels (format-key-labels-from-specs *current-screen-keys*
