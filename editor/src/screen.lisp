@@ -310,6 +310,7 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
             (setf (editor-next-cursor session) nil))
           (lispf:set-cursor (layout-command-row layout)
                            (1+ (length (layout-command-prompt layout))))))
+    (lispf:show-key :pf1 "Help")
     ;; Show repeat keys when a find/change has been done
     (when (editor-last-find session)
       (lispf:show-key :pf5 "RFnd"))
