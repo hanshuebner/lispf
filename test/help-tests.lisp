@@ -468,7 +468,7 @@
              ;; editor screen arrives, so poll until we see it.
              (press-pf-wait-screen s 3 "Size=")
              ;; Cancel and exit
-             (move-cursor s 23 6)
+             (move-cursor s 22 6)
              (type-text s "CANCEL")
              (press-enter s)))
       (ignore-errors (delete-file path)))))
@@ -506,7 +506,7 @@
              (press-pf s 3)
              (assert-screen-contains s "Size=")
              ;; Clean up
-             (move-cursor s 23 6)
+             (move-cursor s 22 6)
              (type-text s "CANCEL")
              (press-enter s)))
       (ignore-errors (delete-file (merge-pathnames "lispf-e2e-helpnav.help" dir)))
@@ -539,7 +539,7 @@
              (assert-screen-contains s "Function Keys")
              ;; PF4 returns directly to editor (skipping history)
              (press-pf-wait-screen s 4 "Size=")
-             (move-cursor s 23 6)
+             (move-cursor s 22 6)
              (type-text s "CANCEL")
              (press-enter s)))
       (ignore-errors (delete-file path)))))
@@ -565,7 +565,7 @@
                (assert-nil (search "{topic:" full)
                            "Markup should be hidden in display"))
              ;; Cancel
-             (move-cursor s 23 6)
+             (move-cursor s 22 6)
              (type-text s "CANCEL")
              (press-enter s)))
       (ignore-errors (delete-file path)))))
@@ -582,35 +582,35 @@
              (press-enter s)
              (assert-screen-contains s "Hello world here.")
              ;; Type LINK command targeting "world"
-             (move-cursor s 23 6)
+             (move-cursor s 22 6)
              (type-text s "LINK greet")
              ;; Position cursor on "world" (row 3 = first file line, col 13 = "world")
              (move-cursor s 3 13)
              (press-enter s)
              (assert-screen-contains s "Linked to greet")
              ;; Verify link exists via LINK query
-             (move-cursor s 23 6)
+             (move-cursor s 22 6)
              (erase-eof s)
              (type-text s "LINK")
              (move-cursor s 3 13)
              (press-enter s)
              (assert-screen-contains s "Link target: greet")
              ;; UNLINK it
-             (move-cursor s 23 6)
+             (move-cursor s 22 6)
              (erase-eof s)
              (type-text s "UNLINK")
              (move-cursor s 3 13)
              (press-enter s)
              (assert-screen-contains s "Link removed")
              ;; Verify link is gone
-             (move-cursor s 23 6)
+             (move-cursor s 22 6)
              (erase-eof s)
              (type-text s "LINK")
              (move-cursor s 3 13)
              (press-enter s)
              (assert-screen-contains s "No link at cursor")
              ;; Cancel
-             (move-cursor s 23 6)
+             (move-cursor s 22 6)
              (erase-eof s)
              (type-text s "CANCEL")
              (press-enter s)))
@@ -634,18 +634,18 @@
              (move-cursor s 4 11)
              (type-text s "NEW TEXT")
              ;; Move to command field before Enter to avoid auto-insert
-             (move-cursor s 23 6)
+             (move-cursor s 22 6)
              (press-enter s)
              ;; Should see updated text
              (assert-screen-contains s "NEW TEXT")
              ;; Verify link target preserved
-             (move-cursor s 23 6)
+             (move-cursor s 22 6)
              (type-text s "LINK")
              (move-cursor s 4 11)
              (press-enter s)
              (assert-screen-contains s "Link target: topic")
              ;; Save and verify file content
-             (move-cursor s 23 6)
+             (move-cursor s 22 6)
              (erase-eof s)
              (type-text s "SAVE")
              (press-enter s)
