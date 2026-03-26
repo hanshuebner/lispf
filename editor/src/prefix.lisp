@@ -87,8 +87,19 @@ Returns (values command count) or nil."
 ;;; Prefix command execution
 ;;; ============================================================
 
-(defun justify-lines (lines width)
-  "Justify/reflow a list of lines to fit within WIDTH columns.
+(defun leading-spaces (line)
+  "Return the number of leading spaces in LINE."
+  (or (position #\Space line :test-not #'char=) (length line)))
+
+(defun common-indent (lines)
+  "Return the minimum leading indentation of non-blank LINES."
+  (loop for line in lines
+        for trimmed = (string-trim '(#\Space) line)
+        unless (zerop (length trimmed))
+          minimize (leading-spaces line)))
+
+(defun reflow-lines (lines width)
+  "Reflow LINES to fit within WIDTH columns, joining words across lines.
 Preserves paragraph breaks (empty lines). Words longer than WIDTH
 are kept intact on their own line (not broken).
 Returns (values new-lines long-word-count)."
@@ -106,13 +117,10 @@ Returns (values new-lines long-word-count)."
                    (when (> (length word) width)
                      (incf long-words))
                    (cond
-                     ;; First word on line
                      ((zerop (length current-line))
                       (setf current-line word))
-                     ;; Word fits on current line
                      ((<= (+ (length current-line) 1 (length word)) width)
                       (setf current-line (concatenate 'string current-line " " word)))
-                     ;; Start new line
                      (t
                       (push current-line output-lines)
                       (setf current-line word))))
@@ -129,6 +137,21 @@ Returns (values new-lines long-word-count)."
             (push line current-paragraph)))
       (flush-paragraph))
     (values (nreverse result) long-words)))
+
+(defun justify-lines (lines width)
+  "Justify/reflow LINES to fit within WIDTH columns, preserving common indentation.
+Detects the minimum leading indentation, strips it before reflowing,
+then re-adds it to the result. Preserves paragraph breaks (empty lines).
+Returns (values new-lines long-word-count)."
+  (let* ((indent (common-indent lines))
+         (stripped (mapcar (lambda (line) (subseq line (min indent (length line))))
+                           lines))
+         (prefix (make-string indent :initial-element #\Space)))
+    (multiple-value-bind (reflowed long-words)
+        (reflow-lines stripped (- width indent))
+      (values (mapcar (lambda (line) (concatenate 'string prefix line))
+                      reflowed)
+              long-words))))
 
 (defun find-block-markers (commands cmd-type)
   "Find all entries in COMMANDS with command CMD-TYPE. Returns a list."
