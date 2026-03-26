@@ -188,6 +188,18 @@ Override to localize or to return different labels per menu.")
     (declare (ignore menu-name))
     (values (msg "Select") (msg "Exit"))))
 
+;;; Role-based access control
+
+(defgeneric session-user-roles (application session)
+  (:documentation "Return a list of role strings for the current session user.")
+  (:method ((application t) (session t))
+    nil))
+
+(defgeneric role-access-denied-message (application)
+  (:documentation "Return the error message shown when a user lacks required roles.")
+  (:method ((application t))
+    "Permission denied"))
+
 ;;; Field attribute overrides
 
 (defun set-field-attribute (field-name &rest attrs)

@@ -1488,9 +1488,10 @@ Screen stack entries are (symbol cursor-row . cursor-col) to restore cursor on :
              (list (cons root (cons 0 0))))
        (setf (session-current-screen *session*) (cdr result))))
     ((symbolp result)
-     ;; Save current screen with cursor position
-     (push (cons screen-sym (cons (cursor-row) (cursor-col)))
-           (session-screen-stack *session*))
+     ;; Save current screen with cursor position (avoid consecutive duplicates)
+     (unless (eq screen-sym result)
+       (push (cons screen-sym (cons (cursor-row) (cursor-col)))
+             (session-screen-stack *session*)))
      (setf (session-current-screen *session*) result))
     (t
      (warn "Unexpected handle-key return value ~S on screen ~S, treating as :stay"
@@ -1541,31 +1542,38 @@ Returns the 3270 response."
     (setf (list-state-value *session* dispatch-sym :cursor-row) (cursor-row))
     (setf (list-state-value *session* dispatch-sym :cursor-col) (cursor-col))))
 
-(defun check-anonymous-access (result context)
-  "Check if a screen transition target requires authentication.
-Returns the original RESULT if access is allowed, or :stay with an error message
-if the target screen requires authentication and the session is not authenticated."
+(defun target-screen-info (result)
+  "Extract the target screen-info from a navigation RESULT, or NIL."
   (let ((target-sym (cond ((and (consp result) (eq (car result) :jump))
-                           (cdr result))
-                          ((symbolp result) result))))
-    (if (and target-sym
-             (not (eq target-sym :stay))
-             (not (eq target-sym :back))
-             (not (eq target-sym :logoff))
-             (not (session-authenticated-p *application* *session*)))
-        (let* ((target-name (screen-name-string target-sym))
-               (target-info (gethash target-name (app-screens)))
-               (target-info (or target-info
-                                (when (find-screen-file target-name)
-                                  (load-and-register-screen target-name)))))
-          (if (and target-info
-                   (not (screen-info-anonymous target-info)))
-              (progn
-                (setf (gethash "errormsg" context)
-                      (anonymous-access-denied-message *application*))
-                :stay)
-              result))
-        result)))
+                            (cdr result))
+                           ((symbolp result) result))))
+    (when (and target-sym
+               (not (member target-sym '(:stay :back :logoff))))
+      (let ((name (screen-name-string target-sym)))
+        (or (gethash name (app-screens))
+            (when (find-screen-file name)
+              (load-and-register-screen name)))))))
+
+(defun check-anonymous-access (result context)
+  "Check if a screen transition target requires authentication."
+  (when-let ((info (target-screen-info result)))
+    (when (and (not (screen-info-anonymous info))
+               (not (session-authenticated-p *application* *session*)))
+      (setf (gethash "errormsg" context)
+            (anonymous-access-denied-message *application*))
+      (return-from check-anonymous-access :stay)))
+  result)
+
+(defun check-role-access (result context)
+  "Check if a screen transition target requires roles the user doesn't have."
+  (when-let ((info (target-screen-info result)))
+    (when (and (screen-info-roles info)
+               (not (intersection (screen-info-roles info)
+                                  (session-user-roles *application* *session*))))
+      (setf (gethash "errormsg" context)
+            (role-access-denied-message *application*))
+      (return-from check-role-access :stay)))
+  result)
 
 (defun handle-screen-render-error (c)
   "Handle an error during screen rendering by restoring to the last successful
@@ -1606,7 +1614,7 @@ Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
              (prog1 (dispatch-key context dispatch-sym aid-kw key-spec has-list-data
                                   repeat-groups list-data-total app-package resp-command)
                (dolist (k transient-fields) (remhash k context))))
-           (checked (check-anonymous-access result context))
+           (checked (check-role-access (check-anonymous-access result context) context))
            (no-clear (and (or (eq checked :stay) (null checked))
                           (not (session-property *session* :force-redraw)))))
       (setf (session-property *session* :force-redraw) nil)

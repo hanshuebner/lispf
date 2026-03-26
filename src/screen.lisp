@@ -112,6 +112,8 @@
            ;; Access control
            #:session-authenticated-p
            #:anonymous-access-denied-message
+           #:session-user-roles
+           #:role-access-denied-message
            ;; Command processing
            #:process-screen-command
            #:process-command

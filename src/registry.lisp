@@ -28,6 +28,7 @@
   (menu nil)
   (aliases nil)
   (anonymous nil)
+  (roles nil)
   (navigable nil)
   (handler-package nil)
   (full-control nil)
@@ -346,6 +347,8 @@ when keys are shown or hidden at runtime."
          (aliases (mapcar (lambda (a) (string-downcase (string a)))
                           (getf data :aliases)))
          (anonymous (getf data :anonymous))
+         (roles (mapcar (lambda (r) (intern (string-upcase (string r)) :keyword))
+                        (getf data :roles)))
          (navigable (getf data :navigable))
          (handler-package (let ((hp (getf data :handler-package)))
                             (when hp (find-package (string-upcase (string hp))))))
@@ -387,6 +390,7 @@ when keys are shown or hidden at runtime."
            :menu menu-name
            :aliases aliases
            :anonymous anonymous
+           :roles roles
            :navigable navigable
            :handler-package handler-package
            :full-control full-control
@@ -433,6 +437,7 @@ Creates a simple screen with repeat fields for menu items."
                         (list :from '(2 29) :len 50 :name 'description
                               :repeat 17))
           :navigable t
+          :roles (getf menu-data :roles)
           :keys (multiple-value-bind (enter-label pf3-label)
                     (menu-key-labels *application* name-string)
                   (list (list :enter enter-label)
