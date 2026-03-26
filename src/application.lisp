@@ -794,8 +794,7 @@ unlocking the 3270 keyboard after the main thread received a response."
                                    (session-indicator-texts)))
          (screen (cl3270:make-screen "title-overlay"
                    (cl3270:make-field :row 0 :col 0 :name "title"
-                                      :position-only t)
-                   (cl3270:make-field :row 0 :col 79 :name "")))
+                                      :position-only t :len 79)))
          (vals (cl3270:make-dict :test #'equal)))
     (setf (gethash "title" vals) title)
     (bt:with-lock-held ((session-write-lock *session*))
