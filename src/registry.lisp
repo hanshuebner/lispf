@@ -432,8 +432,9 @@ Creates a simple screen with repeat fields for menu items."
                               :intense t :repeat 17)
                         (list :from '(2 29) :len 50 :name 'description
                               :repeat 17))
+          :navigable t
           :keys (multiple-value-bind (enter-label pf3-label)
-                    (menu-key-labels *application*)
+                    (menu-key-labels *application* name-string)
                   (list (list :enter enter-label)
                         (list :pf3 pf3-label :back t))))))
 
@@ -452,8 +453,17 @@ Menu files are checked for changes on disk and reloaded if newer."
           (if path
               (load-and-register-screen name-string)
               ;; No .screen file: check if it's a menu and auto-generate
-              (let ((menu-data (gethash name-string
-                                        (application-menus *application*))))
+              (let ((menu-data (or (gethash name-string
+                                            (application-menus *application*))
+                                   ;; Discover new .menu files added after startup
+                                   (let ((menu-path (find-menu-file name-string)))
+                                     (when menu-path
+                                       (let ((data (load-menu-file menu-path)))
+                                         (setf (gethash name-string (application-menus *application*)) data
+                                               (gethash name-string (application-menu-timestamps *application*))
+                                               (cons menu-path (file-write-date menu-path)))
+                                         (rebuild-menu-entries *application*)
+                                         data))))))
                 (if menu-data
                     (let ((info (compile-screen-data
                                  name-string

@@ -258,10 +258,10 @@ PREFIX is prepended with a dot for nested items (e.g. \"5.1\")."
   (let ((pkg (application-package app))
         (entries nil))
     (maphash (lambda (name data)
-               (declare (ignore name))
-               (setf entries
-                     (nconc (collect-menu-entries (getf data :items) pkg)
-                            entries)))
+               (let ((prefix (unless (string= name "main") name)))
+                 (setf entries
+                       (nconc (collect-menu-entries (getf data :items) pkg prefix)
+                              entries))))
              (application-menus app))
     (setf (application-menu-entries app) entries)))
 
@@ -579,6 +579,20 @@ telnet negotiation."
         (call-next-method))))
 
 ;;; Menu item selection via Enter key
+
+(defun menu-screen-command (screen-name command)
+  "Look up COMMAND as a key in the current menu's items. Returns screen symbol or NIL."
+  (let* ((name-string (screen-name-string screen-name))
+         (info (gethash name-string (app-screens)))
+         (menu-name (when info (screen-info-menu info))))
+    (when menu-name
+      (let* ((menu (gethash menu-name (application-menus *application*)))
+             (items (when menu (getf menu :items)))
+             (pkg (application-package *application*)))
+        (dolist (item items)
+          (when (string-equal command (getf item :key))
+            (return (when (getf item :screen)
+                      (intern (string-upcase (string (getf item :screen))) pkg)))))))))
 
 (defun menu-screen-select (screen-name)
   "Handle Enter key on a menu screen. Returns screen symbol or NIL."
@@ -1420,6 +1434,7 @@ COMMAND is the trimmed value from the command field (extracted from response)."
           ;; Command field processing: check before normal key dispatch
           ((and (eq aid-kw :enter) (plusp (length command)))
            (let ((result (or (process-screen-command dispatch-sym command)
+                             (menu-screen-command dispatch-sym command)
                              (process-command *application* command))))
              (cond
                (result
@@ -1638,6 +1653,10 @@ Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
                     (((and error (not end-of-file) (not idle-timeout-error)
                            (not dynamic-area-error))
                        (lambda (c)
+                         (when (typep c '(or stream-error
+                                             cl+ssl::cl+ssl-error
+                                             usocket:socket-error))
+                           (error c))
                          (handle-screen-render-error c)
                          (return-from next-screen))))
                   ;; Prepare

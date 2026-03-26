@@ -180,10 +180,12 @@ Override to localize.")
   (:method ((application t))
     (values (msg "Prev") (msg "Next"))))
 
-(defgeneric menu-key-labels (application)
+(defgeneric menu-key-labels (application &optional menu-name)
   (:documentation "Return (values enter-label pf3-label) for auto-generated menu screens.
-Override to localize.")
-  (:method ((application t))
+MENU-NAME is the string name of the menu being generated.
+Override to localize or to return different labels per menu.")
+  (:method ((application t) &optional menu-name)
+    (declare (ignore menu-name))
     (values (msg "Select") (msg "Exit"))))
 
 ;;; Field attribute overrides
