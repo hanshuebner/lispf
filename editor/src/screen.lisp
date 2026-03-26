@@ -148,12 +148,11 @@ Returns a list of (real-index cmd count row)."
                                             col-offset)))
             (unless (string= (string-right-trim '(#\Space) data-val)
                              (string-right-trim '(#\Space) original))
+              (save-undo-state session)
               (if is-help
-                  (progn
-                    (save-undo-state session)
-                    (setf (nth real (editor-lines session))
-                          (lispf:apply-help-line-edit raw-line col-offset
-                                                     +data-width+ data-val)))
+                  (setf (nth real (editor-lines session))
+                        (lispf:apply-help-line-edit raw-line col-offset
+                                                   +data-width+ data-val))
                   (apply-edit session real data-val)))))
         ;; Parse prefix commands only from modified prefix fields
         (when prefix-modified

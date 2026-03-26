@@ -1162,6 +1162,32 @@ MDT-based detection treats all fields as modified (the test default)."
     ;; because (when commands ...) is nil
     (assert-nil (ed:editor-undo-stack s))))
 
+(defun make-context-with-data-edit (session data-overrides)
+  "Build a context simulating data line edits. DATA-OVERRIDES is an alist
+of (screen-row . new-text). Prefix fields are unchanged."
+  (let ((context (make-hash-table :test 'equal)))
+    (multiple-value-bind (prefix-str data-str) (ed::build-screen-data session)
+      (let ((data-lines (split-sequence:split-sequence #\Newline data-str)))
+        (dolist (override data-overrides)
+          (when (< (car override) (length data-lines))
+            (setf (nth (car override) data-lines) (cdr override))))
+        (setf (gethash "prefix" context) prefix-str
+              (gethash "data" context) (format nil "~{~A~^~%~}" data-lines))))
+    context))
+
+(define-test undo-from-data-edit ()
+  ;; Editing a data line should save undo state so it can be reversed
+  (let* ((s (make-session "Hello" "World"))
+         (context (progn (setf (ed:editor-top-line s) 0)
+                         ;; Row 0 = Top-of-Data marker, row 1 = "Hello"
+                         (make-context-with-data-edit s '((1 . "Changed"))))))
+    (test-process-editor-changes s context)
+    (assert-lines s '("Changed" "World"))
+    (assert-true (ed:editor-undo-stack s)
+                 "Data edit should create undo state")
+    (ed:undo s)
+    (assert-lines s '("Hello" "World"))))
+
 ;;; ============================================================
 ;;; Restricted mode tests
 ;;; ============================================================
