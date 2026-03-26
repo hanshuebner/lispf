@@ -90,12 +90,12 @@ Returns a list of segments: strings and help-link instances."
 
 ;;; Display rendering
 
-(defstruct link-position
-  "Position of a link on a rendered display line."
-  (line 0 :type fixnum)
-  (col-start 0 :type fixnum)
-  (col-end 0 :type fixnum)
-  (target "" :type string))
+(defclass link-position ()
+  ((line :initarg :line :initform 0 :accessor link-position-line)
+   (col-start :initarg :col-start :initform 0 :accessor link-position-col-start)
+   (col-end :initarg :col-end :initform 0 :accessor link-position-col-end)
+   (target :initarg :target :initform "" :accessor link-position-target))
+  (:documentation "Position of a link on a rendered display line."))
 
 (defun render-help-line (segments)
   "Render a parsed help line to display text.
@@ -130,7 +130,7 @@ line numbers."
       (multiple-value-bind (text links) (render-help-line parsed-line)
         (push text display-lines)
         (dolist (link links)
-          (push (make-link-position :line line-num
+          (push (make-instance 'link-position :line line-num
                                     :col-start (first link)
                                     :col-end (second link)
                                     :target (third link))
@@ -141,14 +141,14 @@ line numbers."
 
 ;;; Segment-based editing support
 
-(defstruct help-edit-segment
-  "A segment of a help line for edit mapping."
-  (kind :text :type keyword)     ; :text or :link
-  (text "" :type string)         ; display text
-  (target nil)                   ; link target string (nil for :text)
-  (raw "" :type string)          ; original raw text including markup
-  (display-start 0 :type fixnum) ; display column start
-  (display-end 0 :type fixnum))  ; display column end (exclusive)
+(defclass help-edit-segment ()
+  ((kind :initarg :kind :initform :text :accessor help-edit-segment-kind)
+   (text :initarg :text :initform "" :accessor help-edit-segment-text)
+   (target :initarg :target :initform nil :accessor help-edit-segment-target)
+   (raw :initarg :raw :initform "" :accessor help-edit-segment-raw)
+   (display-start :initarg :display-start :initform 0 :accessor help-edit-segment-display-start)
+   (display-end :initarg :display-end :initform 0 :accessor help-edit-segment-display-end))
+  (:documentation "A segment of a help line for edit mapping."))
 
 (defun parse-help-segments (line)
   "Parse LINE into segments with display position tracking.
@@ -161,7 +161,7 @@ Returns a list of help-edit-segment structs."
           for open = (position #\{ line :start pos)
           do (if (null open)
                  (let ((text (subseq line pos)))
-                   (push (make-help-edit-segment
+                   (push (make-instance 'help-edit-segment
                           :kind :text :text text :raw text
                           :display-start display-pos
                           :display-end (+ display-pos (length text)))
@@ -171,7 +171,7 @@ Returns a list of help-edit-segment structs."
                  (let ((close (position #\} line :start (1+ open))))
                    (unless close
                      (let ((text (subseq line pos)))
-                       (push (make-help-edit-segment
+                       (push (make-instance 'help-edit-segment
                               :kind :text :text text :raw text
                               :display-start display-pos
                               :display-end (+ display-pos (length text)))
@@ -182,7 +182,7 @@ Returns a list of help-edit-segment structs."
                    ;; Text before link
                    (when (> open pos)
                      (let ((text (subseq line pos open)))
-                       (push (make-help-edit-segment
+                       (push (make-instance 'help-edit-segment
                               :kind :text :text text :raw text
                               :display-start display-pos
                               :display-end (+ display-pos (length text)))
@@ -194,7 +194,7 @@ Returns a list of help-edit-segment structs."
                           (colon (position #\: content))
                           (target (if colon (subseq content 0 colon) content))
                           (text (if colon (subseq content (1+ colon)) content)))
-                     (push (make-help-edit-segment
+                     (push (make-instance 'help-edit-segment
                             :kind :link :text text :target target :raw raw
                             :display-start display-pos
                             :display-end (+ display-pos (length text)))

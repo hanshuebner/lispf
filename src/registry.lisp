@@ -15,33 +15,33 @@
 
 ;;; Per-screen compiled data
 
-(defstruct screen-info
-  "All compiled data for a single screen."
-  screen
-  rules
-  keys
-  key-layout
-  transient-fields
-  repeat-groups
-  (dynamic-areas nil)
-  (has-command nil)
-  (menu nil)
-  (aliases nil)
-  (anonymous nil)
-  (roles nil)
-  (navigable nil)
-  (handler-package nil)
-  (full-control nil)
-  (overlay nil)
-  (file-timestamp 0))
+(defclass screen-info ()
+  ((screen :initarg :screen :accessor screen-info-screen)
+   (rules :initarg :rules :accessor screen-info-rules)
+   (keys :initarg :keys :accessor screen-info-keys)
+   (key-layout :initarg :key-layout :accessor screen-info-key-layout)
+   (transient-fields :initarg :transient-fields :accessor screen-info-transient-fields)
+   (repeat-groups :initarg :repeat-groups :accessor screen-info-repeat-groups)
+   (dynamic-areas :initarg :dynamic-areas :initform nil :accessor screen-info-dynamic-areas)
+   (has-command :initarg :has-command :initform nil :accessor screen-info-has-command)
+   (menu :initarg :menu :initform nil :accessor screen-info-menu)
+   (aliases :initarg :aliases :initform nil :accessor screen-info-aliases)
+   (anonymous :initarg :anonymous :initform nil :accessor screen-info-anonymous)
+   (roles :initarg :roles :initform nil :accessor screen-info-roles)
+   (navigable :initarg :navigable :initform nil :accessor screen-info-navigable)
+   (handler-package :initarg :handler-package :initform nil :accessor screen-info-handler-package)
+   (full-control :initarg :full-control :initform nil :accessor screen-info-full-control)
+   (overlay :initarg :overlay :initform nil :accessor screen-info-overlay)
+   (file-timestamp :initarg :file-timestamp :initform 0 :accessor screen-info-file-timestamp))
+  (:documentation "All compiled data for a single screen."))
 
-(defstruct dynamic-area
-  "A host-updateable screen region."
-  (name "" :type string)
-  (from-row 0 :type fixnum)
-  (from-col 0 :type fixnum)
-  (to-row 0 :type fixnum)
-  (to-col 0 :type fixnum))
+(defclass dynamic-area ()
+  ((name :initarg :name :initform "" :accessor dynamic-area-name)
+   (from-row :initarg :from-row :initform 0 :accessor dynamic-area-from-row)
+   (from-col :initarg :from-col :initform 0 :accessor dynamic-area-from-col)
+   (to-row :initarg :to-row :initform 0 :accessor dynamic-area-to-row)
+   (to-col :initarg :to-col :initform 0 :accessor dynamic-area-to-col))
+  (:documentation "A host-updateable screen region."))
 
 ;;; Name resolution
 
@@ -332,11 +332,12 @@ when keys are shown or hidden at runtime."
 (defun compile-dynamic-areas (specs)
   "Compile dynamic area specifications from screen data into dynamic-area structs."
   (mapcar (lambda (spec)
-            (make-dynamic-area :name (string-downcase (string (getf spec :name)))
-                               :from-row (first (getf spec :from))
-                               :from-col (second (getf spec :from))
-                               :to-row (first (getf spec :to))
-                               :to-col (second (getf spec :to))))
+            (make-instance 'dynamic-area
+                           :name (string-downcase (string (getf spec :name)))
+                           :from-row (first (getf spec :from))
+                           :from-col (second (getf spec :from))
+                           :to-row (first (getf spec :to))
+                           :to-col (second (getf spec :to))))
           specs))
 
 (defun compile-screen-data (name data)
@@ -377,7 +378,7 @@ when keys are shown or hidden at runtime."
                                                           :full-control full-control)))
                (keys (when raw-keys (normalize-key-specs raw-keys)))
                (key-layout (when keys (compute-key-layout keys))))
-          (make-screen-info
+          (make-instance 'screen-info
            :screen (apply #'cl3270:make-screen name all-fields)
            :rules rules
            :keys keys
