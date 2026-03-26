@@ -1910,29 +1910,6 @@ Moves cursor to command field before pressing Enter to avoid auto-insert."
                     "Cursor should advance to next row"))))
 
 ;;; ============================================================
-;;; SET AUTOINSERT tests
-;;; ============================================================
-
-(define-test set-autoinsert-off ()
-  (let ((s (make-session "a")))
-    (assert-true (ed:editor-auto-insert-p s) "Default should be ON")
-    (let ((msg (ed:handle-primary-command s "SET AUTOINSERT OFF")))
-      (assert-string-contains msg "OFF")
-      (assert-nil (ed:editor-auto-insert-p s)))))
-
-(define-test set-autoinsert-on ()
-  (let ((s (make-session "a")))
-    (setf (ed:editor-auto-insert-p s) nil)
-    (let ((msg (ed:handle-primary-command s "SET AI ON")))
-      (assert-string-contains msg "ON")
-      (assert-true (ed:editor-auto-insert-p s)))))
-
-(define-test set-autoinsert-query ()
-  (let ((s (make-session "a")))
-    (let ((msg (ed:handle-primary-command s "SET AUTOINSERT")))
-      (assert-string-contains msg "ON"))))
-
-;;; ============================================================
 ;;; Screen data after delete tests
 ;;; ============================================================
 

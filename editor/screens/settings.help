@@ -1,0 +1,15 @@
+Editor Settings
+Press PF4 in the editor to open the settings screen.
+Settings are saved per user and persist across sessions.
+
+AUTOINSERT   ON/OFF   When ON, pressing Enter on the last line
+                      inserts a new blank line.  Default: ON.
+
+VERBOSE      ON/OFF   When ON, informational messages are shown
+                      in the message line (e.g. "2 lines deleted").
+                      Error messages are always shown.  Default: ON.
+
+Change a value and press Enter to save.  PF3 cancels.
+
+See also: {keys:Function Keys}
+          {edit:Editor Help}

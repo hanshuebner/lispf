@@ -8,6 +8,7 @@ Choose a topic:
   {prefix:Prefix Commands}    Line number area commands
   {block:Block Commands}     Multi-line block operations
   {find:Find and Change}    Text search and replace
+  {settings:Settings}           Editor preferences (PF4)
 
 NAVIGATION:
   Position cursor on a topic name and press Enter to follow the link.

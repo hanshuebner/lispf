@@ -53,12 +53,11 @@
        result)
       ;; Primary command was handled (returned :stay)
       ((eq result :stay)
-       (when msg
-         (setf (gethash "errormsg" (lispf:session-context lispf:*session*)) msg))
+       (when msg (editor-set-message msg))
        :stay)
       ;; Primary command returned a message string (info or error)
       ((stringp result)
-       (setf (gethash "errormsg" (lispf:session-context lispf:*session*)) result)
+       (editor-set-message result)
        :stay)
       ;; Unknown command - fall through to app-level process-command
       (t nil))))

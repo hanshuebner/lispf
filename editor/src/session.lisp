@@ -126,7 +126,9 @@ Virtual 0 = Top-of-Data marker, 1..N = file lines, N+1 = Bottom-of-Data marker."
    (current-line :initform 0 :accessor editor-current-line
                  :documentation "0-based real line index of the current (focus) line.")
    (auto-insert :initform t :accessor editor-auto-insert-p
-                :documentation "When T, Enter on the last line inserts a new blank line.")))
+                :documentation "When T, Enter on the last line inserts a new blank line.")
+   (verbose :initform t :accessor editor-verbose-p
+            :documentation "When T, show informational messages (e.g. '2 lines deleted').")))
 
 (defmethod page-size ((session editor-session))
   (page-size (editor-layout session)))

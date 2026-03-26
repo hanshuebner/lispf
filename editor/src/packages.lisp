@@ -49,6 +49,7 @@
            #:editor-restricted-p
            #:editor-current-line
            #:editor-auto-insert-p
+           #:editor-verbose-p
            #:editor-alteration-count
            #:help-file-p
            #:make-test-session

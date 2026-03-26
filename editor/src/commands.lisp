@@ -5,6 +5,13 @@
 (in-package #:lispf-editor)
 
 
+(defun editor-set-message (message)
+  "Set an informational (non-error) message, shown only when verbose mode is on.
+Returns the message string (for use as a return value) regardless of verbose setting."
+  (when (editor-verbose-p lispf:*session*)
+    (setf (gethash "errormsg" (lispf:session-context lispf:*session*)) message))
+  message)
+
 (defun parse-delimited-string (text pos)
   "Parse a delimited string starting at POS in TEXT.
 If TEXT[POS] is a quote or slash, use it as delimiter. Otherwise parse a word.
@@ -155,18 +162,6 @@ Returns a message string or :stay."
                           (layout-data-end-row layout))))
               (setf (layout-scale-row layout) n)
               (format nil "Scale line set to row ~D" n)))))
-      ((:AUTOINSERT :AI)
-       (cond
-         ((null arg) (format nil "AUTOINSERT is ~A"
-                             (if (editor-auto-insert-p session) "ON" "OFF")))
-         ((string-equal arg "ON")
-          (setf (editor-auto-insert-p session) t)
-          "AUTOINSERT ON")
-         ((string-equal arg "OFF")
-          (setf (editor-auto-insert-p session) nil)
-          "AUTOINSERT OFF")
-         (t "SET AUTOINSERT ON/OFF")))
-
       (:TRUNC
        (let ((n (when arg (parse-integer arg :junk-allowed t))))
          (if (and n (> n 0))

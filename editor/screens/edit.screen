@@ -16,6 +16,7 @@
  :keys ((:enter "")
         (:pf1 "Help" :hidden t)
         (:pf3 "Exit")
+        (:pf4 "Set" :hidden t)
         (:pf5 "RFnd" :hidden t)
         (:pf6 "RChg" :hidden t)
         (:pf7 "Up" :hidden t)

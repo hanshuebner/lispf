@@ -1,0 +1,13 @@
+(:name "settings"
+ :handler-package "LISPF-EDITOR"
+ :screen "
+
+   Editor Settings
+
+   Autoinsert:
+   Verbose:
+"
+ :fields ((:from (3 17) :len 3 :name autoinsert :write t :highlighting underscore)
+          (:from (4 17) :len 3 :name verbose :write t :highlighting underscore))
+ :keys ((:enter "Speichern")
+        (:pf3 "Zurueck")))

@@ -311,6 +311,7 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
           (lispf:set-cursor (layout-command-row layout)
                            (1+ (length (layout-command-prompt layout))))))
     (lispf:show-key :pf1 "Help")
+    (lispf:show-key :pf4 "Set")
     ;; Show repeat keys when a find/change has been done
     (when (editor-last-find session)
       (lispf:show-key :pf5 "RFnd"))
@@ -396,8 +397,7 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
     (let ((cmd-result (dispatch-command session command)))
       (when cmd-result
         (return-from lispf:handle-key cmd-result)))
-    (when msg
-      (setf (gethash "errormsg" (lispf:session-context lispf:*session*)) msg))
+    (when msg (editor-set-message msg))
     ;; Auto-insert new line when Enter is pressed on a data line
     (unless msg
       (auto-insert-line session layout))
@@ -419,8 +419,7 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
     (unless search-str
       (setf (gethash "errormsg" (lispf:session-context lispf:*session*)) "No previous FIND")
       (return-from lispf:handle-key :stay))
-    (setf (gethash "errormsg" (lispf:session-context lispf:*session*))
-          (do-find lispf:*session* search-str t))
+    (editor-set-message (do-find lispf:*session* search-str t))
     :stay))
 
 ;;; PF6 - Repeat Change
@@ -431,8 +430,7 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
       (setf (gethash "errormsg" (lispf:session-context lispf:*session*)) "No previous CHANGE")
       (return-from lispf:handle-key :stay))
     (destructuring-bind (from to all-p) last
-      (setf (gethash "errormsg" (lispf:session-context lispf:*session*))
-            (do-change lispf:*session* from to all-p))
+      (editor-set-message (do-change lispf:*session* from to all-p))
       :stay)))
 
 ;;; PF7 - Scroll Up (with wrap-around)
@@ -479,4 +477,36 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
   (setf (editor-col-offset lispf:*session*)
         (+ (editor-col-offset lispf:*session*) +data-width+))
   :stay)
+
+;;; PF4 - Settings
+(lispf:define-key-handler edit :pf4 ()
+  (process-editor-changes lispf:*session* (lispf:session-context lispf:*session*))
+  'settings)
+
+;;; ============================================================
+;;; Settings screen
+;;; ============================================================
+
+(defun bool-to-on-off (value)
+  (if value "ON" "OFF"))
+
+(defun on-off-to-bool (string)
+  (string-equal (string-trim '(#\Space) string) "ON"))
+
+(lispf:define-screen-update settings (autoinsert verbose)
+  (let ((session lispf:*session*))
+    (setf autoinsert (bool-to-on-off (editor-auto-insert-p session))
+          verbose (bool-to-on-off (editor-verbose-p session)))))
+
+(lispf:define-key-handler settings :enter (autoinsert verbose)
+  (let ((session lispf:*session*))
+    (setf (editor-auto-insert-p session) (on-off-to-bool autoinsert)
+          (editor-verbose-p session) (on-off-to-bool verbose)))
+  ;; Signal veron to persist settings if hooked
+  (let ((save-fn (lispf:session-property lispf:*session* :save-editor-settings)))
+    (when save-fn (funcall save-fn)))
+  :back)
+
+(lispf:define-key-handler settings :pf3 ()
+  :back)
 
