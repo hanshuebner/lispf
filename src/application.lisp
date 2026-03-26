@@ -59,6 +59,9 @@ and accepted user input. Set after show-screen-and-read returns.")
    (screen-stack :initform nil :accessor session-screen-stack)
    (context :initform (make-hash-table :test 'equal) :accessor session-context)
    (properties :initform (make-hash-table) :accessor session-properties)
+   (key-override :initform nil :accessor session-key-override
+                 :documentation "When non-nil, a function (lambda (aid-kw) ...) that replaces
+normal key dispatch. Returns a navigation result or NIL to fall through.")
    (list-state :initform (make-hash-table) :accessor session-list-state
                :documentation "Framework-managed per-screen list state.
 Keys are screen symbols, values are plists of (:offset N :data-count N :cursor-row N).")
@@ -225,45 +228,16 @@ Returns a screen symbol or NIL. Lazily loads screens from disk."
   "Load a .menu file and return the data plist."
   (read-single-form path))
 
-(defun collect-menu-entries (items pkg &optional prefix)
-  "Recursively collect (key . screen-symbol) pairs from menu ITEMS.
-PREFIX is prepended with a dot for nested items (e.g. \"5.1\")."
-  (let ((entries nil))
-    (dolist (item items)
-      (let* ((key (getf item :key))
-             (full-key (if prefix (format nil "~A.~A" prefix key) key))
-             (screen (getf item :screen))
-             (sub-items (getf item :items)))
-        (when (and key screen)
-          (push (cons full-key (intern (string-upcase (string screen)) pkg))
-                entries))
-        (when sub-items
-          (setf entries (nconc (nreverse (collect-menu-entries sub-items pkg full-key))
-                               entries)))))
-    (nreverse entries)))
-
 (defun load-application-menus (app)
   "Load all .menu files from the application's screen directories."
   (dolist (dir (application-screen-directories app))
     (dolist (path (directory (merge-pathnames "*.menu" dir)))
       (let* ((data (load-menu-file path))
              (name (getf data :name)))
-        (setf (gethash name (application-menus app)) data)
-        (setf (gethash name (application-menu-timestamps app))
+        (setf (gethash name (application-menus app)) data
+              (gethash name (application-menu-timestamps app))
               (cons path (file-write-date path))))))
-  (rebuild-menu-entries app))
-
-(defun rebuild-menu-entries (app)
-  "Rebuild the flattened menu-entries alist from all loaded menus."
-  (let ((pkg (application-package app))
-        (entries nil))
-    (maphash (lambda (name data)
-               (let ((prefix (unless (string= name "main") name)))
-                 (setf entries
-                       (nconc (collect-menu-entries (getf data :items) pkg prefix)
-                              entries))))
-             (application-menus app))
-    (setf (application-menu-entries app) entries)))
+  (setf (application-menu-entries app) nil))
 
 (defun find-menu-file (name-string)
   "Search the current application's directories for NAME-STRING.menu."
@@ -288,7 +262,6 @@ PREFIX is prepended with a dot for nested items (e.g. \"5.1\")."
       (setf (gethash name-string (application-menus *application*)) data)
       (setf (gethash name-string (application-menu-timestamps *application*))
             (cons path (file-write-date path)))
-      (rebuild-menu-entries *application*)
       ;; Clear the cached generated screen so it gets regenerated
       (remhash name-string (app-screens))
       t)))
@@ -696,6 +669,33 @@ after binding but before the accept loop. Useful for test harnesses."
                                (usocket:get-peer-address c))))))
       (when tls-listener-socket
         (ignore-errors (usocket:socket-close tls-listener-socket))))))
+
+;;; Confirmation dialog
+;;;
+;;; A screen can request confirmation before performing a destructive action.
+;;; Call request-confirmation from a key handler with a message and callback.
+;;; On the next screen render, the message is shown in yellow, key labels are
+;;; replaced with PF5=Confirm PF3=Cancel. All other keys are ignored.
+;;; PF5 executes the callback, PF3 cancels.
+
+(defun request-confirmation (message callback)
+  "Request user confirmation. MESSAGE is shown in yellow on the message line.
+CALLBACK is a function called with no arguments when PF5 confirms.
+Installs a key override on the session. Returns :stay."
+  (setf (session-property *session* :confirm-message) message
+        (session-key-override *session*)
+        (lambda (aid-kw)
+          (case aid-kw
+            (:pf5
+             (setf (session-property *session* :confirm-message) nil
+                   (session-key-override *session*) nil)
+             (funcall callback))
+            (:pf3
+             (setf (session-property *session* :confirm-message) nil
+                   (session-key-override *session*) nil)
+             :stay)
+            (otherwise :stay))))
+  :stay)
 
 ;;; Dynamic key label management
 
@@ -1216,6 +1216,9 @@ cl3270 symbols, adding background update thread support via post-send-callback."
           (cond
             ((cl3270:aid-in-set (cl3270:response-aid resp) exit-keys)
              (return (values resp nil)))
+            ;; Key override active: accept all keys
+            ((session-key-override *session*)
+             (return (values resp nil)))
             ((not (cl3270:aid-in-set (cl3270:response-aid resp) pf-keys))
              (unless (or (cl3270:is-clear-key (cl3270:response-aid resp))
                          (cl3270:is-key (cl3270:response-aid resp) cl3270:+aid-pa1+)
@@ -1348,8 +1351,15 @@ With FULL-CONTROL, do nothing (app manages all fields)."
                 (default-command-label *application*))))
     (setf (gethash "command" field-values)
           (make-string +command-field-width+ :initial-element #\Space)))
-  (setf (gethash "errormsg" field-values)
-        (or (gethash "errormsg" field-values) ""))
+  ;; Confirmation dialog override: show message in yellow, replace key labels
+  (let ((confirm-msg (session-property *session* :confirm-message)))
+    (when confirm-msg
+      (setf (gethash "errormsg" field-values) confirm-msg)
+      (set-field-attribute "errormsg" :color cl3270:+yellow+)
+      (setf *current-screen-keys*
+            (list (list :pf5 "Bestaetigen") (list :pf3 "Zurueck")))))
+  (unless (gethash "errormsg" field-values)
+    (setf (gethash "errormsg" field-values) ""))
   (let ((key-labels (format-key-labels-from-specs *current-screen-keys*
                                                    *current-key-layout*)))
     (when key-labels
@@ -1409,6 +1419,42 @@ Uses set-cursor override if set, otherwise falls back to the first writable fiel
     (find-if (lambda (m) (not (eq m default-method)))
              (compute-applicable-methods #'handle-key (list screen-sym aid-kw)))))
 
+(defun dispatch-enter (context dispatch-sym key-spec command)
+  "Handle Enter key: menu selection, command field, or screen handler.
+Returns a navigation result."
+  (let* ((name-string (screen-name-string dispatch-sym))
+         (info (gethash name-string (app-screens)))
+         (is-menu (and info (screen-info-menu info))))
+    (cond
+      ;; Command field has input
+      ((plusp (length command))
+       (let ((result (or (process-screen-command dispatch-sym command)
+                         (when is-menu
+                           (menu-screen-command dispatch-sym command))
+                         (process-command *application* command))))
+         (cond
+           (result
+            (setf (cursor-row) 21 (cursor-col) 14)
+            result)
+           (t
+            (setf (gethash "errormsg" context)
+                  (if (and is-menu (every #'digit-char-p command))
+                      (invalid-menu-selection-message *application*
+                                                     (string-upcase command))
+                      (unknown-command-message *application* command)))
+            :stay))))
+      ;; Empty command on menu screen: cursor-based item selection
+      (is-menu
+       (let ((target (menu-screen-select dispatch-sym)))
+         (when target
+           (setf (cursor-row) 21 (cursor-col) 14))
+         (or target :stay)))
+      ;; Empty command with Enter key handler
+      (key-spec
+       (handle-key dispatch-sym :enter))
+      ;; No handler
+      (t :stay))))
+
 (defun dispatch-key (context dispatch-sym aid-kw key-spec
                      has-list-data repeat-groups list-data-total app-package
                      command)
@@ -1429,6 +1475,9 @@ COMMAND is the trimmed value from the command field (extracted from response)."
                        (format nil "Internal error. Incident: ~A" id))
                  (invoke-restart 'redisplay)))))
         (cond
+          ;; Key override (used by confirmation dialog)
+          ((session-key-override *session*)
+           (funcall (session-key-override *session*) aid-kw))
           ;; :back and :goto are defaults that custom handlers can override
           ((and key-spec (getf (cddr key-spec) :back))
            (if (has-custom-key-handler-p dispatch-sym aid-kw)
@@ -1446,35 +1495,9 @@ COMMAND is the trimmed value from the command field (extracted from response)."
           ((and has-list-data (eq aid-kw :pf8))
            (page-forward dispatch-sym repeat-groups list-data-total)
            :stay)
-          ;; Command field processing: check before normal key dispatch
-          ((and (eq aid-kw :enter) (plusp (length command)))
-           (let ((result (or (process-screen-command dispatch-sym command)
-                             (menu-screen-command dispatch-sym command)
-                             (process-command *application* command))))
-             (cond
-               (result
-                ;; Command triggered navigation: save cursor at command field start
-                (setf (cursor-row) 21 (cursor-col) 14)
-                result)
-               (t
-                (setf (gethash "errormsg" context)
-                      (unknown-command-message *application* command))
-                :stay))))
-          ;; Enter with empty command
+          ;; Enter: menu input, command field, or screen handler
           ((eq aid-kw :enter)
-           (let* ((name-string (screen-name-string dispatch-sym))
-                  (info (gethash name-string (app-screens)))
-                  (is-menu (and info (screen-info-menu info))))
-             (cond
-               ;; Menu screen: cursor-based item selection or stay
-               (is-menu (let ((target (menu-screen-select dispatch-sym)))
-                          (when target
-                            (setf (cursor-row) 21 (cursor-col) 14))
-                          (or target :stay)))
-               ;; Has an Enter key spec: dispatch normally
-               (key-spec (handle-key dispatch-sym aid-kw))
-               ;; No Enter handler: just stay
-               (t :stay))))
+           (dispatch-enter context dispatch-sym key-spec command))
           (t (handle-key dispatch-sym aid-kw))))
     (redisplay () :stay)))
 

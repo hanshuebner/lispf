@@ -100,12 +100,15 @@
            #:*attribute-intro-char*
            ;; Customization
            #:unknown-key-message
+           #:invalid-menu-selection-message
            ;; Logging
            #:log-message
            #:*log-level*
            #:*log-consumers*
            #:add-log-consumer
            #:remove-log-consumer
+           ;; Confirmation dialog
+           #:request-confirmation
            ;; Idle timeout
            #:session-idle-timeout
            #:session-cleanup

@@ -5,8 +5,7 @@
 ;;;; End-to-end tests for the guestbook example application.
 
 (defpackage #:lispf-guestbook-tests
-  (:use #:cl #:lispf-test)
-  (:export #:run-all))
+  (:use #:cl #:lispf-test))
 
 (in-package #:lispf-guestbook-tests)
 
@@ -23,6 +22,11 @@
 
 (defun load-screen-data-files ()
   (setf *new-entry-screen* (load-test-screen-data (screen-path "new-entry"))))
+
+(define-suite-fixtures
+  (:name :screen-data
+   :scope :suite
+   :setup (load-screen-data-files)))
 
 ;;; Test utilities
 
@@ -81,13 +85,3 @@
       (assert-on-screen s "BYE")
       (assert-screen-contains s "Thank you"))))
 
-;;; Runner
-
-(defun run-all ()
-  "Run all guestbook tests."
-  (load-screen-data-files)
-  (format t "~&;;; Running guestbook tests~%")
-  (run-tests 'welcome-screen-displays
-             'enter-on-welcome-goes-to-empty-list
-             'add-entry-and-verify-list
-             'pf3-exits-to-bye))

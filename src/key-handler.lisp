@@ -160,6 +160,11 @@ The '=' prefix triggers a jump (resets screen stack)."))
   (:method ((application t) (command t))
     (msg "~A: unknown command" command)))
 
+(defgeneric invalid-menu-selection-message (application selection)
+  (:documentation "Return the error message for an invalid menu selection.")
+  (:method ((application t) (selection t))
+    (msg "~A: invalid selection" selection)))
+
 ;;; Command label customization
 
 (defgeneric default-command-label (application)

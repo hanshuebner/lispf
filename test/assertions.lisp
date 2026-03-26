@@ -123,6 +123,10 @@ Accounts for the 3270 field attribute byte at column 0 by checking from column 1
 (defvar *suite-order* nil
   "Packages in the order their first test was registered.")
 
+(defvar *suite-fixtures* (make-hash-table :test 'eq)
+  "Per-package fixture declarations: package -> list of fixture plists.
+Each plist has keys :name, :scope (:suite or :test), :setup, :teardown.")
+
 (defun package-tests (&optional (pkg *package*))
   "Return (tests-hash . test-order) for PKG, creating if needed."
   (or (gethash pkg *test-registry*)
@@ -141,10 +145,53 @@ Tests are automatically available to run-tests."
      (pushnew ',name (cdr entry))
      ',name))
 
+(defmacro define-suite-fixtures (&body fixture-specs)
+  "Declare fixtures for the current package's test suite.
+Each FIXTURE-SPEC is a plist with keys :name, :scope, :setup, and optionally :teardown.
+SCOPE is :suite (run once before/after all tests) or :test (run around each test).
+SETUP and TEARDOWN are forms to evaluate."
+  (let ((specs (loop for spec in fixture-specs
+                     collect `(list :name ,(getf spec :name)
+                                    :scope ,(getf spec :scope)
+                                    :setup (lambda () ,(getf spec :setup))
+                                    :teardown ,(if (getf spec :teardown)
+                                                   `(lambda () ,(getf spec :teardown))
+                                                   '(lambda ()))))))
+    `(setf (gethash *package* *suite-fixtures*)
+           (list ,@specs))))
+
+(defun run-single-test (name fn test-fixtures)
+  "Run a single test FN, wrapping it with TEST-FIXTURES setup/teardown.
+Returns :pass, :fail, or :error, and the condition on failure."
+  (labels ((wrap (fixtures)
+             (if (null fixtures)
+                 (funcall fn)
+                 (let ((f (first fixtures))
+                       (setup-done nil))
+                   (unwind-protect
+                        (progn
+                          (funcall (getf f :setup))
+                          (setf setup-done t)
+                          (wrap (rest fixtures)))
+                     (when setup-done
+                       (ignore-errors (funcall (getf f :teardown)))))))))
+    (handler-case
+        (progn
+          (wrap test-fixtures)
+          (format t "~&  PASS ~A~%" name)
+          (values :pass nil))
+      (test-failure (c)
+        (format t "~&  FAIL ~A: ~A~%" name c)
+        (values :fail c))
+      (error (c)
+        (format t "~&  ERROR ~A: ~A~%" name c)
+        (values :error c)))))
+
 (defun run-tests (&rest args)
   "Run the named tests, or all tests in definition order.
 When :PACKAGE is given (a package designator), run tests from that package
-instead of the calling package.  Example: (run-tests :package :my-tests)"
+instead of the calling package.  Example: (run-tests :package :my-tests)
+Automatically sets up suite fixtures declared via define-suite-fixtures."
   (let* ((package-pos (position :package args))
          (pkg (if package-pos
                   (find-package (nth (1+ package-pos) args))
@@ -156,46 +203,46 @@ instead of the calling package.  Example: (run-tests :package :my-tests)"
          (entry (package-tests pkg))
          (tests (car entry))
          (test-names (or names (reverse (cdr entry))))
+         (all-fixtures (gethash pkg *suite-fixtures*))
+         (suite-fixtures (remove :test all-fixtures :key (lambda (f) (getf f :scope))))
+         (test-fixtures (remove :suite all-fixtures :key (lambda (f) (getf f :scope))))
          (pass 0)
          (fail-count 0)
-         (errors '()))
-    (dolist (name test-names)
-      (let ((fn (gethash name tests)))
-        (if (not fn)
-            (progn
-              (format t "~&  SKIP ~A (not defined)~%" name)
-              (incf fail-count)
-              (push (cons name "not defined") errors))
-            (handler-case
-                (progn
-                  (funcall fn)
-                  (format t "~&  PASS ~A~%" name)
-                  (incf pass))
-              (test-failure (c)
-                (format t "~&  FAIL ~A: ~A~%" name c)
-                (incf fail-count)
-                (push (cons name c) errors))
-              (error (c)
-                (format t "~&  ERROR ~A: ~A~%" name c)
-                (incf fail-count)
-                (push (cons name c) errors))))))
+         (errors '())
+         (setup-fixtures nil))
+    (unwind-protect
+         (progn
+           (dolist (f suite-fixtures)
+             (funcall (getf f :setup))
+             (push f setup-fixtures))
+           (dolist (name test-names)
+             (let ((fn (gethash name tests)))
+               (if (not fn)
+                   (progn
+                     (format t "~&  SKIP ~A (not defined)~%" name)
+                     (incf fail-count)
+                     (push (cons name "not defined") errors))
+                   (multiple-value-bind (result condition)
+                       (run-single-test name fn test-fixtures)
+                     (case result
+                       (:pass (incf pass))
+                       (t (incf fail-count)
+                          (push (cons name condition) errors))))))))
+      (dolist (f setup-fixtures)
+        (ignore-errors (funcall (getf f :teardown)))))
     (format t "~&~%Results: ~D passed, ~D failed out of ~D~%"
             pass fail-count (+ pass fail-count))
     (values (zerop fail-count) pass fail-count errors)))
 
 (defun run-all-suites ()
   "Run all registered test suites.  Returns T if all passed.
-For each suite, calls its RUN-ALL if exported, otherwise calls RUN-TESTS
-in that package's context.  Always binds *package* to the suite's package
-so that run-tests can find the test registry."
+Calls run-tests for each suite, which automatically sets up any declared
+fixtures.  Always binds *package* to the suite's package so that
+run-tests can find the test registry."
   (let ((all-passed t))
     (dolist (pkg (reverse *suite-order*))
       (format t "~&~%=== ~A ===~%" (package-name pkg))
       (let ((*package* pkg))
-        (let ((run-all (find-symbol "RUN-ALL" pkg)))
-          (if (and run-all (fboundp run-all))
-              (unless (funcall run-all)
-                (setf all-passed nil))
-              (unless (run-tests)
-                (setf all-passed nil))))))
+        (unless (run-tests :package pkg)
+          (setf all-passed nil))))
     all-passed))

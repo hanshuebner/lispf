@@ -468,7 +468,6 @@ Menu files are checked for changes on disk and reloaded if newer."
                                          (setf (gethash name-string (application-menus *application*)) data
                                                (gethash name-string (application-menu-timestamps *application*))
                                                (cons menu-path (file-write-date menu-path)))
-                                         (rebuild-menu-entries *application*)
                                          data))))))
                 (if menu-data
                     (let ((info (compile-screen-data

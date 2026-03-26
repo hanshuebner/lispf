@@ -45,8 +45,10 @@
            ;; Test runner
            #:*test-registry*
            #:*suite-order*
+           #:*suite-fixtures*
            #:package-tests
            #:define-test
+           #:define-suite-fixtures
            #:run-tests
            #:run-all-suites
            ;; Harness
