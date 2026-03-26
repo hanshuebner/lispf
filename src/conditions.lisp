@@ -44,8 +44,29 @@ Use this in key handlers for user-facing errors (e.g. validation failures)."
         (num (incf *incident-counter*)))
     (format nil "~A-~A-~D" adj noun num)))
 
+;;; Error logging rate limiter
+
+(defvar *last-error-log-time* 0
+  "Internal real time of the last error/incident log, for rate limiting.")
+
+(defvar *error-log-lock* (bt:make-lock "error-log")
+  "Lock protecting *last-error-log-time*.")
+
+(defun error-log-throttled-p ()
+  "Return T if an error was logged less than 2 seconds ago."
+  (bt:with-lock-held (*error-log-lock*)
+    (let ((now (get-internal-real-time))
+          (min-interval (* 2 internal-time-units-per-second)))
+      (if (< (- now *last-error-log-time*) min-interval)
+          t
+          (progn (setf *last-error-log-time* now) nil)))))
+
 ;;; Incident logging
 
 (defun log-incident (id condition)
-  "Log an incident with its ID and condition details to *error-output*."
-  (format *error-output* "~&[INCIDENT ~A] ~A~%" id condition))
+  "Log an incident with its ID, condition details, and backtrace to *error-output*."
+  (format *error-output* "~&[INCIDENT ~A] ~A~%" id condition)
+  (unless (error-log-throttled-p)
+    (ignore-errors
+      (sb-debug:print-backtrace :stream *error-output* :count 20
+                                :print-frame-source nil))))

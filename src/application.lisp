@@ -480,57 +480,64 @@ telnet negotiation."
   (let* ((conn-id (next-connection-id))
          (*application* application)
          (*connection-id* conn-id))
-    (handler-case
-        (progn
-          (when tls-immediate-p
-            (cl3270:wrap-socket-with-tls socket tls-config))
-          (multiple-value-bind (devinfo err)
-              (cl3270:negotiate-telnet socket
-                                       :tls-config (unless tls-immediate-p tls-config))
-            (when err
-              (log-message :warn "negotiation error: ~A" err)
-              (return-from handle-connection))
+    (handler-bind
+        (((and error (not idle-timeout-error) (not end-of-file))
+           (lambda (c)
+             (log-message :error "connection error: ~A" c)
+             (unless (error-log-throttled-p)
+               (ignore-errors
+                 (sb-debug:print-backtrace :stream *error-output* :count 20
+                                           :print-frame-source nil))))))
+      (handler-case
+          (progn
             (when tls-immediate-p
-              (setf (cl3270:tls-p devinfo) t))
-            (let* ((addr (ignore-errors (usocket:get-peer-address socket)))
-                   (peer (ignore-errors
-                           (format nil "~{~D~^.~}:~D"
-                                   (coerce addr 'list)
-                                   (usocket:get-peer-port socket))))
-                   (term (cl3270::term-type devinfo))
-                   (model (when (and (>= (length term) 10)
-                                     (char= (char term 8) #\-))
-                            (char term 9))))
-              (multiple-value-bind (pri-rows pri-cols)
-                  (case model
-                    (#\2 (values 24 80))
-                    (#\3 (values 32 80))
-                    (#\4 (values 43 80))
-                    (#\5 (values 27 132))
-                    (otherwise (values 24 80)))
-                (log-message :info "connect from=~A type=~A size=~Dx~D~@[ alt=~Dx~D~]~@[ codepage=~A~] tls=~A"
-                             (or peer "unknown")
-                             term
-                             pri-rows pri-cols
-                             (when (or (/= (cl3270::rows devinfo) pri-rows)
-                                       (/= (cl3270::cols devinfo) pri-cols))
-                               (cl3270::rows devinfo))
-                             (when (or (/= (cl3270::rows devinfo) pri-rows)
-                                       (/= (cl3270::cols devinfo) pri-cols))
-                               (cl3270::cols devinfo))
-                             (when (cl3270::codepage devinfo)
-                               (cl3270::codepage-name (cl3270::codepage devinfo)))
-                             (if (cl3270:tls-p devinfo) "yes" "no"))))
-            (unwind-protect
-                 (run-application application socket devinfo
-                                  :tls-p (cl3270:tls-p devinfo)
-                                  :connection-id conn-id)
-              (cl3270:unnegotiate-telnet socket 1))))
-      (idle-timeout-error ())
-      (end-of-file ()
-        (log-message :info "client disconnected"))
-      (error (e)
-        (log-message :error "connection error: ~A" e)))))
+              (cl3270:wrap-socket-with-tls socket tls-config))
+            (multiple-value-bind (devinfo err)
+                (cl3270:negotiate-telnet socket
+                                         :tls-config (unless tls-immediate-p tls-config))
+              (when err
+                (log-message :warn "negotiation error: ~A" err)
+                (return-from handle-connection))
+              (when tls-immediate-p
+                (setf (cl3270:tls-p devinfo) t))
+              (let* ((addr (ignore-errors (usocket:get-peer-address socket)))
+                     (peer (ignore-errors
+                             (format nil "~{~D~^.~}:~D"
+                                     (coerce addr 'list)
+                                     (usocket:get-peer-port socket))))
+                     (term (cl3270::term-type devinfo))
+                     (model (when (and (>= (length term) 10)
+                                       (char= (char term 8) #\-))
+                              (char term 9))))
+                (multiple-value-bind (pri-rows pri-cols)
+                    (case model
+                      (#\2 (values 24 80))
+                      (#\3 (values 32 80))
+                      (#\4 (values 43 80))
+                      (#\5 (values 27 132))
+                      (otherwise (values 24 80)))
+                  (log-message :info "connect from=~A type=~A size=~Dx~D~@[ alt=~Dx~D~]~@[ codepage=~A~] tls=~A"
+                               (or peer "unknown")
+                               term
+                               pri-rows pri-cols
+                               (when (or (/= (cl3270::rows devinfo) pri-rows)
+                                         (/= (cl3270::cols devinfo) pri-cols))
+                                 (cl3270::rows devinfo))
+                               (when (or (/= (cl3270::rows devinfo) pri-rows)
+                                         (/= (cl3270::cols devinfo) pri-cols))
+                                 (cl3270::cols devinfo))
+                               (when (cl3270::codepage devinfo)
+                                 (cl3270::codepage-name (cl3270::codepage devinfo)))
+                               (if (cl3270:tls-p devinfo) "yes" "no"))))
+              (unwind-protect
+                   (run-application application socket devinfo
+                                    :tls-p (cl3270:tls-p devinfo)
+                                    :connection-id conn-id)
+                (cl3270:unnegotiate-telnet socket 1))))
+        (idle-timeout-error ())
+        (end-of-file ()
+          (log-message :info "client disconnected"))
+        (error ())))))
 
 ;;; Default command processing (menu entries + screen aliases)
 
