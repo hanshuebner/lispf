@@ -213,8 +213,9 @@ With FULL-CONTROL, no framework fields are created (app manages all rows)."
                               :content "Command ==>" :color cl3270:+turquoise+)
            (cl3270:make-field :row 21 :col 13 :name "command"
                               :write t :highlighting cl3270:+underscore+)))
-   (list (cl3270:make-field :row 21 :col 79 :name "errormsg" :color cl3270:+red+)
-         (cl3270:make-field :row 22 :col 79 :name "keys"))))
+   (list (cl3270:make-field :row 21 :col 79 :name "errormsg" :color cl3270:+red+
+                            :len 79)
+         (cl3270:make-field :row 22 :col 79 :name "keys" :len 79))))
 
 (defun now-time-hhmm ()
   "Return current time as HH:MM string."

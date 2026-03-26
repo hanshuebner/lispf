@@ -1341,7 +1341,7 @@ With FULL-CONTROL, do nothing (app manages all fields)."
     (setf (gethash "command" field-values)
           (make-string +command-field-width+ :initial-element #\Space)))
   (setf (gethash "errormsg" field-values)
-        (format nil "~80A" (or (gethash "errormsg" field-values) "")))
+        (or (gethash "errormsg" field-values) ""))
   (let ((key-labels (format-key-labels-from-specs *current-screen-keys*
                                                    *current-key-layout*)))
     (when key-labels
