@@ -182,9 +182,9 @@ Example:
             (,merged-rules-var (merge-screen-rules ,screen-rules-var ,rules))
             (,vals-var (or ,initial-values (cl3270:make-dict :test #'equal))))
        ;; Framework: set title and key labels
-       (setf (gethash "title" ,vals-var) (format-title-line ',screen-name))
+       (setf (gethash "%title" ,vals-var) (format-title-line ',screen-name))
        ,@(when key-label-string
-           `((setf (gethash "keys" ,vals-var) ,key-label-string)))
+           `((setf (gethash "%keys" ,vals-var) ,key-label-string)))
        ,@(when field-bindings
            `((check-field-names ,screen-var
                                 ,@(mapcar (lambda (f) `',f) field-bindings))))
@@ -194,7 +194,7 @@ Example:
                                       ,vals-var
                                       (vector ,@pf-key-forms)
                                       (vector ,@exit-key-forms)
-                                      "errormsg"
+                                      "%errormsg"
                                       ,cursor-row ,cursor-col
                                       ,conn
                                       ,devinfo

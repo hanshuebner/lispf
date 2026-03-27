@@ -202,20 +202,21 @@ distributes to \"name.0\" ... \"name.N-1\", removes base key."
 
 (defun make-framework-fields (&key has-command full-control)
   "Create framework-managed fields: title, command line (when HAS-COMMAND), errormsg, keys.
-With FULL-CONTROL, no framework fields are created (app manages all rows)."
+With FULL-CONTROL, no framework fields are created (app manages all rows).
+Framework field names are prefixed with % to avoid collisions with application fields."
   (when full-control
     (return-from make-framework-fields '()))
   (append
-   (list (cl3270:make-field :row 0 :col 0 :name "title" :position-only t)
+   (list (cl3270:make-field :row 0 :col 0 :name "%title" :position-only t)
          (cl3270:make-field :row 0 :col 79 :name ""))
    (when has-command
-     (list (cl3270:make-field :row 21 :col 0 :name "cmdlabel"
+     (list (cl3270:make-field :row 21 :col 0 :name "%cmdlabel"
                               :content "Command ==>" :color cl3270:+turquoise+)
-           (cl3270:make-field :row 21 :col 13 :name "command"
+           (cl3270:make-field :row 21 :col 13 :name "%command"
                               :write t :highlighting cl3270:+underscore+)))
-   (list (cl3270:make-field :row 21 :col 79 :name "errormsg" :color cl3270:+red+
+   (list (cl3270:make-field :row 21 :col 79 :name "%errormsg" :color cl3270:+red+
                             :len 79)
-         (cl3270:make-field :row 22 :col 79 :name "keys" :len 79))))
+         (cl3270:make-field :row 22 :col 79 :name "%keys" :len 79))))
 
 (defun now-time-hhmm ()
   "Return current time as HH:MM string."
@@ -585,10 +586,12 @@ APP-RULES takes precedence over SCREEN-RULES. Returns nil if both are nil."
                   ""))))))
 
 (defun set-page-info (field-values context offset page-size total)
-  "Auto-populate the page-info field in FIELD-VALUES and CONTEXT."
-  (let ((str (format nil "Page ~D of ~D"
-                     (1+ (floor offset page-size))
-                     (max 1 (ceiling total page-size)))))
+  "Auto-populate the page-info field in FIELD-VALUES and CONTEXT.
+Omits page info when all data fits on one page."
+  (let* ((pages (max 1 (ceiling total page-size)))
+         (str (if (<= pages 1)
+                  ""
+                  (msg "Page ~D of ~D" (1+ (floor offset page-size)) pages))))
     (setf (gethash "page-info" field-values) str
           (gethash "page-info" context) str)))
 
@@ -644,18 +647,26 @@ Call from a key handler on a screen with a list-data-getter."
           (parse-integer idx-str))))))
 
 (defun filter-screen-fields (screen repeat-groups data-count)
-  "Return a screen copy excluding repeat field instances beyond DATA-COUNT.
-Fields belonging to a repeat group with index >= DATA-COUNT are removed."
+  "Return a screen copy excluding all fields on rows beyond DATA-COUNT.
+On partial pages, the caller must force a screen clear so that stale field
+attribute bytes and content are erased.  Removes both named repeat fields
+and unnamed separator fields that occupy the same rows."
   (let ((max-count (reduce #'max repeat-groups :key #'second :initial-value 0)))
     (if (>= data-count max-count)
         screen
-        (let ((base-names (mapcar #'first repeat-groups)))
-          (flet ((beyond-data-p (field)
-                   (let ((idx (repeat-field-index (cl3270:field-name field) base-names)))
-                     (and idx (>= idx data-count)))))
+        (let* ((base-names (mapcar #'first repeat-groups))
+               (excess-rows (make-hash-table)))
+          ;; Identify rows occupied by repeat fields beyond data-count
+          (dolist (f (cl3270:screen-fields screen))
+            (let ((idx (repeat-field-index (cl3270:field-name f) base-names)))
+              (when (and idx (>= idx data-count))
+                (setf (gethash (cl3270:field-row f) excess-rows) t))))
+          ;; Remove all fields on those rows
+          (flet ((on-excess-row-p (field)
+                   (gethash (cl3270:field-row field) excess-rows)))
             (apply #'cl3270:make-screen
                    (cl3270:screen-name screen)
-                   (remove-if #'beyond-data-p (cl3270:screen-fields screen))))))))
+                   (remove-if #'on-excess-row-p (cl3270:screen-fields screen))))))))
 
 ;;; Simple screen display
 
@@ -664,8 +675,8 @@ Fields belonging to a repeat group with index >= DATA-COUNT are removed."
 Automatically populates the title line. Useful for informational screens."
   (let* ((screen (get-screen screen-name))
          (vals (or values (cl3270:make-dict :test #'equal))))
-    (unless (nth-value 1 (gethash "title" vals))
-      (setf (gethash "title" vals) (format-title-line screen-name)))
+    (unless (nth-value 1 (gethash "%title" vals))
+      (setf (gethash "%title" vals) (format-title-line screen-name)))
     (cl3270:show-screen-opts screen vals conn
                              (cl3270:make-screen-opts
                               :altscreen devinfo

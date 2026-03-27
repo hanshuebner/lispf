@@ -25,6 +25,6 @@ Returns :stay if a .help file was found and the help viewer invoked, or NIL."
     (if result
         result
         (progn
-          (setf (gethash "errormsg" (session-context *session*))
+          (setf (gethash "%errormsg" (session-context *session*))
                 (msg "No help available"))
           :stay))))

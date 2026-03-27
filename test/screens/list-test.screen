@@ -1,0 +1,12 @@
+(:name "list-test"
+ :navigable t
+ :screen "
+
+     Name
+"
+ :fields ((:from (2 1) :len 1 :name sel :write t :highlighting underscore :repeat 5)
+          (:from (2 5) :len 30 :name item-name :repeat 5)
+          (:from (7 1) :len 30 :name page-info :color turquoise))
+ :keys ((:pf3 "Exit")
+        (:pf7 "Prev" :hidden t)
+        (:pf8 "Next" :hidden t)))

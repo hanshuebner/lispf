@@ -33,6 +33,7 @@
                 :components ((:file "key-layout-tests")
                              (:file "i18n-tests")
                              (:file "cursor-tests")
+                             (:file "list-tests")
                              (:file "help-tests")))
                (:module "editor/test"
                 :components ((:file "editor-tests")))

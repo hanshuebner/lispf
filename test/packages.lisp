@@ -30,6 +30,9 @@
            #:cursor-position
            #:wait-for-field
            #:press-pf-wait-screen
+           #:read-buffer
+           #:row-has-input-field-p
+           #:row-has-field-attribute-p
            ;; Assertions
            #:test-failure
            #:assert-screen-contains

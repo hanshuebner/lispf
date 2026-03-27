@@ -37,6 +37,30 @@ Uses Wait(3270Mode) then Wait(Unlock) since the first screen may have no input f
   "Read a full row (80 columns) from the screen."
   (screen-text-at session row 0 80))
 
+(defun read-buffer (session)
+  "Read the raw 3270 buffer. Returns a list of strings (one per row)
+containing field attribute markers like SF(c0e4) for input fields."
+  (let ((resp (send-action session "ReadBuffer(Ascii)")))
+    (s3270-response-data resp)))
+
+(defun row-has-input-field-p (session row)
+  "Return T if ROW contains an unprotected (input) field attribute.
+In ReadBuffer(Ascii) output, field attributes appear as SF(c0=XX,...).
+The attribute byte XX encodes protection in bit 5: unprotected values
+have hex digits 4,5,c,d in the high nibble (bit 5 = 0)."
+  (let ((buffer-rows (read-buffer session)))
+    (when (< row (length buffer-rows))
+      (let ((line (nth row buffer-rows)))
+        (and (cl-ppcre:scan "SF\\(c0=[45cd]" line) t)))))
+
+(defun row-has-field-attribute-p (session row)
+  "Return T if ROW contains any field attribute (SF marker).
+Detects both protected and unprotected fields."
+  (let ((buffer-rows (read-buffer session)))
+    (when (< row (length buffer-rows))
+      (let ((line (nth row buffer-rows)))
+        (and (cl-ppcre:scan "SF\\(" line) t)))))
+
 ;;; Input
 
 (defun type-text (session text)

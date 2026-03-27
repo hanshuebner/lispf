@@ -9,7 +9,7 @@
   "Set an informational (non-error) message, shown only when verbose mode is on.
 Returns the message string (for use as a return value) regardless of verbose setting."
   (when (editor-verbose-p lispf:*session*)
-    (setf (gethash "errormsg" (lispf:session-context lispf:*session*)) message))
+    (setf (gethash "%errormsg" (lispf:session-context lispf:*session*)) message))
   message)
 
 (defun parse-delimited-string (text pos)

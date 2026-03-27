@@ -12,4 +12,5 @@
  "Login required" "Anmeldung erforderlich"
  "No help available" "Keine Hilfe verfügbar"
  "~A: help topic not found" "~A: Hilfethema nicht gefunden"
+ "Page ~D of ~D" "Seite ~D von ~D"
 )

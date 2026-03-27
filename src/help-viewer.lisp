@@ -148,7 +148,7 @@ Returns a string with inline attribute codes."
                               (or (hv-topic state) ""))
                       " No help content loaded")))
     ;; Override command label to show "Topic" instead of default
-    (setf (gethash "cmdlabel" (session-context *session*))
+    (setf (gethash "%cmdlabel" (session-context *session*))
           "Topic ===>")
     ;; Scroll key visibility
     (when (> offset 0)
@@ -181,7 +181,7 @@ Returns a string with inline attribute codes."
       (if (load-help-topic state topic)
           :stay
           (progn
-            (setf (gethash "errormsg" (session-context *session*))
+            (setf (gethash "%errormsg" (session-context *session*))
                   (format nil "~A: help topic not found" topic))
             :stay)))))
 
@@ -192,7 +192,7 @@ Returns a string with inline attribute codes."
       (if (load-help-topic state target)
           (return-from handle-key :stay)
           (progn
-            (setf (gethash "errormsg" (session-context *session*))
+            (setf (gethash "%errormsg" (session-context *session*))
                   (format nil "~A: help topic not found" target))
             (return-from handle-key :stay))))
     :stay))
@@ -202,7 +202,7 @@ Returns a string with inline attribute codes."
     (if (load-help-topic state "index")
         :stay
         (progn
-          (setf (gethash "errormsg" (session-context *session*))
+          (setf (gethash "%errormsg" (session-context *session*))
                 "No help index available")
           :stay))))
 
@@ -251,7 +251,7 @@ Returns :stay."
     ;; Reset state for fresh invocation
     (setf (hv-history state) nil)
     (unless (load-help-topic state topic :no-history t)
-      (setf (gethash "errormsg" (session-context *session*))
+      (setf (gethash "%errormsg" (session-context *session*))
             (format nil "~A: help topic not found" topic))
       (return-from show-help :stay)))
   (invoke-subapplication *help-viewer-app* 'help-viewer))

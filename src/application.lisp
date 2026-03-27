@@ -411,8 +411,9 @@ that need to render key labels themselves."
 
 ;;; Framework field names (excluded from context merge)
 
-(defparameter *framework-fields* '("title" "cmdlabel" "command" "errormsg" "keys")
-  "Field names managed by the framework, excluded from context.")
+(defparameter *framework-fields* '("%title" "%cmdlabel" "%command" "%errormsg" "%keys")
+  "Field names managed by the framework, excluded from context.
+Prefixed with % to avoid collisions with application field names.")
 
 (defconstant +command-field-width+ 65
   "Width of the command input field (col 14 through col 78).")
@@ -835,10 +836,10 @@ unlocking the 3270 keyboard after the main thread received a response."
   (let* ((title (format-title-line (update-context-screen-sym ctx)
                                    (session-indicator-texts)))
          (screen (cl3270:make-screen "title-overlay"
-                   (cl3270:make-field :row 0 :col 0 :name "title"
+                   (cl3270:make-field :row 0 :col 0 :name "%title"
                                       :position-only t :len 79)))
          (vals (cl3270:make-dict :test #'equal)))
-    (setf (gethash "title" vals) title)
+    (setf (gethash "%title"vals) title)
     (bt:with-lock-held ((session-write-lock *session*))
       ;; Double-check running inside the lock -- stop-updates acquires
       ;; this lock after setting running=nil to create a fence.
@@ -1146,7 +1147,7 @@ so no immediate first update is needed."
         (log-incident id e)
         (setf (update-context-running ctx) nil)
         ;; Notify user by setting error message and interrupting main thread
-        (setf (gethash "errormsg" (session-context *session*))
+        (setf (gethash "%errormsg" (session-context *session*))
               (format nil "Internal error. Incident: ~A" id))
         (let ((main (update-context-main-thread ctx)))
           (when main
@@ -1376,31 +1377,31 @@ Returns (values list-data-count list-data-total has-list-data)."
 With FULL-CONTROL, do nothing (app manages all fields)."
   (when full-control
     (return-from set-framework-fields))
-  (setf (gethash "title" field-values)
+  (setf (gethash "%title"field-values)
         (format-title-line screen-sym (session-indicator-texts)))
   ;; Command line (only on screens with command field)
   (when has-command
-    (unless (gethash "cmdlabel" field-values)
-      (setf (gethash "cmdlabel" field-values)
+    (unless (gethash "%cmdlabel" field-values)
+      (setf (gethash "%cmdlabel" field-values)
             (if is-menu
                 (menu-command-label *application*)
                 (default-command-label *application*))))
-    (setf (gethash "command" field-values)
+    (setf (gethash "%command" field-values)
           (make-string +command-field-width+ :initial-element #\Space)))
   ;; Confirmation dialog override: show message in yellow, replace key labels
   (let ((confirm-msg (session-property *session* :confirm-message)))
     (when confirm-msg
-      (setf (gethash "errormsg" field-values) confirm-msg)
-      (set-field-attribute "errormsg" :color cl3270:+yellow+)
+      (setf (gethash "%errormsg" field-values) confirm-msg)
+      (set-field-attribute "%errormsg" :color cl3270:+yellow+)
       (let ((confirm-keys '((:pf3 "Zurueck") (:pf5 "Bestaetigen"))))
         (setf *current-screen-keys* confirm-keys
               *current-key-layout* (compute-key-layout confirm-keys)))))
-  (unless (gethash "errormsg" field-values)
-    (setf (gethash "errormsg" field-values) ""))
+  (unless (gethash "%errormsg" field-values)
+    (setf (gethash "%errormsg" field-values) ""))
   (let ((key-labels (format-key-labels-from-specs *current-screen-keys*
                                                    *current-key-layout*)))
     (when key-labels
-      (setf (gethash "keys" field-values) key-labels))))
+      (setf (gethash "%keys" field-values) key-labels))))
 
 (defun compute-cursor-position (screen display-screen dispatch-sym
                                 repeat-groups has-list-data list-data-count)
@@ -1474,7 +1475,7 @@ Returns a navigation result."
             (setf (cursor-row) 21 (cursor-col) 14)
             result)
            (t
-            (setf (gethash "errormsg" context)
+            (setf (gethash "%errormsg" context)
                   (if (and is-menu (every #'digit-char-p command))
                       (invalid-menu-selection-message *application*
                                                      (string-upcase command))
@@ -1501,14 +1502,14 @@ COMMAND is the trimmed value from the command field (extracted from response)."
       (handler-bind
           ((application-error
              (lambda (c)
-               (setf (gethash "errormsg" context)
+               (setf (gethash "%errormsg" context)
                      (application-error-message c))
                (invoke-restart 'redisplay)))
            (error
              (lambda (c)
                (let ((id (generate-incident-id)))
                  (log-incident id c)
-                 (setf (gethash "errormsg" context)
+                 (setf (gethash "%errormsg" context)
                        (format nil "Internal error. Incident: ~A" id))
                  (invoke-restart 'redisplay)))))
         (cond
@@ -1528,9 +1529,15 @@ COMMAND is the trimmed value from the command field (extracted from response)."
                 app-package)))
           ((and has-list-data (eq aid-kw :pf7))
            (page-backward dispatch-sym repeat-groups)
+           (let ((first-row (list-data-row (get-screen dispatch-sym) repeat-groups)))
+             (when first-row
+               (setf *next-cursor-row* first-row *next-cursor-col* 0)))
            :stay)
           ((and has-list-data (eq aid-kw :pf8))
            (page-forward dispatch-sym repeat-groups list-data-total)
+           (let ((first-row (list-data-row (get-screen dispatch-sym) repeat-groups)))
+             (when first-row
+               (setf *next-cursor-row* first-row *next-cursor-col* 0)))
            :stay)
           ;; Enter: menu input, command field, or screen handler
           ((eq aid-kw :enter)
@@ -1593,7 +1600,7 @@ Returns the 3270 response."
                                     (vector cl3270:+aid-enter+))))
       (multiple-value-bind (response err)
           (display-and-read display-screen screen-rules field-values
-                            pf-keys exit-keys "errormsg"
+                            pf-keys exit-keys "%errormsg"
                             cursor-row cursor-col *connection*
                             :screen-sym (unless full-control dispatch-sym)
                             :codepage (when *device-info*
@@ -1608,7 +1615,7 @@ Returns the 3270 response."
   (merge-response-into-context response context transient-fields)
   (when (and repeat-groups (not has-list-data))
     (join-repeat-field-values repeat-groups context))
-  (remhash "errormsg" context)
+  (remhash "%errormsg" context)
   (setf (cursor-row) (cl3270:response-row response)
         (cursor-col) (cl3270:response-col response)
         (current-response) response)
@@ -1633,7 +1640,7 @@ Returns the 3270 response."
   (when-let ((info (target-screen-info result)))
     (when (and (not (screen-info-anonymous info))
                (not (session-authenticated-p *application* *session*)))
-      (setf (gethash "errormsg" context)
+      (setf (gethash "%errormsg" context)
             (anonymous-access-denied-message *application*))
       (return-from check-anonymous-access :stay)))
   result)
@@ -1644,7 +1651,7 @@ Returns the 3270 response."
     (when (and (screen-info-roles info)
                (not (intersection (screen-info-roles info)
                                   (session-user-roles *application* *session*))))
-      (setf (gethash "errormsg" context)
+      (setf (gethash "%errormsg" context)
             (role-access-denied-message *application*))
       (return-from check-role-access :stay)))
   result)
@@ -1658,7 +1665,7 @@ screen with an incident message. Called from handler-bind."
         (log-incident id c)
         (setf (session-current-screen *session*) last
               (session-context *session*) (make-hash-table :test 'equal))
-        (setf (gethash "errormsg" (session-context *session*))
+        (setf (gethash "%errormsg" (session-context *session*))
               (format nil "Internal error. Incident: ~A" id))))))
 
 (defun dispatch-and-transition (response dispatch-sym has-list-data
@@ -1683,7 +1690,7 @@ Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
            (key-spec (find-key-spec key-specs aid-kw))
            (resp-command
              (string-trim '(#\Space)
-                          (or (gethash "command" (cl3270:response-vals response)) "")))
+                          (or (gethash "%command" (cl3270:response-vals response)) "")))
            (result
              (prog1 (dispatch-key context dispatch-sym aid-kw key-spec has-list-data
                                   repeat-groups list-data-total app-package resp-command)
@@ -1717,7 +1724,7 @@ Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
                                              app-package)))
                    (field-values (cl3270:make-dict :test #'equal)))
               (ensure-key-handlers-validated dispatch-sym key-specs)
-              (remhash "cmdlabel" context)
+              (remhash "%cmdlabel" context)
               (let ((*current-screen-keys*
                       (mapcar (lambda (spec)
                                 (destructuring-bind (aid-kw label &rest rest) spec
@@ -1758,7 +1765,12 @@ Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
                     (set-framework-fields screen-sym field-values
                                           :has-command has-command :is-menu is-menu
                                           :full-control full-control)
-                    (let* ((base-screen
+                    (let* ((partial-page
+                             (and has-list-data list-data-count
+                                  (< list-data-count
+                                     (reduce #'max repeat-groups
+                                             :key #'second :initial-value 0))))
+                           (base-screen
                              (apply-field-attribute-overrides
                               (if has-list-data
                                   (filter-screen-fields screen repeat-groups list-data-count)
@@ -1773,7 +1785,8 @@ Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
                                      field-values dispatch-sym repeat-groups
                                      has-list-data list-data-count
                                      :has-command has-command :full-control full-control
-                                     :no-clear (or no-clear (and overlay t)))
+                                     :no-clear (and (or no-clear (and overlay t))
+                                                    (not partial-page)))
                                (setf no-clear nil))))
                       (unless response (return-from next-screen))
                       (setf (session-last-activity *session*) (get-universal-time)

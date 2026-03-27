@@ -236,7 +236,7 @@ CONTEXT is the field-values hash table. Returns error/info message or nil."
     ;; Message line: show pending info or error - pad to field width
     (setf ed-message
           (pad-to-field-width
-           (or (gethash "errormsg" (lispf:session-context lispf:*session*))
+           (or (gethash "%errormsg" (lispf:session-context lispf:*session*))
                (if pending
                    (let* ((cmd-name (string-upcase (symbol-name (first pending))))
                           (start-line (second pending))
@@ -342,7 +342,7 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
                        (lispf:session-current-screen session) command)
                       (lispf:process-command lispf:*application* command))))
       (return-from dispatch-command result))
-    (setf (gethash "errormsg" (lispf:session-context lispf:*session*))
+    (setf (gethash "%errormsg" (lispf:session-context lispf:*session*))
           (lispf:unknown-command-message lispf:*application* command))
     :stay))
 
@@ -407,7 +407,7 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
 (lispf:define-key-handler edit :pf3 ()
   (process-editor-changes lispf:*session* (lispf:session-context lispf:*session*))
   (when (editor-modified lispf:*session*)
-    (setf (gethash "errormsg" (lispf:session-context lispf:*session*))
+    (setf (gethash "%errormsg" (lispf:session-context lispf:*session*))
           "File modified - use SAVE, SUBMIT, or CANCEL")
     (return-from lispf:handle-key :stay))
   :back)
@@ -417,7 +417,7 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
   (process-editor-changes lispf:*session* (lispf:session-context lispf:*session*))
   (let ((search-str (editor-last-find lispf:*session*)))
     (unless search-str
-      (setf (gethash "errormsg" (lispf:session-context lispf:*session*)) "No previous FIND")
+      (setf (gethash "%errormsg" (lispf:session-context lispf:*session*)) "No previous FIND")
       (return-from lispf:handle-key :stay))
     (editor-set-message (do-find lispf:*session* search-str t))
     :stay))
@@ -427,7 +427,7 @@ Returns a navigation result (:stay, :back, screen symbol), or nil if no command.
   (process-editor-changes lispf:*session* (lispf:session-context lispf:*session*))
   (let ((last (editor-last-change lispf:*session*)))
     (unless last
-      (setf (gethash "errormsg" (lispf:session-context lispf:*session*)) "No previous CHANGE")
+      (setf (gethash "%errormsg" (lispf:session-context lispf:*session*)) "No previous CHANGE")
       (return-from lispf:handle-key :stay))
     (destructuring-bind (from to all-p) last
       (editor-set-message (do-change lispf:*session* from to all-p))
