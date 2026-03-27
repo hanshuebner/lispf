@@ -428,21 +428,26 @@ Creates a simple screen with repeat fields for menu items."
   (let* ((items (getf menu-data :items))
          (max-items (min (length items) 17)))
     (declare (ignore max-items))
-    (list :name name-string
-          :menu name-string
-          :screen (format nil "~%~%~%")
-          :fields (list (list :from '(2 3) :len 3 :name 'key
-                              :color 'green :intense t :repeat 17)
-                        (list :from '(2 8) :len 20 :name 'label
-                              :intense t :repeat 17)
-                        (list :from '(2 29) :len 50 :name 'description
-                              :repeat 17))
-          :navigable t
-          :roles (getf menu-data :roles)
-          :keys (multiple-value-bind (enter-label pf3-label)
-                    (menu-key-labels *application* name-string)
-                  (list (list :enter enter-label)
-                        (list :pf3 pf3-label :back t))))))
+    (let ((result (list :name name-string
+                       :menu name-string
+                       :screen (format nil "~%~%~%")
+                       :fields (list (list :from '(2 3) :len 3 :name 'key
+                                           :color 'green :intense t :repeat 17)
+                                     (list :from '(2 8) :len 20 :name 'label
+                                           :intense t :repeat 17)
+                                     (list :from '(2 29) :len 50 :name 'description
+                                           :repeat 17))
+                       :navigable t
+                       :roles (getf menu-data :roles)
+                       :keys (multiple-value-bind (enter-label pf3-label)
+                                 (menu-key-labels *application* name-string)
+                               (list (list :enter enter-label)
+                                     (list :pf3 pf3-label :back t))))))
+      (when (getf menu-data :command)
+        (setf (getf result :command) t))
+      (when (getf menu-data :aliases)
+        (setf (getf result :aliases) (getf menu-data :aliases)))
+      result)))
 
 (defun ensure-screen-loaded (screen-name)
   "Ensure SCREEN-NAME is loaded and up-to-date. Returns the screen-info.
