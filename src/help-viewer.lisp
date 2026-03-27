@@ -224,13 +224,9 @@ Returns a string with inline attribute codes."
   (let* ((state (ensure-help-viewer-state))
          (offset (hv-scroll-offset state))
          (scroll (1- +hv-content-rows+)))
-    (if (<= offset 0)
-        ;; Wrap to bottom
-        (let ((total (length (hv-rendered-lines state))))
-          (setf (hv-scroll-offset state)
-                (max 0 (- total +hv-content-rows+))))
-        (setf (hv-scroll-offset state)
-              (max 0 (- offset scroll)))))
+    (when (> offset 0)
+      (setf (hv-scroll-offset state)
+            (max 0 (- offset scroll)))))
   :stay)
 
 (define-key-handler help-viewer :pf8 ()
@@ -238,10 +234,8 @@ Returns a string with inline attribute codes."
          (offset (hv-scroll-offset state))
          (total (length (hv-rendered-lines state)))
          (scroll (1- +hv-content-rows+)))
-    (if (>= (+ offset +hv-content-rows+) total)
-        ;; Wrap to top
-        (setf (hv-scroll-offset state) 0)
-        (setf (hv-scroll-offset state) (+ offset scroll))))
+    (when (< (+ offset +hv-content-rows+) total)
+      (setf (hv-scroll-offset state) (+ offset scroll))))
   :stay)
 
 ;;; Public API
