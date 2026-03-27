@@ -53,6 +53,8 @@ Key dispatch chain: `show-screen-and-read` -> 3270 response -> `dispatch-key` ->
 
 Applications are defined with `define-application`, key handlers with `define-key-handler`, screen pre-render with `define-screen-update`. Field values are accessed via `with-field-bindings` (setf-able symbol macros).
 
+**Subapplication handover pattern:** To invoke a subapplication (editor, help viewer) from a menu item, a minimal `.screen` file is required. The framework needs to load the screen before transitioning and calling `prepare-screen`. The `define-screen-update` calls the subapplication via `invoke-subapplication` (which blocks in a nested screen loop), then returns `:back`. Example: a menu item points to screen `notes`, whose screen-update calls `edit-file` (which calls `invoke-subapplication`) and returns `:back` when the editor exits.
+
 ### Editor (`editor/src/`)
 
 The editor uses full-control mode and manages its own screen layout via `editor-layout`. Key concepts:
