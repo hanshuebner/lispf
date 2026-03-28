@@ -243,11 +243,11 @@
                   (static-text-end-position row-map col)))
          (len (- end col))
          (content (map 'string #'car (subseq row-map col end))))
-    (values `(cl3270:make-field :row ,(if (> col 0) row (mod (1- row) +screen-rows+))
-                                :col ,(1- (if (> col 0) col +screen-columns+))
-                                :len ,len
-                                ,@(unless (every (lambda (c) (eql c #\Space)) content) `(:content ,content))
-                                ,@attributes)
+    (values `(make-instance 'cl3270:field :row ,(if (> col 0) row (mod (1- row) +screen-rows+))
+                                         :col ,(1- (if (> col 0) col +screen-columns+))
+                                         :len ,len
+                                         ,@(unless (every (lambda (c) (eql c #\Space)) content) `(:content ,content))
+                                         ,@attributes)
             row
             end)))
 
@@ -260,8 +260,8 @@
           (setf (values field row col) (find-field cell-map row col))
           (push field fields)
           (when (and (< col +screen-columns+)
-                     (remove-from-plist (rest field) :row :col :content))
-            (push `(cl3270:make-field :row ,row :col ,col) fields)))))))
+                     (remove-from-plist (cddr field) :row :col :content))
+            (push `(make-instance 'cl3270:field :row ,row :col ,col) fields)))))))
 
 (defun set-attributes-in-cell-map (cell-map field-definitions)
   (dolist (field-definition field-definitions

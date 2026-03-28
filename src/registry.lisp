@@ -207,16 +207,16 @@ Framework field names are prefixed with % to avoid collisions with application f
   (when full-control
     (return-from make-framework-fields '()))
   (append
-   (list (cl3270:make-field :row 0 :col 0 :name "%title" :position-only t)
-         (cl3270:make-field :row 0 :col 79 :name ""))
+   (list (make-instance 'cl3270:field :row 0 :col 0 :name "%title" :position-only t)
+         (make-instance 'cl3270:field :row 0 :col 79 :name ""))
    (when has-command
-     (list (cl3270:make-field :row 21 :col 0 :name "%cmdlabel"
-                              :content "Command ==>" :color cl3270:+turquoise+)
-           (cl3270:make-field :row 21 :col 13 :name "%command"
-                              :write t :highlighting cl3270:+underscore+)))
-   (list (cl3270:make-field :row 21 :col 79 :name "%errormsg" :color cl3270:+red+
-                            :len 79)
-         (cl3270:make-field :row 22 :col 79 :name "%keys" :len 79))))
+     (list (make-instance 'cl3270:field :row 21 :col 0 :name "%cmdlabel"
+                                        :content "Command ==>" :color cl3270:+turquoise+)
+           (make-instance 'cl3270:field :row 21 :col 13 :name "%command"
+                                        :write t :highlighting cl3270:+underscore+)))
+   (list (make-instance 'cl3270:field :row 21 :col 79 :name "%errormsg" :color cl3270:+red+
+                                      :len 79)
+         (make-instance 'cl3270:field :row 22 :col 79 :name "%keys" :len 79))))
 
 (defun now-time-hhmm ()
   "Return current time as HH:MM string."
@@ -678,7 +678,7 @@ Automatically populates the title line. Useful for informational screens."
     (unless (nth-value 1 (gethash "%title" vals))
       (setf (gethash "%title" vals) (format-title-line screen-name)))
     (cl3270:show-screen-opts screen vals conn
-                             (cl3270:make-screen-opts
+                             (make-instance 'cl3270:screen-opts
                               :altscreen devinfo
                               :codepage codepage
                               :cursor-row (if cursor (first cursor) 0)

@@ -458,64 +458,61 @@ telnet negotiation."
   (let* ((conn-id (next-connection-id))
          (*application* application)
          (*connection-id* conn-id))
-    (handler-bind
-        (((and error (not idle-timeout-error) (not end-of-file))
-           (lambda (c)
-             (log-message :error "connection error: ~A" c)
-             (unless (error-log-throttled-p)
-               (ignore-errors
-                 (sb-debug:print-backtrace :stream *error-output* :count 20
-                                           :print-frame-source nil))))))
-      (handler-case
-          (progn
+    (handler-case
+        (progn
+          (when tls-immediate-p
+            (cl3270:wrap-socket-with-tls socket tls-config))
+          (multiple-value-bind (devinfo err)
+              (cl3270:negotiate-telnet socket
+                                       :tls-config (unless tls-immediate-p tls-config))
+            (when err
+              (log-message :warn "negotiation error: ~A" err)
+              (return-from handle-connection))
             (when tls-immediate-p
-              (cl3270:wrap-socket-with-tls socket tls-config))
-            (multiple-value-bind (devinfo err)
-                (cl3270:negotiate-telnet socket
-                                         :tls-config (unless tls-immediate-p tls-config))
-              (when err
-                (log-message :warn "negotiation error: ~A" err)
-                (return-from handle-connection))
-              (when tls-immediate-p
-                (setf (cl3270:tls-p devinfo) t))
-              (let* ((addr (ignore-errors (usocket:get-peer-address socket)))
-                     (peer (ignore-errors
-                             (format nil "~{~D~^.~}:~D"
-                                     (coerce addr 'list)
-                                     (usocket:get-peer-port socket))))
-                     (term (cl3270::term-type devinfo))
-                     (model (when (and (>= (length term) 10)
-                                       (char= (char term 8) #\-))
-                              (char term 9))))
-                (multiple-value-bind (pri-rows pri-cols)
-                    (case model
-                      (#\2 (values 24 80))
-                      (#\3 (values 32 80))
-                      (#\4 (values 43 80))
-                      (#\5 (values 27 132))
-                      (otherwise (values 24 80)))
-                  (log-message :info "connect from=~A type=~A size=~Dx~D~@[ alt=~Dx~D~]~@[ codepage=~A~] tls=~A"
-                               (or peer "unknown")
-                               term
-                               pri-rows pri-cols
-                               (when (or (/= (cl3270::rows devinfo) pri-rows)
-                                         (/= (cl3270::cols devinfo) pri-cols))
-                                 (cl3270::rows devinfo))
-                               (when (or (/= (cl3270::rows devinfo) pri-rows)
-                                         (/= (cl3270::cols devinfo) pri-cols))
-                                 (cl3270::cols devinfo))
-                               (when (cl3270::codepage devinfo)
-                                 (cl3270::codepage-name (cl3270::codepage devinfo)))
-                               (if (cl3270:tls-p devinfo) "yes" "no"))))
-              (unwind-protect
-                   (run-application application socket devinfo
-                                    :tls-p (cl3270:tls-p devinfo)
-                                    :connection-id conn-id)
-                (cl3270:unnegotiate-telnet socket 1))))
-        (idle-timeout-error ())
-        (end-of-file ()
-          (log-message :info "client disconnected"))
-        (error ())))))
+              (setf (cl3270:tls-p devinfo) t))
+            (let* ((addr (ignore-errors (usocket:get-peer-address socket)))
+                   (peer (ignore-errors
+                           (format nil "~{~D~^.~}:~D"
+                                   (coerce addr 'list)
+                                   (usocket:get-peer-port socket))))
+                   (term (cl3270::term-type devinfo))
+                   (model (when (and (>= (length term) 10)
+                                     (char= (char term 8) #\-))
+                            (char term 9))))
+              (multiple-value-bind (pri-rows pri-cols)
+                  (case model
+                    (#\2 (values 24 80))
+                    (#\3 (values 32 80))
+                    (#\4 (values 43 80))
+                    (#\5 (values 27 132))
+                    (otherwise (values 24 80)))
+                (log-message :info "connect from=~A type=~A size=~Dx~D~@[ alt=~Dx~D~]~@[ codepage=~A~] tls=~A"
+                             (or peer "unknown")
+                             term
+                             pri-rows pri-cols
+                             (when (or (/= (cl3270::rows devinfo) pri-rows)
+                                       (/= (cl3270::cols devinfo) pri-cols))
+                               (cl3270::rows devinfo))
+                             (when (or (/= (cl3270::rows devinfo) pri-rows)
+                                       (/= (cl3270::cols devinfo) pri-cols))
+                               (cl3270::cols devinfo))
+                             (when (cl3270::codepage devinfo)
+                               (cl3270::codepage-name (cl3270::codepage devinfo)))
+                             (if (cl3270:tls-p devinfo) "yes" "no"))))
+            (unwind-protect
+                 (run-application application socket devinfo
+                                  :tls-p (cl3270:tls-p devinfo)
+                                  :connection-id conn-id)
+              (cl3270:unnegotiate-telnet socket 1))))
+      (idle-timeout-error ())
+      (end-of-file ()
+        (log-message :info "client disconnected"))
+      (error (c)
+        (log-message :error "connection error: ~A" c)
+        (unless (error-log-throttled-p)
+          (ignore-errors
+            (sb-debug:print-backtrace :stream *error-output* :count 20
+                                      :print-frame-source nil)))))))
 
 ;;; Default command processing (menu entries + screen aliases)
 
@@ -832,8 +829,8 @@ unlocking the 3270 keyboard after the main thread received a response."
   (let* ((title (format-title-line (update-context-screen-sym ctx)
                                    (session-indicator-texts)))
          (screen (cl3270:make-screen "title-overlay"
-                   (cl3270:make-field :row 0 :col 0 :name "%title"
-                                      :position-only t :len 79)))
+                   (make-instance 'cl3270:field :row 0 :col 0 :name "%title"
+                                                :position-only t :len 79)))
          (vals (cl3270:make-dict :test #'equal)))
     (setf (gethash "%title"vals) title)
     (bt:with-lock-held ((session-write-lock *session*))
@@ -841,7 +838,7 @@ unlocking the 3270 keyboard after the main thread received a response."
       ;; this lock after setting running=nil to create a fence.
       (when (update-context-running ctx)
         (cl3270:show-screen-opts screen vals *connection*
-          (cl3270:make-screen-opts :no-clear t :no-response t))))))
+          (make-instance 'cl3270:screen-opts :no-clear t :no-response t))))))
 
 (defun pad-or-truncate (string width)
   "Pad STRING with spaces or truncate it to exactly WIDTH characters."
@@ -963,7 +960,7 @@ Returns (values screen vals)."
          (vals (cl3270:make-dict :test #'equal))
          (field-idx 0))
     (flet ((add-field (row col name attrs text width)
-             (push (apply #'cl3270:make-field :row row :col col :name name attrs) fields)
+             (push (apply #'make-instance 'cl3270:field :row row :col col :name name attrs) fields)
              (setf (gethash name vals) (pad-or-truncate text width)))
            (attr-row (row)
              (if full-width-p (1- row) row)))
@@ -1070,7 +1067,7 @@ Each element may be a string, a plist, or NIL."
               (bt:with-lock-held ((session-write-lock *session*))
                 (when (update-context-running ctx)
                   (cl3270:show-screen-opts screen vals *connection*
-                                           (cl3270:make-screen-opts :no-clear t :no-response t)))))))))))
+                                           (make-instance 'cl3270:screen-opts :no-clear t :no-response t)))))))))))
 
 (defun wait-for-update-signal (ctx)
   "Block until the update thread is signaled or 1 second elapses.
@@ -1230,7 +1227,7 @@ cl3270 symbols, adding background update thread support via post-send-callback."
             (handler-case
                 (unwind-protect
                      (cl3270:show-screen-opts display-screen my-vals conn
-                                              (cl3270:make-screen-opts
+                                              (make-instance 'cl3270:screen-opts
                                                :cursor-row cursor-row :cursor-col cursor-col
                                                :altscreen devinfo :codepage codepage
                                                :no-clear no-clear
@@ -1275,9 +1272,18 @@ cl3270 symbols, adding background update thread support via post-send-callback."
 
 ;;; Field attribute overrides
 
+(defun copy-instance (instance)
+  "Create a shallow copy of a CLOS instance, copying all bound slot values."
+  (let* ((class (class-of instance))
+         (copy (allocate-instance class)))
+    (dolist (slot (sb-mop:class-slots class) copy)
+      (let ((name (sb-mop:slot-definition-name slot)))
+        (when (slot-boundp instance name)
+          (setf (slot-value copy name) (slot-value instance name)))))))
+
 (defun copy-field-with-overrides (field attrs)
   "Return a copy of FIELD with attributes from ATTRS plist applied."
-  (let ((new (copy-structure field)))
+  (let ((new (copy-instance field)))
     (loop for (key val) on attrs by #'cddr
           do (case key
                (:write (setf (cl3270::field-write new) val))
@@ -1315,10 +1321,10 @@ columns of spaces covering the target row."
   (destructuring-bind (start end) overlay
     (loop for content-row from start to end
           for physical-row = (1+ content-row)
-          collect (cl3270:make-field :row (mod (1- physical-row) 24)
-                                     :col 79
-                                     :len 80
-                                     :content (make-string 80 :initial-element #\Space)))))
+          collect (make-instance 'cl3270:field :row (mod (1- physical-row) 24)
+                                              :col 79
+                                              :len 80
+                                              :content (make-string 80 :initial-element #\Space)))))
 
 (defun add-overlay-clearing (screen overlay)
   "Return a new screen with clearing fields prepended for the overlay range.
