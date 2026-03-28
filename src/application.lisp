@@ -1594,6 +1594,11 @@ Returns the 3270 response."
                   (find cl3270:+aid-enter+ exit-keys))
         (setf pf-keys (concatenate 'vector pf-keys
                                     (vector cl3270:+aid-enter+))))
+      ;; Always accept PF1 (default help handler)
+      (unless (or (find cl3270:+aid-pf1+ pf-keys)
+                  (find cl3270:+aid-pf1+ exit-keys))
+        (setf pf-keys (concatenate 'vector pf-keys
+                                    (vector cl3270:+aid-pf1+))))
       (multiple-value-bind (response err)
           (display-and-read display-screen screen-rules field-values
                             pf-keys exit-keys "%errormsg"
