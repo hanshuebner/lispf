@@ -187,22 +187,50 @@ Returns :pass, :fail, or :error, and the condition on failure."
         (format t "~&  ERROR ~A: ~A~%" name c)
         (values :error c)))))
 
+(defun resolve-test-name (name pkg)
+  "Resolve NAME to a symbol in PKG's test registry.
+NAME can be a symbol from any package; lookup is by symbol-name string."
+  (let ((entry (gethash pkg *test-registry*)))
+    (when entry
+      (find-symbol (symbol-name name) pkg))))
+
+(defun find-test-package (name)
+  "Find the unique package containing a test named NAME.
+Returns the package, or NIL if not found. Signals an error if ambiguous."
+  (let ((matches nil))
+    (maphash (lambda (pkg entry)
+               (let ((sym (find-symbol (symbol-name name) pkg)))
+                 (when (and sym (gethash sym (car entry)))
+                   (push pkg matches))))
+             *test-registry*)
+    (cond ((null matches) nil)
+          ((null (cdr matches)) (first matches))
+          (t (error "Ambiguous test name ~A — found in packages: ~{~A~^, ~}"
+                    name (mapcar #'package-name matches))))))
+
 (defun run-tests (&rest args)
   "Run the named tests, or all tests in definition order.
 When :PACKAGE is given (a package designator), run tests from that package
-instead of the calling package.  Example: (run-tests :package :my-tests)
+instead of the calling package.  When :PACKAGE is omitted and specific test
+names are given, the package is discovered automatically from the test
+registry.  Example: (run-tests 'my-test) or (run-tests :package :my-tests)
 Automatically sets up suite fixtures declared via define-suite-fixtures."
   (let* ((package-pos (position :package args))
-         (pkg (if package-pos
-                  (find-package (nth (1+ package-pos) args))
-                  *package*))
          (names (if package-pos
                     (append (subseq args 0 package-pos)
                             (subseq args (+ package-pos 2)))
                     args))
+         (pkg (cond (package-pos
+                     (find-package (nth (1+ package-pos) args)))
+                    (names
+                     (or (find-test-package (first names))
+                         *package*))
+                    (t *package*)))
          (entry (package-tests pkg))
          (tests (car entry))
-         (test-names (or names (reverse (cdr entry))))
+         (test-names (or (mapcar (lambda (name) (or (resolve-test-name name pkg) name))
+                                 names)
+                         (reverse (cdr entry))))
          (all-fixtures (gethash pkg *suite-fixtures*))
          (suite-fixtures (remove :test all-fixtures :key (lambda (f) (getf f :scope))))
          (test-fixtures (remove :suite all-fixtures :key (lambda (f) (getf f :scope))))

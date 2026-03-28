@@ -65,7 +65,7 @@ The editor uses full-control mode and manages its own screen layout via `editor-
 
 ### Test Framework (`test/`)
 
-Tests are self-registering via `define-test` into a per-package registry (`*test-registry*`). `run-tests` with no arguments runs all tests in the current package in definition order. E2E tests use `with-test-app` to start a lispf instance and `s3270` to drive it.
+Tests are self-registering via `define-test` into a per-package registry (`*test-registry*`). `run-tests` with no arguments runs all tests in the current package in definition order. When specific test names are given, the package is auto-discovered from the registry — no `:package` needed (e.g. `(run-tests 'my-test)`). E2E tests use `with-test-app` to start a lispf instance and `s3270` to drive it.
 
 ## Thread Safety
 
