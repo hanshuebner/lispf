@@ -13,6 +13,7 @@
                (:file "conditions")
                (:file "key-handler")
                (:file "application")
+               (:file "command")
                (:file "help-parser")
                (:file "help")
                (:file "help-viewer"))

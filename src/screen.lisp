@@ -128,11 +128,21 @@
            #:paging-labels
            #:menu-key-labels
            ;; Menu system
-           #:find-menu-entry
            #:find-screen-alias
            #:load-application-menus
            #:application-menus
-           #:application-menu-entries
+           ;; Command registry
+           #:command-info
+           #:command-info-name
+           #:command-info-aliases
+           #:command-info-doc
+           #:command-info-handler
+           #:define-command
+           #:register-command
+           #:find-command
+           #:find-command-doc
+           #:collect-all-commands
+           #:application-commands
            ;; Key labels
            #:format-key-labels
            ;; Field attribute overrides
@@ -166,6 +176,7 @@
            #:wrap-word-as-link
            #:remove-link-at-col
            #:show-help
+           #:show-help-page
            ;; Internationalization
            #:msg
            #:load-message-catalog

@@ -29,8 +29,8 @@
    (menu-timestamps :initform (make-hash-table :test 'equal)
                      :accessor application-menu-timestamps
                      :documentation "Menu file timestamps: name-string -> (path . write-date).")
-   (menu-entries :initform nil :accessor application-menu-entries
-                 :documentation "Alist of (key-string . screen-symbol) from all loaded menus.")
+   (commands :initform (make-hash-table :test 'equal) :accessor application-commands
+             :documentation "Command registry: name-string -> command-info.")
    (sessions :initform '() :accessor application-sessions
              :documentation "List of active sessions (one per connection).")
    (sessions-lock :initform (bt:make-lock "sessions") :reader application-sessions-lock)
@@ -239,7 +239,7 @@ Returns a screen symbol or NIL. Lazily loads screens from disk."
         (setf (gethash name (application-menus app)) data
               (gethash name (application-menu-timestamps app))
               (cons path (file-write-date path))))))
-  (setf (application-menu-entries app) nil))
+)
 
 (defun find-menu-file (name-string)
   "Search the current application's directories for NAME-STRING.menu."
@@ -267,10 +267,6 @@ Returns a screen symbol or NIL. Lazily loads screens from disk."
       ;; Clear the cached generated screen so it gets regenerated
       (remhash name-string (app-screens))
       t)))
-
-(defun find-menu-entry (app key)
-  "Look up KEY in the application's menu entries. Returns a screen symbol or NIL."
-  (cdr (assoc key (application-menu-entries app) :test #'string-equal)))
 
 ;;; define-application macro
 
@@ -530,7 +526,7 @@ telnet negotiation."
          (jump-p (and (plusp (length trimmed))
                       (char= (char trimmed 0) #\=)))
          (key (if jump-p (subseq trimmed 1) trimmed))
-         (target (or (find-menu-entry application key)
+         (target (or (find-command application key)
                      (find-screen-alias application key))))
     (when target
       (if jump-p

@@ -255,3 +255,19 @@ Returns :stay."
             (format nil "~A: help topic not found" topic))
       (return-from show-help :stay)))
   (invoke-subapplication *help-viewer-app* 'help-viewer))
+
+(defun show-help-page (page)
+  "Display a pre-built help-page in the help viewer.
+Call from a key handler. PAGE is a help-page instance.
+Returns :stay."
+  (let ((state (ensure-help-viewer-state)))
+    (setf (hv-help-directories state)
+          (copy-list (application-screen-directories *application*)))
+    (setf (hv-history state) nil)
+    (multiple-value-bind (lines link-map) (render-help-page page)
+      (setf (hv-topic state) "commands"
+            (hv-page state) page
+            (hv-scroll-offset state) 0
+            (hv-rendered-lines state) lines
+            (hv-link-map state) link-map)))
+  (invoke-subapplication *help-viewer-app* 'help-viewer))
