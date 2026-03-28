@@ -198,13 +198,7 @@ Returns a string with inline attribute codes."
     :stay))
 
 (define-key-handler help-viewer :pf1 ()
-  (let ((state (ensure-help-viewer-state)))
-    (if (load-help-topic state "index")
-        :stay
-        (progn
-          (setf (gethash "%errormsg" (session-context *session*))
-                "No help index available")
-          :stay))))
+  :stay)
 
 (define-key-handler help-viewer :pf3 ()
   (let ((state (ensure-help-viewer-state)))
