@@ -20,11 +20,7 @@ Returns :stay if a .help file was found and the help viewer invoked, or NIL."
 ;;; Default PF1 handler: show help
 
 (defmethod handle-key (screen-name (aid-key (eql :pf1)))
-  "Default PF1 handler: navigate to help for the current screen."
-  (let ((result (navigate-to-help screen-name)))
-    (if result
-        result
-        (progn
-          (setf (gethash "%errormsg" (session-context *session*))
-                (msg "No help available"))
-          :stay))))
+  "Default PF1 handler: navigate to help for the current screen.
+Falls back to the index topic when no screen-specific help exists."
+  (or (navigate-to-help screen-name)
+      (show-help "index")))
