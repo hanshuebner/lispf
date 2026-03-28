@@ -119,6 +119,9 @@
            #:anonymous-access-denied-message
            #:session-user-roles
            #:role-access-denied-message
+           ;; Connection validation
+           #:validate-connection
+           #:session-client-ip
            ;; Command processing
            #:process-screen-command
            #:process-command

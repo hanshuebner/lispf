@@ -43,6 +43,14 @@ KEY-NAME is the string name of the key (e.g. \"PF5\").")
   (:method ((app application) key-name)
     (format nil "~A: unknown key" key-name)))
 
+(defgeneric validate-connection (application devinfo client-ip)
+  (:documentation "Validate a new connection before starting the application.
+DEVINFO is the device-info from telnet negotiation, CLIENT-IP is a string.
+Return T to accept, or a string with a rejection message to close the connection.")
+  (:method ((app application) devinfo client-ip)
+    (declare (ignore app devinfo client-ip))
+    t))
+
 (defmethod initialize-instance :after ((app application) &key)
   (let ((dir (application-screen-directory app)))
     (when dir
@@ -79,7 +87,9 @@ Keys are screen symbols, values are plists of (:offset N :data-count N :cursor-r
    (tls-p :initform nil :accessor session-tls-p
           :documentation "True when this session's connection is TLS-encrypted.")
    (connection-id :initform nil :accessor session-connection-id
-                  :documentation "Unique identifier for this connection.")))
+                  :documentation "Unique identifier for this connection.")
+   (client-ip :initform nil :accessor session-client-ip
+              :documentation "Client IP address string (dotted notation).")))
 
 (defun session-property (session key &optional default)
   "Get a session property by key."
@@ -471,9 +481,10 @@ telnet negotiation."
             (when tls-immediate-p
               (setf (cl3270:tls-p devinfo) t))
             (let* ((addr (ignore-errors (usocket:get-peer-address socket)))
+                   (client-ip (ignore-errors
+                                (format nil "~{~D~^.~}" (coerce addr 'list))))
                    (peer (ignore-errors
-                           (format nil "~{~D~^.~}:~D"
-                                   (coerce addr 'list)
+                           (format nil "~A:~D" client-ip
                                    (usocket:get-peer-port socket))))
                    (term (cl3270::term-type devinfo))
                    (model (when (and (>= (length term) 10)
@@ -486,7 +497,7 @@ telnet negotiation."
                     (#\4 (values 43 80))
                     (#\5 (values 27 132))
                     (otherwise (values 24 80)))
-                (log-message :info "connect from=~A type=~A size=~Dx~D~@[ alt=~Dx~D~]~@[ codepage=~A~] tls=~A"
+                (log-message :info "connect from=~A type=~A size=~Dx~D~@[ alt=~Dx~D~]~@[ codepage=~A~] tls=~A~@[ lu=~A~]"
                              (or peer "unknown")
                              term
                              pri-rows pri-cols
@@ -498,14 +509,23 @@ telnet negotiation."
                                (cl3270::cols devinfo))
                              (when (cl3270::codepage devinfo)
                                (cl3270::codepage-name (cl3270::codepage devinfo)))
-                             (if (cl3270:tls-p devinfo) "yes" "no"))))
-            (unwind-protect
-                 (run-application application socket devinfo
-                                  :tls-p (cl3270:tls-p devinfo)
-                                  :connection-id conn-id)
-              (cl3270:unnegotiate-telnet socket 1))))
+                             (if (cl3270:tls-p devinfo) "yes" "no")
+                             (cl3270:device-name devinfo)))
+              (let ((rejection (validate-connection application devinfo
+                                                    (or client-ip ""))))
+                (when (stringp rejection)
+                  (log-message :warn "connection rejected: ~A" rejection)
+                  (return-from handle-connection)))
+              (unwind-protect
+                   (run-application application socket devinfo
+                                    :tls-p (cl3270:tls-p devinfo)
+                                    :connection-id conn-id
+                                    :client-ip client-ip)
+                (cl3270:unnegotiate-telnet socket 1)))))
       (idle-timeout-error ())
       (end-of-file ()
+        (log-message :info "client disconnected"))
+      (cl+ssl::ssl-error/handle ()
         (log-message :info "client disconnected"))
       (error (c)
         (log-message :error "connection error: ~A" c)
@@ -1819,7 +1839,7 @@ with *session* and *application* bound. The default method does nothing.")
     (declare (ignore application session))
     nil))
 
-(defun run-application (application conn devinfo &key tls-p connection-id)
+(defun run-application (application conn devinfo &key tls-p connection-id client-ip)
   "Run an application's main loop for a single connection.
 Binds dynamic variables, creates a session, and loops through screens.
 TLS-P indicates the connection is TLS-encrypted."
@@ -1834,7 +1854,8 @@ TLS-P indicates the connection is TLS-encrypted."
       (push *session* (application-sessions application)))
     (setf (session-active-application *session*) application
           (session-tls-p *session*) (or tls-p (application-test-force-tls application))
-          (session-connection-id *session*) connection-id)
+          (session-connection-id *session*) connection-id
+          (session-client-ip *session*) client-ip)
     (unwind-protect
          (progn
            (setf (session-current-screen *session*)
