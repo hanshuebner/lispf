@@ -910,7 +910,7 @@ Call from the update cycle hook. TEXT is the message to display.
 When ALARM is true, the terminal beeps."
   (let* ((screen (cl3270:make-screen "errormsg-overlay"
                    (make-instance 'cl3270:field :row 21 :col 79 :name "%errormsg"
-                                                :color cl3270:+red+ :len 79)))
+                                                :position-only t :len 79)))
          (vals (cl3270:make-dict :test #'equal)))
     (setf (gethash "%errormsg" vals) text)
     (bt:with-lock-held ((connection-write-lock (session-connection *session*)))
