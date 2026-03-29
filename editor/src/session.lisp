@@ -148,7 +148,8 @@ Virtual 0 = Top-of-Data marker, 1..N = file lines, N+1 = Bottom-of-Data marker."
 
 (defun make-test-session (lines &key layout)
   "Create an editor session for testing (no application binding needed)."
-  (let ((s (make-instance 'editor-session)))
+  (let ((s (make-instance 'editor-session
+                          :connection (make-instance 'lispf:connection))))
     (setf (editor-lines s) (copy-list lines))
     (when layout
       (setf (editor-layout s) layout))
