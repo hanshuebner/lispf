@@ -892,6 +892,20 @@ unlocking the 3270 keyboard after the main thread received a response."
         (cl3270:show-screen-opts screen vals *connection*
           (make-instance 'cl3270:screen-opts :no-clear t :no-response t))))))
 
+(defun send-error-line-overlay (text &key alarm)
+  "Send an overlay that updates only the error message line (row 22).
+Call from the update cycle hook. TEXT is the message to display.
+When ALARM is true, the terminal beeps."
+  (let* ((screen (cl3270:make-screen "errormsg-overlay"
+                   (make-instance 'cl3270:field :row 21 :col 79 :name "%errormsg"
+                                                :color cl3270:+red+ :len 79)))
+         (vals (cl3270:make-dict :test #'equal)))
+    (setf (gethash "%errormsg" vals) text)
+    (bt:with-lock-held ((connection-write-lock (session-connection *session*)))
+      (cl3270:show-screen-opts screen vals *connection*
+        (make-instance 'cl3270:screen-opts :no-clear t :no-response t
+                                           :alarm alarm)))))
+
 (defun pad-or-truncate (string width)
   "Pad STRING with spaces or truncate it to exactly WIDTH characters."
   (let ((len (length string)))
@@ -1187,6 +1201,7 @@ so no immediate first update is needed."
       (progn
         (loop while (wait-for-update-signal ctx)
               when (check-idle-timeout ctx) do (return)
+              do (ignore-errors (update-cycle-hook *application*))
               when (title-needs-update-p ctx)
                 do (send-title-overlay ctx)
               do (send-dynamic-area-overlays ctx)))

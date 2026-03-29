@@ -263,6 +263,16 @@ Override to localize or to return different labels per menu.")
   (:method ((application t))
     "Permission denied"))
 
+;;; Update cycle hook
+
+(defgeneric update-cycle-hook (application)
+  (:documentation "Called by the update thread each iteration, with *session* and
+*connection* bound. Use for application-specific background work such as
+delivering notifications. Default method does nothing.")
+  (:method (application)
+    (declare (ignore application))
+    nil))
+
 ;;; Field attribute overrides
 
 (defun set-field-attribute (field-name &rest attrs)

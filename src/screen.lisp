@@ -121,6 +121,9 @@
            #:update-dynamic-area
            #:define-dynamic-area-updater
            #:*attribute-intro-char*
+           ;; Update cycle hook
+           #:update-cycle-hook
+           #:send-error-line-overlay
            ;; Customization
            #:unknown-key-message
            #:invalid-menu-selection-message
