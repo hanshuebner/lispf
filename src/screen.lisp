@@ -123,6 +123,10 @@
            #:update-dynamic-area
            #:define-dynamic-area-updater
            #:*attribute-intro-char*
+           ;; Message line
+           #:set-message
+           #:clear-message
+           #:message-expired-p
            ;; Update cycle hook
            #:update-cycle-hook
            #:send-error-line-overlay

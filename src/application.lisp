@@ -918,6 +918,13 @@ When ALARM is true, the terminal beeps."
         (make-instance 'cl3270:screen-opts :no-clear t :no-response t
                                            :alarm alarm)))))
 
+(defun check-message-timeout ()
+  "Clear the message line if its timeout has expired. Called by the update thread."
+  (let ((msg (session-property *session* :message-line)))
+    (when (and msg (message-expired-p msg))
+      (setf (session-property *session* :message-line) nil)
+      (send-error-line-overlay ""))))
+
 (defun pad-or-truncate (string width)
   "Pad STRING with spaces or truncate it to exactly WIDTH characters."
   (let ((len (length string)))
@@ -1214,6 +1221,7 @@ so no immediate first update is needed."
         (loop while (wait-for-update-signal ctx)
               when (check-idle-timeout ctx) do (return)
               do (ignore-errors (update-cycle-hook *application*))
+              do (ignore-errors (check-message-timeout))
               when (title-needs-update-p ctx)
                 do (send-title-overlay ctx)
               do (send-dynamic-area-overlays ctx)))
@@ -1222,8 +1230,7 @@ so no immediate first update is needed."
         (log-incident id e)
         (setf (update-context-running ctx) nil)
         ;; Notify user by setting error message and interrupting main thread
-        (setf (gethash "%errormsg" (session-context *session*))
-              (format nil "Internal error. Incident: ~A" id))
+        (set-message :error "Internal error. Incident: ~A" id)
         (let ((main (update-context-main-thread ctx)))
           (when main
             (ignore-errors
@@ -1481,8 +1488,26 @@ With FULL-CONTROL, do nothing (app manages all fields)."
       (let ((confirm-keys '((:pf3 "Zurueck") (:pf5 "Bestaetigen"))))
         (setf *current-screen-keys* confirm-keys
               *current-key-layout* (compute-key-layout confirm-keys)))))
+  ;; Message line: check structured message, apply color, expire timeouts
   (unless (gethash "%errormsg" field-values)
-    (setf (gethash "%errormsg" field-values) ""))
+    (let ((msg (session-property *session* :message-line)))
+      (cond
+        ((and msg (not (message-expired-p msg)))
+         (setf (gethash "%errormsg" field-values) (getf msg :text))
+         (set-field-attribute "%errormsg"
+                              :color (if (eq (getf msg :type) :error)
+                                         cl3270:+red+
+                                         cl3270:+yellow+)))
+        (msg
+         ;; Expired — clear it
+         (setf (session-property *session* :message-line) nil)
+         (setf (gethash "%errormsg" field-values) ""))
+        ;; Legacy: raw %errormsg in context (backward compatibility)
+        ((gethash "%errormsg" (session-context *session*))
+         (setf (gethash "%errormsg" field-values)
+               (gethash "%errormsg" (session-context *session*))))
+        (t
+         (setf (gethash "%errormsg" field-values) "")))))
   (let ((key-labels (format-key-labels-from-specs *current-screen-keys*
                                                    *current-key-layout*)))
     (when key-labels
@@ -1569,11 +1594,11 @@ Returns a navigation result."
             (setf (cursor-row) 21 (cursor-col) 14)
             result)
            (t
-            (setf (gethash "%errormsg" context)
-                  (if (and is-menu (every #'digit-char-p command))
-                      (invalid-menu-selection-message *application*
-                                                     (string-upcase command))
-                      (unknown-command-message *application* command)))
+            (set-message :error
+                         (if (and is-menu (every #'digit-char-p command))
+                             (invalid-menu-selection-message *application*
+                                                            (string-upcase command))
+                             (unknown-command-message *application* command)))
             :stay))))
       ;; Empty command on menu screen: cursor-based item selection
       (is-menu
@@ -1596,15 +1621,13 @@ COMMAND is the trimmed value from the command field (extracted from response)."
       (handler-bind
           ((application-error
              (lambda (c)
-               (setf (gethash "%errormsg" context)
-                     (application-error-message c))
+               (set-message :error (application-error-message c))
                (invoke-restart 'redisplay)))
            (error
              (lambda (c)
                (let ((id (generate-incident-id)))
                  (log-incident id c)
-                 (setf (gethash "%errormsg" context)
-                       (format nil "Internal error. Incident: ~A" id))
+                 (set-message :error "Internal error. Incident: ~A" id)
                  (invoke-restart 'redisplay)))))
         (cond
           ;; Key override (used by confirmation dialog)
@@ -1751,8 +1774,7 @@ Returns the 3270 response."
   (when-let ((info (target-screen-info result)))
     (when (and (not (screen-info-anonymous info))
                (not (session-authenticated-p *application* *session*)))
-      (setf (gethash "%errormsg" context)
-            (anonymous-access-denied-message *application*))
+      (set-message :error (anonymous-access-denied-message *application*))
       (return-from check-anonymous-access :stay)))
   result)
 
@@ -1762,8 +1784,7 @@ Returns the 3270 response."
     (when (and (screen-info-roles info)
                (not (intersection (screen-info-roles info)
                                   (session-user-roles *application* *session*))))
-      (setf (gethash "%errormsg" context)
-            (role-access-denied-message *application*))
+      (set-message :error (role-access-denied-message *application*))
       (return-from check-role-access :stay)))
   result)
 
@@ -1776,8 +1797,7 @@ screen with an incident message. Called from handler-bind."
         (log-incident id c)
         (setf (session-current-screen *session*) last
               (session-context *session*) (make-hash-table :test 'equal))
-        (setf (gethash "%errormsg" (session-context *session*))
-              (format nil "Internal error. Incident: ~A" id))))))
+        (set-message :error "Internal error. Incident: ~A" id)))))
 
 (defun dispatch-and-transition (response dispatch-sym has-list-data
                                 list-data-total app-package)

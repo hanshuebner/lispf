@@ -273,6 +273,41 @@ delivering notifications. Default method does nothing.")
     (declare (ignore application))
     nil))
 
+;;; Message line (row 22)
+;;;
+;;; The message line supports three types with different colors and timeouts:
+;;;   :error        — red, no timeout (persists until next interaction)
+;;;   :confirmation — yellow, default 15s timeout
+;;;   :notification — yellow, default 60s timeout
+;;; Use set-message to display a message. application-error sets :error type.
+
+(defun set-message (type format-string &rest format-args)
+  "Display a message on the message line.
+TYPE is :error (red, permanent), :confirmation (yellow, 15s), or :notification (yellow, 60s).
+FORMAT-STRING and FORMAT-ARGS are passed to FORMAT to produce the message text.
+If no FORMAT-ARGS, FORMAT-STRING is used as-is."
+  (let ((text (if format-args
+                  (apply #'format nil format-string format-args)
+                  format-string))
+        (timeout (case type
+                   (:confirmation 15)
+                   (:notification 60)
+                   (otherwise nil))))
+    (setf (session-property *session* :message-line)
+          (list :text text :type type :timeout timeout
+                :timestamp (get-universal-time)))))
+
+(defun clear-message ()
+  "Clear the message line."
+  (setf (session-property *session* :message-line) nil))
+
+(defun message-expired-p (msg)
+  "Return T if MSG (a message-line plist) has exceeded its timeout."
+  (let ((timeout (getf msg :timeout))
+        (timestamp (getf msg :timestamp)))
+    (and timeout timestamp
+         (> (- (get-universal-time) timestamp) timeout))))
+
 ;;; Field attribute overrides
 
 (defun set-field-attribute (field-name &rest attrs)

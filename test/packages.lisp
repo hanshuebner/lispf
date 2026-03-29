@@ -44,6 +44,10 @@
            #:assert-field
            #:type-in-field
            #:assert-on-screen
+           #:assert-message
+           #:assert-no-message
+           #:assert-title
+           #:assert-keys
            #:load-test-screen-data
            ;; Test runner
            #:*test-registry*

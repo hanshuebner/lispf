@@ -58,6 +58,36 @@
             (format nil "(~D, ~D)" row col)
             (format nil "(~D, ~D)" actual-row actual-col)))))
 
+;;; Row-specific assertions
+
+(defun assert-message (session expected &key description)
+  "Assert that the message line (row 22) contains EXPECTED."
+  (let ((row (string-trim '(#\Space) (screen-row session 22))))
+    (unless (search expected row)
+      (fail (or description (format nil "Message line should contain ~S" expected))
+            expected row))))
+
+(defun assert-no-message (session &key description)
+  "Assert that the message line (row 22) is empty."
+  (let ((row (string-trim '(#\Space) (screen-row session 22))))
+    (when (plusp (length row))
+      (fail (or description "Message line should be empty")
+            "" row))))
+
+(defun assert-title (session expected &key description)
+  "Assert that the title line (row 0) contains EXPECTED."
+  (let ((row (screen-row session 0)))
+    (unless (search expected row)
+      (fail (or description (format nil "Title should contain ~S" expected))
+            expected row))))
+
+(defun assert-keys (session expected &key description)
+  "Assert that the key label line (row 23) contains EXPECTED."
+  (let ((row (screen-row session 23)))
+    (unless (search expected row)
+      (fail (or description (format nil "Key labels should contain ~S" expected))
+            expected row))))
+
 ;;; Screen-data-aware operations
 
 (defun load-test-screen-data (screen-path)
