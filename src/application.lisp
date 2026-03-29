@@ -1444,6 +1444,15 @@ Uses set-cursor override if set, otherwise falls back to the first writable fiel
             cursor-col 0))
     (values cursor-row cursor-col)))
 
+(defun clear-screen-context (context)
+  "Remove all non-framework fields from CONTEXT to prevent field leakage
+across screen transitions. Preserves %errormsg so key handlers can set
+error/success messages before navigating."
+  (let ((errormsg (gethash "%errormsg" context)))
+    (clrhash context)
+    (when errormsg
+      (setf (gethash "%errormsg" context) errormsg))))
+
 (defun merge-response-into-context (response context transient-fields)
   "Merge response field values into CONTEXT, skipping framework and transient fields."
   (let ((resp-vals (cl3270:response-vals response)))
@@ -1581,6 +1590,7 @@ Screen stack entries are (symbol cursor-row . cursor-col) to restore cursor on :
      (let ((prev (pop (session-screen-stack *session*))))
        (if prev
            (progn
+             (clear-screen-context (session-context *session*))
              (setf (session-current-screen *session*) (car prev))
              ;; Return saved cursor position as secondary values
              (values nil (cadr prev) (cddr prev)))
@@ -1588,6 +1598,7 @@ Screen stack entries are (symbol cursor-row . cursor-col) to restore cursor on :
     ((and (consp result) (eq (car result) :jump))
      ;; Jump navigation: reset stack to just the entry screen, navigate to target
      (let ((root (application-entry-screen *application*)))
+       (clear-screen-context (session-context *session*))
        (setf (session-screen-stack *session*)
              (list (cons root (cons 0 0))))
        (setf (session-current-screen *session*) (cdr result))))
@@ -1596,6 +1607,7 @@ Screen stack entries are (symbol cursor-row . cursor-col) to restore cursor on :
      (unless (eq screen-sym result)
        (push (cons screen-sym (cons (cursor-row) (cursor-col)))
              (session-screen-stack *session*)))
+     (clear-screen-context (session-context *session*))
      (setf (session-current-screen *session*) result))
     (t
      (warn "Unexpected handle-key return value ~S on screen ~S, treating as :stay"
@@ -1606,7 +1618,7 @@ Screen stack entries are (symbol cursor-row . cursor-col) to restore cursor on :
 (defun show-screen-and-read (screen display-screen screen-rules key-specs
                              field-values dispatch-sym repeat-groups
                              has-list-data list-data-count
-                             &key has-command full-control no-clear)
+                             &key full-control no-clear)
   "Prepare the display screen, compute cursor, and read user input.
 When NO-CLEAR is true, the screen is rewritten without erasing first.
 Returns the 3270 response."
@@ -1811,7 +1823,7 @@ Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
                                      screen display-screen screen-rules key-specs
                                      field-values dispatch-sym repeat-groups
                                      has-list-data list-data-count
-                                     :has-command has-command :full-control full-control
+                                     :full-control full-control
                                      :no-clear (and (or no-clear (and overlay t))
                                                     (not partial-page)))
                                (setf no-clear nil))))
