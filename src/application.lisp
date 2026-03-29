@@ -904,13 +904,13 @@ unlocking the 3270 keyboard after the main thread received a response."
         (cl3270:show-screen-opts screen vals *connection*
           (make-instance 'cl3270:screen-opts :no-clear t :no-response t))))))
 
-(defun send-error-line-overlay (text &key alarm)
+(defun send-error-line-overlay (text &key alarm (color cl3270:+red+))
   "Send an overlay that updates only the error message line (row 22).
 Call from the update cycle hook. TEXT is the message to display.
 When ALARM is true, the terminal beeps."
   (let* ((screen (cl3270:make-screen "errormsg-overlay"
-                   (make-instance 'cl3270:field :row 21 :col 79 :name "%errormsg"
-                                                :position-only t :len 79)))
+                   (make-instance 'cl3270:field :row 22 :col 0 :name "%errormsg"
+                                                :position-only t :color color :len 79)))
          (vals (cl3270:make-dict :test #'equal)))
     (setf (gethash "%errormsg" vals) text)
     (bt:with-lock-held ((connection-write-lock (session-connection *session*)))
@@ -1617,6 +1617,11 @@ Returns a navigation result."
                      command)
   "Dispatch AID-KW with error handling. Returns a navigation result.
 COMMAND is the trimmed value from the command field (extracted from response)."
+  ;; Clear previous message on user interaction
+  (let ((prev-msg (session-property *session* :message-line)))
+    (when prev-msg
+      (clear-message)
+      (ignore-errors (message-cleared *application* prev-msg))))
   (restart-case
       (handler-bind
           ((application-error

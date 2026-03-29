@@ -301,6 +301,14 @@ If no FORMAT-ARGS, FORMAT-STRING is used as-is."
   "Clear the message line."
   (setf (session-property *session* :message-line) nil))
 
+(defgeneric message-cleared (application message)
+  (:documentation "Called when a message is cleared by user interaction.
+MESSAGE is the message plist that was cleared. Applications can use this
+to perform cleanup, e.g. marking notifications as read.")
+  (:method (application message)
+    (declare (ignore application message))
+    nil))
+
 (defun message-expired-p (msg)
   "Return T if MSG (a message-line plist) has exceeded its timeout."
   (let ((timeout (getf msg :timeout))

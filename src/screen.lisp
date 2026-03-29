@@ -127,6 +127,7 @@
            #:set-message
            #:clear-message
            #:message-expired-p
+           #:message-cleared
            ;; Update cycle hook
            #:update-cycle-hook
            #:send-error-line-overlay
