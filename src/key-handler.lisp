@@ -92,16 +92,56 @@ of plists with keys matching repeat field base names."
        (declare (ignorable ,start ,end))
        ,@body)))
 
-;;; Screen preparation generic function
+;;; Screen lifecycle generic functions
 
-(defgeneric prepare-screen (screen-name)
-  (:documentation "Called before each display of SCREEN-NAME.
-Use define-screen-update to define methods. Within the body, use
-show-key/hide-key to control key label visibility, and field bindings
-to set display values.")
+(defgeneric enter-screen (screen-name)
+  (:documentation "Called once when first navigating to SCREEN-NAME.
+NOT called on :stay redisplays. Use define-screen-enter to define methods.
+This is where data loading (DB reads) should happen — field values set here
+persist across :stay redisplays without being overwritten.")
   (:method (screen-name)
     (declare (ignore screen-name))
     nil))
+
+(defgeneric prepare-screen (screen-name)
+  (:documentation "Called before each display of SCREEN-NAME, including :stay redisplays.
+Use define-screen-update to define methods. Within the body, use
+show-key/hide-key to control key label visibility, and field bindings
+to set display values. Avoid overwriting field values that were set by
+enter-screen or by the user.")
+  (:method (screen-name)
+    (declare (ignore screen-name))
+    nil))
+
+(defgeneric leave-screen (screen-name result)
+  (:documentation "Called once when navigating away from SCREEN-NAME.
+RESULT is the navigation value (:back, screen symbol, :logoff, etc.).
+NOT called for :stay. Use define-screen-leave to define methods.
+Return value is ignored.")
+  (:method (screen-name result)
+    (declare (ignore screen-name result))
+    nil))
+
+;;; define-screen-enter macro
+
+(defmacro define-screen-enter (screen-name (&rest field-names) &body body)
+  "Define an initialization function called once when entering SCREEN-NAME.
+
+SCREEN-NAME is a symbol, interned in *package* at macro-expansion time.
+FIELD-NAMES are bound as setf-able accessors into the session context.
+
+Use this for loading data from the database and populating field values.
+Values set here persist across :stay redisplays.
+
+Example:
+  (define-screen-enter edit-item (name price)
+    (let ((item (load-item-from-db)))
+      (setf name (item-name item)
+            price (item-price item))))"
+  (let ((screen-sym (intern (string-upcase (string screen-name)) *package*)))
+    `(defmethod enter-screen ((screen-name (eql ',screen-sym)))
+       (with-field-bindings ((session-context *session*) ,@field-names)
+         ,@body))))
 
 ;;; define-screen-update macro
 
@@ -120,6 +160,24 @@ Example:
     (when has-entries-p (show-key :pf7 \"Prev\")))"
   (let ((screen-sym (intern (string-upcase (string screen-name)) *package*)))
     `(defmethod prepare-screen ((screen-name (eql ',screen-sym)))
+       (with-field-bindings ((session-context *session*) ,@field-names)
+         ,@body))))
+
+;;; define-screen-leave macro
+
+(defmacro define-screen-leave (screen-name (result &rest field-names) &body body)
+  "Define a cleanup function called once when leaving SCREEN-NAME.
+
+SCREEN-NAME is a symbol, interned in *package* at macro-expansion time.
+RESULT is bound to the navigation value (:back, screen symbol, :logoff, etc.).
+FIELD-NAMES are bound as setf-able accessors into the session context.
+
+Example:
+  (define-screen-leave edit-item (result)
+    (declare (ignore result))
+    (cleanup-temp-data))"
+  (let ((screen-sym (intern (string-upcase (string screen-name)) *package*)))
+    `(defmethod leave-screen ((screen-name (eql ',screen-sym)) ,result)
        (with-field-bindings ((session-context *session*) ,@field-names)
          ,@body))))
 

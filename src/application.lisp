@@ -1774,6 +1774,9 @@ Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
            (no-clear (and (or (eq checked :stay) (null checked))
                           (not (session-property *session* :force-redraw)))))
       (setf (session-property *session* :force-redraw) nil)
+      ;; Call leave-screen when navigating away (not :stay)
+      (unless no-clear
+        (ignore-errors (leave-screen dispatch-sym checked)))
       (multiple-value-bind (transition saved-row saved-col)
           (apply-screen-transition checked screen-sym dispatch-sym)
         (values transition no-clear saved-row saved-col)))))
@@ -1823,7 +1826,16 @@ Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
                            (error c))
                          (handle-screen-render-error c)
                          (return-from next-screen))))
-                  ;; Prepare
+                  ;; Enter screen (only on fresh entry, not :stay redisplay)
+                  (unless no-clear
+                    (let ((enter-result (enter-screen dispatch-sym)))
+                      (when (and enter-result (symbolp enter-result))
+                        (multiple-value-bind (transition r c)
+                            (apply-screen-transition enter-result screen-sym dispatch-sym)
+                          (when (eq transition :exit) (return-from run-screen-loop))
+                          (when r (setf restored-cursor-row r restored-cursor-col c)))
+                        (return-from next-screen))))
+                  ;; Prepare (runs every display including :stay)
                   (let ((prep-result (prepare-screen dispatch-sym)))
                     (when (and prep-result (symbolp prep-result))
                       (multiple-value-bind (transition r c)

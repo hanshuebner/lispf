@@ -42,9 +42,13 @@
            ;; Key handlers
            #:handle-key
            #:define-key-handler
-           ;; Screen preparation
+           ;; Screen lifecycle
+           #:enter-screen
+           #:define-screen-enter
            #:prepare-screen
            #:define-screen-update
+           #:leave-screen
+           #:define-screen-leave
            #:show-key
            #:hide-key
            #:set-cursor
