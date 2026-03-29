@@ -99,12 +99,4 @@
 (defun run-all ()
   "Run all key layout tests."
   (format t "~&;;; Running key layout tests~%")
-  (run-tests 'layout-assigns-sequential-positions
-             'hidden-keys-reserve-slot
-             'empty-label-without-hidden-gets-no-slot
-             'all-keys-shown-at-fixed-positions
-             'hidden-keys-leave-blank-space
-             'only-some-keys-hidden
-             'unknown-key-appended-at-end
-             'no-keys-returns-nil
-             'all-hidden-returns-nil))
+  (run-tests :lispf-key-layout-tests))

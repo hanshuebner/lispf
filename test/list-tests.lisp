@@ -71,5 +71,4 @@
     (press-key s :pf3)))
 
 (defun run-all ()
-  (let ((*package* (find-package :lispf-list-tests)))
-    (run-tests)))
+  (run-tests :lispf-list-tests))

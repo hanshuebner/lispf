@@ -106,14 +106,4 @@
 
 (defun run-all ()
   (format t "~&;;; Running i18n tests~%")
-  (run-tests 'count-simple-directives
-             'count-ignores-non-consuming
-             'count-with-modifiers
-             'count-plural
-             'validate-matching
-             'validate-mismatch
-             'msg-returns-english-default
-             'msg-with-format-args
-             'msg-uses-catalog
-             'load-catalog-from-file
-             'write-template))
+  (run-tests :lispf-i18n-tests))

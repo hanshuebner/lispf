@@ -663,5 +663,4 @@
 
 (defun run-all ()
   (format t "~&;;; Running help system tests~%")
-  (let ((*package* (find-package :lispf-help-tests)))
-    (run-tests)))
+  (run-tests :lispf-help-tests))

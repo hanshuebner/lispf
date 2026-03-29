@@ -194,38 +194,12 @@ NAME can be a symbol from any package; lookup is by symbol-name string."
     (when entry
       (find-symbol (symbol-name name) pkg))))
 
-(defun find-test-package (name)
-  "Find the unique package containing a test named NAME.
-Returns the package, or NIL if not found. Signals an error if ambiguous."
-  (let ((matches nil))
-    (maphash (lambda (pkg entry)
-               (let ((sym (find-symbol (symbol-name name) pkg)))
-                 (when (and sym (gethash sym (car entry)))
-                   (push pkg matches))))
-             *test-registry*)
-    (cond ((null matches) nil)
-          ((null (cdr matches)) (first matches))
-          (t (error "Ambiguous test name ~A — found in packages: ~{~A~^, ~}"
-                    name (mapcar #'package-name matches))))))
-
-(defun run-tests (&rest args)
-  "Run the named tests, or all tests in definition order.
-When :PACKAGE is given (a package designator), run tests from that package
-instead of the calling package.  When :PACKAGE is omitted and specific test
-names are given, the package is discovered automatically from the test
-registry.  Example: (run-tests 'my-test) or (run-tests :package :my-tests)
+(defun run-tests (package &rest names)
+  "Run the named tests from PACKAGE, or all tests in definition order.
+PACKAGE is a package designator (symbol, keyword, or string).
+Example: (run-tests :my-tests) or (run-tests :my-tests 'my-test)
 Automatically sets up suite fixtures declared via define-suite-fixtures."
-  (let* ((package-pos (position :package args))
-         (names (if package-pos
-                    (append (subseq args 0 package-pos)
-                            (subseq args (+ package-pos 2)))
-                    args))
-         (pkg (cond (package-pos
-                     (find-package (nth (1+ package-pos) args)))
-                    (names
-                     (or (find-test-package (first names))
-                         *package*))
-                    (t *package*)))
+  (let* ((pkg (find-package package))
          (entry (package-tests pkg))
          (tests (car entry))
          (test-names (or (mapcar (lambda (name) (or (resolve-test-name name pkg) name))
@@ -265,12 +239,10 @@ Automatically sets up suite fixtures declared via define-suite-fixtures."
 (defun run-all-suites ()
   "Run all registered test suites.  Returns T if all passed.
 Calls run-tests for each suite, which automatically sets up any declared
-fixtures.  Always binds *package* to the suite's package so that
-run-tests can find the test registry."
+fixtures."
   (let ((all-passed t))
     (dolist (pkg (reverse *suite-order*))
       (format t "~&~%=== ~A ===~%" (package-name pkg))
-      (let ((*package* pkg))
-        (unless (run-tests :package pkg)
-          (setf all-passed nil))))
+      (unless (run-tests pkg)
+        (setf all-passed nil)))
     all-passed))

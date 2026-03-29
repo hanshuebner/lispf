@@ -72,4 +72,4 @@
 (defun run-all ()
   "Run all read-single-form tests."
   (format t "~&;;; Running read-single-form tests~%")
-  (run-tests))
+  (run-tests :lispf-read-single-form-tests))

@@ -48,5 +48,4 @@
     (press-pf s 3)))
 
 (defun run-all ()
-  (let ((*package* (find-package :lispf-cursor-tests)))
-    (run-tests)))
+  (run-tests :lispf-cursor-tests))

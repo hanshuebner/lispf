@@ -1998,5 +1998,4 @@ Moves cursor to command field before pressing Enter to avoid auto-insert."
   "Run all editor tests in definition order."
   (load-editor-screen-data)
   (format t "~&;;; Running editor tests~%")
-  (let ((*package* (find-package :lispf-editor-tests)))
-    (run-tests)))
+  (run-tests :lispf-editor-tests))
