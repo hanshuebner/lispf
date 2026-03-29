@@ -58,9 +58,10 @@ and connection ID."
   (declare (type log-level level))
   (when (>= (getf *log-level-priority* level 0)
             (getf *log-level-priority* *log-level* 0))
-    (let* ((conn-id (or (when (and (boundp '*session*) *session*
-                                    (slot-boundp *session* 'connection-id))
-                          (slot-value *session* 'connection-id))
+    (let* ((conn-id (or (when (and (boundp '*session*) *session*)
+                          (let ((conn (session-connection *session*)))
+                            (when (and conn (slot-boundp conn 'id))
+                              (connection-id conn))))
                         (when (boundp '*connection-id*) *connection-id*)))
            (app-name (if (and (boundp '*application*) *application*)
                          (application-name *application*)

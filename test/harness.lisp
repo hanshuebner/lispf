@@ -69,17 +69,17 @@ Cleans up on exit."
            (ignore-errors (close-s3270 ,s3270-var)))
          (when ,listener-var
            (ignore-errors (usocket:socket-close ,listener-var)))
-         ;; Wait for session threads to exit (they remove themselves from the list)
+         ;; Wait for connection threads to exit (they remove themselves from the list)
          (loop with deadline = (+ (get-internal-real-time)
                                   (* 5 internal-time-units-per-second))
-               while (and (bt:with-lock-held ((lispf::application-sessions-lock ,app))
-                            (lispf::application-sessions ,app))
+               while (and (bt:with-lock-held ((lispf::application-connections-lock ,app))
+                            (lispf::application-connections ,app))
                           (< (get-internal-real-time) deadline))
                do (bt:thread-yield))
-         (let ((remaining (bt:with-lock-held ((lispf::application-sessions-lock ,app))
-                            (lispf::application-sessions ,app))))
+         (let ((remaining (bt:with-lock-held ((lispf::application-connections-lock ,app))
+                            (lispf::application-connections ,app))))
            (when remaining
-             (error "~D session thread~:P still alive after test cleanup"
+             (error "~D connection thread~:P still alive after test cleanup"
                     (length remaining))))
          (when (bt:thread-alive-p ,app-thread)
            (ignore-errors (bt:destroy-thread ,app-thread)))))))

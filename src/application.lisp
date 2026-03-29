@@ -17,6 +17,8 @@
    (package :initarg :package :accessor application-package)
    (session-class :initarg :session-class :accessor application-session-class
                   :initform 'session)
+   (connection-class :initarg :connection-class :accessor application-connection-class
+                     :initform 'connection)
    (screens :initform (make-hash-table :test 'equal) :accessor application-screens
             :documentation "Screen cache: name-string -> screen-info struct.")
    (screen-directories :initform '() :accessor application-screen-directories
@@ -31,9 +33,9 @@
                      :documentation "Menu file timestamps: name-string -> (path . write-date).")
    (commands :initform (make-hash-table :test 'equal) :accessor application-commands
              :documentation "Command registry: name-string -> command-info.")
-   (sessions :initform '() :accessor application-sessions
-             :documentation "List of active sessions (one per connection).")
-   (sessions-lock :initform (bt:make-lock "sessions") :reader application-sessions-lock)
+   (connections :initform '() :accessor application-connections
+                :documentation "List of active connections.")
+   (connections-lock :initform (bt:make-lock "connections") :reader application-connections-lock)
    (test-force-tls :initform nil :accessor application-test-force-tls
                    :documentation "When true, all connections appear TLS-encrypted. For testing.")))
 
@@ -56,16 +58,38 @@ Return T to accept, or a string with a rejection message to close the connection
     (when dir
       (pushnew (truename dir) (application-screen-directories app) :test #'equal))))
 
+;;; Connection class
+
+(defclass connection ()
+  ((application :initarg :application :reader connection-application)
+   (tls-p :initform nil :accessor connection-tls-p
+          :documentation "True when this connection is TLS-encrypted.")
+   (id :initform nil :accessor connection-id
+       :documentation "Unique identifier for this connection.")
+   (client-ip :initform nil :accessor connection-client-ip
+              :documentation "Client IP address string (dotted notation).")
+   (write-lock :initform (bt:make-lock "conn-write") :reader connection-write-lock)
+   (indicators :initform (make-hash-table :test 'equal) :reader connection-indicators)
+   (indicators-dirty :initform nil :accessor connection-indicators-dirty)
+   (update-lock :initform (bt:make-lock "update-wake") :reader connection-update-lock)
+   (update-cond :initform (bt:make-condition-variable :name "update-wake")
+                :reader connection-update-cond)
+   (current-response :initform nil :accessor connection-current-response)
+   (cursor-row :initform 0 :accessor connection-cursor-row)
+   (cursor-col :initform 0 :accessor connection-cursor-col)
+   (last-activity :initform (get-universal-time) :accessor connection-last-activity)
+   (session :initform nil :accessor connection-session
+            :documentation "The current session on this connection.")))
+
 ;;; Session class
 
 (defclass session ()
-  ((application :initarg :application :reader session-application)
+  ((connection :initarg :connection :reader session-connection)
    (active-application :accessor session-active-application :initform nil)
    (current-screen :accessor session-current-screen)
    (last-successful-screen :initform nil :accessor session-last-successful-screen
                            :documentation "Screen symbol that was last successfully displayed
 and accepted user input. Set after show-screen-and-read returns.")
-   (last-activity :initform (get-universal-time) :accessor session-last-activity)
    (screen-stack :initform nil :accessor session-screen-stack)
    (context :initform (make-hash-table :test 'equal) :accessor session-context)
    (properties :initform (make-hash-table) :accessor session-properties)
@@ -74,22 +98,24 @@ and accepted user input. Set after show-screen-and-read returns.")
 normal key dispatch. Returns a navigation result or NIL to fall through.")
    (list-state :initform (make-hash-table) :accessor session-list-state
                :documentation "Framework-managed per-screen list state.
-Keys are screen symbols, values are plists of (:offset N :data-count N :cursor-row N).")
-   (write-lock :initform (bt:make-lock "conn-write") :reader session-write-lock)
-   (indicators :initform (make-hash-table :test 'equal) :reader session-indicators)
-   (indicators-dirty :initform nil :accessor session-indicators-dirty)
-   (update-lock :initform (bt:make-lock "update-wake") :reader session-update-lock)
-   (update-cond :initform (bt:make-condition-variable :name "update-wake")
-                :reader session-update-cond)
-   (current-response :initform nil :accessor session-current-response)
-   (cursor-row :initform 0 :accessor session-cursor-row)
-   (cursor-col :initform 0 :accessor session-cursor-col)
-   (tls-p :initform nil :accessor session-tls-p
-          :documentation "True when this session's connection is TLS-encrypted.")
-   (connection-id :initform nil :accessor session-connection-id
-                  :documentation "Unique identifier for this connection.")
-   (client-ip :initform nil :accessor session-client-ip
-              :documentation "Client IP address string (dotted notation).")))
+Keys are screen symbols, values are plists of (:offset N :data-count N :cursor-row N).")))
+
+;;; Session reset condition
+
+(define-condition session-reset ()
+  ((data :initarg :data :initform nil :reader session-reset-data))
+  (:documentation "Signaled to request a new session on the same connection.
+DATA carries application-specific information for creating the next session."))
+
+;;; Session factory
+
+(defgeneric make-session (application connection data)
+  (:documentation "Create a new session for CONNECTION. DATA is application-specific
+information from a session-reset condition, or NIL for the initial session.")
+  (:method (application connection data)
+    (declare (ignore data))
+    (make-instance (application-session-class application)
+                   :connection connection)))
 
 (defun session-property (session key &optional default)
   "Get a session property by key."
@@ -100,53 +126,56 @@ Keys are screen symbols, values are plists of (:offset N :data-count N :cursor-r
   (declare (ignore default))
   (setf (gethash key (session-properties session)) value))
 
-;;; Per-session state accessors
+;;; Per-connection state accessors (convenience functions using *session*)
 
 (defun current-response ()
   "Return the raw 3270 response from the last key press."
-  (session-current-response *session*))
+  (connection-current-response (session-connection *session*)))
 
 (defun (setf current-response) (value)
-  (setf (session-current-response *session*) value))
+  (setf (connection-current-response (session-connection *session*)) value))
 
 (defun cursor-row ()
   "Return the cursor row from the last 3270 response."
-  (session-cursor-row *session*))
+  (connection-cursor-row (session-connection *session*)))
 
 (defun (setf cursor-row) (value)
-  (setf (session-cursor-row *session*) value))
+  (setf (connection-cursor-row (session-connection *session*)) value))
 
 (defun cursor-col ()
   "Return the cursor column from the last 3270 response."
-  (session-cursor-col *session*))
+  (connection-cursor-col (session-connection *session*)))
 
 (defun (setf cursor-col) (value)
-  (setf (session-cursor-col *session*) value))
+  (setf (connection-cursor-col (session-connection *session*)) value))
 
 ;;; Indicator API
 
 (defun set-indicator (name text)
   "Set or update a status line indicator. TEXT=NIL clears it.
 Indicators appear as (TEXT) in the title line and persist across screen transitions."
-  (if text
-      (setf (gethash name (session-indicators *session*)) text)
-      (remhash name (session-indicators *session*)))
-  (bt:with-lock-held ((session-update-lock *session*))
-    (setf (session-indicators-dirty *session*) t)
-    (bt:condition-notify (session-update-cond *session*))))
+  (let ((conn (session-connection *session*)))
+    (if text
+        (setf (gethash name (connection-indicators conn)) text)
+        (remhash name (connection-indicators conn)))
+    (bt:with-lock-held ((connection-update-lock conn))
+      (setf (connection-indicators-dirty conn) t)
+      (bt:condition-notify (connection-update-cond conn)))))
 
 (defun clear-indicator (name)
   "Clear a status line indicator."
   (set-indicator name nil))
 
 (defun broadcast (function)
-  "Call FUNCTION once for each active session of the current application.
-*SESSION* is bound to each session in turn. Use this for cross-session
-updates like broadcasting indicators, chat messages, or system notifications."
-  (bt:with-lock-held ((application-sessions-lock *application*))
-    (dolist (session (application-sessions *application*))
-      (let ((*session* session))
-        (funcall function)))))
+  "Call FUNCTION once for each active connection of the current application.
+*SESSION* is bound to each connection's current session in turn.
+Use this for cross-session updates like broadcasting indicators, chat messages,
+or system notifications."
+  (bt:with-lock-held ((application-connections-lock *application*))
+    (dolist (conn (application-connections *application*))
+      (let ((*session* (connection-session conn)))
+        (when *session*
+          (funcall function))))))
 
 (defun broadcast-indicator (name text)
   "Set an indicator on ALL active sessions of the current application.
@@ -154,13 +183,13 @@ Each session's update thread is woken to push the change immediately."
   (broadcast (lambda () (set-indicator name text))))
 
 (defun session-indicator-texts ()
-  "Return list of indicator text strings from the current session, or NIL."
+  "Return list of indicator text strings from the current connection, or NIL."
   (when *session*
     (let ((texts '()))
       (maphash (lambda (name text)
                  (declare (ignore name))
                  (when text (push text texts)))
-               (session-indicators *session*))
+               (connection-indicators (session-connection *session*)))
       (nreverse texts))))
 
 
@@ -288,11 +317,12 @@ define-application is expanded). This means define-key-handler calls
 must be in the same package.
 
 Options:
-  :name string           - application name for logging (default: derived from variable)
-  :entry-screen symbol   - first screen to display (required)
-  :screen-directory path - directory containing .screen files (required)
-  :session-class symbol  - custom session class (default: session)
-  :title string          - display title for the title line (default: name)
+  :name string              - application name for logging (default: derived from variable)
+  :entry-screen symbol      - first screen to display (required)
+  :screen-directory path    - directory containing .screen files (required)
+  :session-class symbol     - custom session class (default: session)
+  :connection-class symbol  - custom connection class (default: connection)
+  :title string             - display title for the title line (default: name)
 
 Example:
   (define-application *my-app*
@@ -302,6 +332,7 @@ Example:
   (let ((entry-screen (getf options :entry-screen))
         (screen-directory (getf options :screen-directory))
         (session-class (getf options :session-class ''session))
+        (connection-class (getf options :connection-class ''connection))
         (title (getf options :title))
         (app-name (getf options :name)))
     (unless entry-screen
@@ -317,7 +348,8 @@ Example:
                         :entry-screen ',entry-sym
                         :screen-directory ,screen-directory
                         :package (find-package ,(package-name *package*))
-                        :session-class ,session-class)))))
+                        :session-class ,session-class
+                        :connection-class ,connection-class)))))
 
 ;;; AID constant to keyword mapping (inverse of aid-keyword-to-constant)
 
@@ -853,7 +885,7 @@ unlocking the 3270 keyboard after the main thread received a response."
                                                 :position-only t :len 79)))
          (vals (cl3270:make-dict :test #'equal)))
     (setf (gethash "%title"vals) title)
-    (bt:with-lock-held ((session-write-lock *session*))
+    (bt:with-lock-held ((connection-write-lock (session-connection *session*)))
       ;; Double-check running inside the lock -- stop-updates acquires
       ;; this lock after setting running=nil to create a fence.
       (when (update-context-running ctx)
@@ -1084,7 +1116,7 @@ Each element may be a string, a plist, or NIL."
           (unless (dynamic-content-equal content (gethash area-name cache))
             (setf (gethash area-name cache) content)
             (multiple-value-bind (screen vals) (build-dynamic-area-overlay area content)
-              (bt:with-lock-held ((session-write-lock *session*))
+              (bt:with-lock-held ((connection-write-lock (session-connection *session*)))
                 (when (update-context-running ctx)
                   (cl3270:show-screen-opts screen vals *connection*
                                            (make-instance 'cl3270:screen-opts :no-clear t :no-response t)))))))))))
@@ -1092,10 +1124,11 @@ Each element may be a string, a plist, or NIL."
 (defun wait-for-update-signal (ctx)
   "Block until the update thread is signaled or 1 second elapses.
 Returns NIL if the thread should exit."
-  (bt:with-lock-held ((session-update-lock *session*))
-    (bt:condition-wait (session-update-cond *session*)
-                        (session-update-lock *session*)
-                        :timeout 1))
+  (let ((conn (session-connection *session*)))
+    (bt:with-lock-held ((connection-update-lock conn))
+      (bt:condition-wait (connection-update-cond conn)
+                          (connection-update-lock conn)
+                          :timeout 1)))
   (update-context-running ctx))
 
 (defun minute-changed-p (ctx)
@@ -1107,10 +1140,11 @@ Returns NIL if the thread should exit."
 
 (defun consume-dirty-indicators-p ()
   "Return T and clear the dirty flag if indicators were changed."
-  (bt:with-lock-held ((session-update-lock *session*))
-    (when (session-indicators-dirty *session*)
-      (setf (session-indicators-dirty *session*) nil)
-      t)))
+  (let ((conn (session-connection *session*)))
+    (bt:with-lock-held ((connection-update-lock conn))
+      (when (connection-indicators-dirty conn)
+        (setf (connection-indicators-dirty conn) nil)
+        t))))
 
 (defun title-needs-update-p (ctx)
   "Return T if the title overlay should be re-sent."
@@ -1131,7 +1165,8 @@ Interrupts the main thread with an idle-timeout-error to break out of
 the blocking read-response."
   (let ((timeout (session-idle-timeout *application* *session*)))
     (when (and timeout
-               (> (- (get-universal-time) (session-last-activity *session*))
+               (> (- (get-universal-time)
+                     (connection-last-activity (session-connection *session*)))
                   timeout))
       (log-message :info "idle timeout (~Ds) on screen ~A, closing connection"
                    timeout (session-current-screen *session*))
@@ -1191,13 +1226,14 @@ Acquires the write-lock after setting running=nil to ensure no in-flight
 overlay send completes after this function returns (which would prematurely
 unlock the 3270 keyboard)."
   (setf (update-context-running ctx) nil)
-  ;; Fence: acquire and release the write-lock to ensure any in-flight
-  ;; overlay send (which holds this lock) completes, and the thread sees
-  ;; running=nil on its next double-check inside the lock.
-  (bt:with-lock-held ((session-write-lock *session*)) nil)
-  ;; Wake the thread so it can exit
-  (bt:with-lock-held ((session-update-lock *session*))
-    (bt:condition-notify (session-update-cond *session*)))
+  (let ((conn (session-connection *session*)))
+    ;; Fence: acquire and release the write-lock to ensure any in-flight
+    ;; overlay send (which holds this lock) completes, and the thread sees
+    ;; running=nil on its next double-check inside the lock.
+    (bt:with-lock-held ((connection-write-lock conn)) nil)
+    ;; Wake the thread so it can exit
+    (bt:with-lock-held ((connection-update-lock conn))
+      (bt:condition-notify (connection-update-cond conn))))
   (when (update-context-thread ctx)
     (bt:join-thread (update-context-thread ctx))
     (setf (update-context-thread ctx) nil)))
@@ -1828,7 +1864,8 @@ Returns (values transition-result no-clear saved-cursor-row saved-cursor-col)."
                                                     (not partial-page)))
                                (setf no-clear nil))))
                       (unless response (return-from next-screen))
-                      (setf (session-last-activity *session*) (get-universal-time)
+                      (setf (connection-last-activity (session-connection *session*))
+                            (get-universal-time)
                             (session-last-successful-screen *session*) screen-sym)
                       ;; Dispatch and transition
                       (multiple-value-bind (transition new-no-clear saved-row saved-col)
@@ -1853,30 +1890,47 @@ with *session* and *application* bound. The default method does nothing.")
 
 (defun run-application (application conn devinfo &key tls-p connection-id client-ip)
   "Run an application's main loop for a single connection.
-Binds dynamic variables, creates a session, and loops through screens.
+Creates a connection object, then loops creating fresh sessions.
+Each session runs the screen loop until exit or session-reset.
 TLS-P indicates the connection is TLS-encrypted."
   (let* ((*application* application)
          (*connection* conn)
          (*device-info* devinfo)
-         (*session* (make-instance (application-session-class application)
-                                   :application application))
          (*field-attribute-overrides* nil)
-         (app-package (application-package application)))
-    (bt:with-lock-held ((application-sessions-lock application))
-      (push *session* (application-sessions application)))
-    (setf (session-active-application *session*) application
-          (session-tls-p *session*) (or tls-p (application-test-force-tls application))
-          (session-connection-id *session*) connection-id
-          (session-client-ip *session*) client-ip)
+         (app-package (application-package application))
+         (conn-obj (make-instance (application-connection-class application)
+                                  :application application)))
+    (setf (connection-tls-p conn-obj)
+          (or tls-p (application-test-force-tls application))
+          (connection-id conn-obj) connection-id
+          (connection-client-ip conn-obj) client-ip)
+    (bt:with-lock-held ((application-connections-lock application))
+      (push conn-obj (application-connections application)))
     (unwind-protect
-         (progn
-           (setf (session-current-screen *session*)
-                 (application-entry-screen application))
-           (run-screen-loop app-package))
-      (ignore-errors (session-cleanup application *session*))
-      (bt:with-lock-held ((application-sessions-lock application))
-        (setf (application-sessions application)
-              (remove *session* (application-sessions application)))))))
+         (let ((data nil))
+           (loop
+             (let* ((*session* (make-session application conn-obj data))
+                    (reset-data nil))
+               (setf (connection-session conn-obj) *session*
+                     (session-active-application *session*) application
+                     (session-current-screen *session*)
+                     (application-entry-screen application))
+               (unwind-protect
+                    (handler-bind
+                        ((session-reset
+                           (lambda (c)
+                             (setf reset-data (session-reset-data c))
+                             (throw 'session-cycle :new-session))))
+                      (catch 'session-cycle
+                        (run-screen-loop app-package)
+                        (return)))
+                 (ignore-errors
+                   (session-cleanup application *session*))
+                 (setf (connection-session conn-obj) nil))
+               (setf data reset-data))))
+      (bt:with-lock-held ((application-connections-lock application))
+        (setf (application-connections application)
+              (remove conn-obj (application-connections application)))))))
 
 (defun invoke-subapplication (subapp entry-screen)
   "Switch to SUBAPP starting at ENTRY-SCREEN within the current session.

@@ -56,20 +56,40 @@
            #:application-entry-screen
            #:application-screen-directory
            #:application-session-class
+           #:application-connection-class
            #:application-test-force-tls
+           #:application-connections
+           #:application-connections-lock
            #:invoke-subapplication
+           ;; Connection
+           #:connection
+           #:connection-application
+           #:connection-session
+           #:connection-tls-p
+           #:connection-id
+           #:connection-client-ip
+           #:connection-write-lock
+           #:connection-indicators
+           #:connection-indicators-dirty
+           #:connection-update-lock
+           #:connection-update-cond
+           #:connection-current-response
+           #:connection-cursor-row
+           #:connection-cursor-col
+           #:connection-last-activity
+           ;; Session
            #:session
-           #:session-application
+           #:session-connection
            #:session-active-application
-           #:session-last-activity
            #:session-current-screen
            #:session-last-successful-screen
            #:session-screen-stack
            #:session-context
            #:session-properties
            #:session-property
-           #:session-tls-p
-           #:session-connection-id
+           #:make-session
+           #:session-reset
+           #:session-reset-data
            #:*application*
            #:*session*
            #:*connection*
@@ -81,9 +101,6 @@
            #:run-application
            #:start-application
            #:handle-connection
-           ;; Real-time updates
-           #:session-write-lock
-           #:session-indicators
            #:set-indicator
            #:clear-indicator
            #:broadcast
@@ -121,7 +138,6 @@
            #:role-access-denied-message
            ;; Connection validation
            #:validate-connection
-           #:session-client-ip
            ;; Command processing
            #:process-screen-command
            #:process-command
