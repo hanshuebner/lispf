@@ -64,6 +64,8 @@
            #:application-test-force-tls
            #:application-connections
            #:application-connections-lock
+           #:application-global-hotkeys
+           #:register-global-hotkey
            #:invoke-subapplication
            ;; Connection
            #:connection

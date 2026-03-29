@@ -37,7 +37,19 @@
                 :documentation "List of active connections.")
    (connections-lock :initform (bt:make-lock "connections") :reader application-connections-lock)
    (test-force-tls :initform nil :accessor application-test-force-tls
-                   :documentation "When true, all connections appear TLS-encrypted. For testing.")))
+                   :documentation "When true, all connections appear TLS-encrypted. For testing.")
+   (global-hotkeys :initform '() :accessor application-global-hotkeys
+                   :documentation "Alist of (aid-keyword . screen-symbol) for global hotkeys.
+These keys are always accepted and navigate to the target screen from any screen.")))
+
+(defun register-global-hotkey (application aid-keyword screen-symbol)
+  "Register AID-KEYWORD as a global hotkey that navigates to SCREEN-SYMBOL.
+Global hotkeys are always accepted and work from any screen, unless the
+screen defines its own handler for the same key."
+  (let ((existing (assoc aid-keyword (application-global-hotkeys application))))
+    (if existing
+        (setf (cdr existing) screen-symbol)
+        (push (cons aid-keyword screen-symbol) (application-global-hotkeys application)))))
 
 (defgeneric unknown-key-message (application key-name)
   (:documentation "Return the error message to display when an unknown key is pressed.
@@ -1624,6 +1636,10 @@ COMMAND is the trimmed value from the command field (extracted from response)."
           ;; Enter: menu input, command field, or screen handler
           ((eq aid-kw :enter)
            (dispatch-enter context dispatch-sym key-spec command))
+          ;; Global hotkey: navigate to target screen if no custom handler
+          ((let ((hotkey (assoc aid-kw (application-global-hotkeys *application*))))
+             (when (and hotkey (not (has-custom-key-handler-p dispatch-sym aid-kw)))
+               (cdr hotkey))))
           (t (handle-key dispatch-sym aid-kw))))
     (redisplay () :stay)))
 
@@ -1688,6 +1704,11 @@ Returns the 3270 response."
                   (find cl3270:+aid-pf1+ exit-keys))
         (setf pf-keys (concatenate 'vector pf-keys
                                     (vector cl3270:+aid-pf1+))))
+      ;; Always accept global hotkeys
+      (dolist (hotkey (application-global-hotkeys *application*))
+        (let ((constant (symbol-value (aid-keyword-to-constant (car hotkey)))))
+          (unless (or (find constant pf-keys) (find constant exit-keys))
+            (setf pf-keys (concatenate 'vector pf-keys (vector constant))))))
       (multiple-value-bind (response err)
           (display-and-read display-screen screen-rules field-values
                             pf-keys exit-keys "%errormsg"
