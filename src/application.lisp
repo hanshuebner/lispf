@@ -1502,10 +1502,6 @@ With FULL-CONTROL, do nothing (app manages all fields)."
          ;; Expired — clear it
          (setf (session-property *session* :message-line) nil)
          (setf (gethash "%errormsg" field-values) ""))
-        ;; Legacy: raw %errormsg in context (backward compatibility)
-        ((gethash "%errormsg" (session-context *session*))
-         (setf (gethash "%errormsg" field-values)
-               (gethash "%errormsg" (session-context *session*))))
         (t
          (setf (gethash "%errormsg" field-values) "")))))
   (let ((key-labels (format-key-labels-from-specs *current-screen-keys*
@@ -1534,12 +1530,8 @@ Uses set-cursor override if set, otherwise falls back to the first writable fiel
 
 (defun clear-screen-context (context)
   "Remove all non-framework fields from CONTEXT to prevent field leakage
-across screen transitions. Preserves %errormsg so key handlers can set
-error/success messages before navigating."
-  (let ((errormsg (gethash "%errormsg" context)))
-    (clrhash context)
-    (when errormsg
-      (setf (gethash "%errormsg" context) errormsg))))
+across screen transitions."
+  (clrhash context))
 
 (defun merge-response-into-context (response context transient-fields)
   "Merge response field values into CONTEXT, skipping framework and transient fields."
@@ -1754,7 +1746,6 @@ Returns the 3270 response."
   (merge-response-into-context response context transient-fields)
   (when (and repeat-groups (not has-list-data))
     (join-repeat-field-values repeat-groups context))
-  (remhash "%errormsg" context)
   (setf (cursor-row) (cl3270:response-row response)
         (cursor-col) (cl3270:response-col response)
         (current-response) response)
