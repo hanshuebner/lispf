@@ -1668,6 +1668,7 @@ COMMAND is the trimmed value from the command field (extracted from response)."
 Returns :exit when the application loop should terminate.
 Screen stack entries are (symbol cursor-row . cursor-col) to restore cursor on :back."
   (declare (ignore dispatch-sym))
+  (setf result (check-screen-transition *application* result))
   (cond
     ((eq result :logoff)
      :exit)

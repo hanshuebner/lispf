@@ -263,6 +263,16 @@ Override to localize or to return different labels per menu.")
   (:method ((application t))
     "Permission denied"))
 
+;;; Screen transition hook
+
+(defgeneric check-screen-transition (application result)
+  (:documentation "Called before a screen transition is applied. RESULT is the
+navigation value (:back, :logoff, a screen symbol, or (:jump . screen)).
+Return RESULT to allow the transition, or :stay to block it.
+Default method passes through unchanged.")
+  (:method ((application t) result)
+    result))
+
 ;;; Update cycle hook
 
 (defgeneric update-cycle-hook (application)

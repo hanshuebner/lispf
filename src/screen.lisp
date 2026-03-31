@@ -128,6 +128,8 @@
            #:clear-message
            #:message-expired-p
            #:message-cleared
+           ;; Screen transition hook
+           #:check-screen-transition
            ;; Update cycle hook
            #:update-cycle-hook
            #:send-error-line-overlay
