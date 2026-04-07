@@ -541,7 +541,7 @@ telnet negotiation."
                     (#\4 (values 43 80))
                     (#\5 (values 27 132))
                     (otherwise (values 24 80)))
-                (log-message :info "connect from=~A type=~A size=~Dx~D~@[ alt=~Dx~D~]~@[ codepage=~A~] tls=~A~@[ lu=~A~]"
+                (log-message :info "connect from=~A type=~A size=~Dx~D~@[ alt=~Dx~D~]~@[ codepage=~S~] tls=~A color=~A highlight=~A~@[ lu=~A~]"
                              (or peer "unknown")
                              term
                              pri-rows pri-cols
@@ -554,6 +554,8 @@ telnet negotiation."
                              (when (cl3270::codepage devinfo)
                                (cl3270::codepage-name (cl3270::codepage devinfo)))
                              (if (cl3270:tls-p devinfo) "yes" "no")
+                             (if (cl3270:color-p devinfo) "yes" "no")
+                             (if (cl3270:highlight-p devinfo) "yes" "no")
                              (cl3270:device-name devinfo)))
               (let ((rejection (validate-connection application devinfo
                                                     (or client-ip ""))))
@@ -1735,6 +1737,7 @@ Returns the 3270 response."
                             pf-keys exit-keys "%errormsg"
                             cursor-row cursor-col *connection*
                             :screen-sym (unless full-control dispatch-sym)
+                            :devinfo *device-info*
                             :codepage (when *device-info*
                                         (cl3270::codepage *device-info*))
                             :no-clear no-clear)
