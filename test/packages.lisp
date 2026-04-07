@@ -30,6 +30,7 @@
            #:cursor-position
            #:wait-for-field
            #:press-pf-wait-screen
+           #:wait-for-screen-contains
            #:read-buffer
            #:row-has-input-field-p
            #:row-has-field-attribute-p
