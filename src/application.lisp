@@ -541,16 +541,15 @@ telnet negotiation."
                     (#\4 (values 43 80))
                     (#\5 (values 27 132))
                     (otherwise (values 24 80)))
-                (log-message :info "connect from=~A type=~A size=~Dx~D~@[ alt=~Dx~D~]~@[ codepage=~S~] tls=~A color=~A highlight=~A~@[ lu=~A~]"
+                (log-message :info "connect from=~A type=~A size=~Dx~D~@[ alt=~A~]~@[ codepage=~A~] tls=~A color=~A highlight=~A~@[ lu=~A~]"
                              (or peer "unknown")
                              term
                              pri-rows pri-cols
                              (when (or (/= (cl3270::rows devinfo) pri-rows)
                                        (/= (cl3270::cols devinfo) pri-cols))
-                               (cl3270::rows devinfo))
-                             (when (or (/= (cl3270::rows devinfo) pri-rows)
-                                       (/= (cl3270::cols devinfo) pri-cols))
-                               (cl3270::cols devinfo))
+                               (format nil "~Dx~D"
+                                       (cl3270::rows devinfo)
+                                       (cl3270::cols devinfo)))
                              (when (cl3270::codepage devinfo)
                                (cl3270::codepage-name (cl3270::codepage devinfo)))
                              (if (cl3270:tls-p devinfo) "yes" "no")
