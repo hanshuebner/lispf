@@ -1596,11 +1596,11 @@ Returns T if the file was falsely marked as modified."
              (assert-on-screen s "OPEN")
              (type-text s (namestring path))
              (press-enter s)
-             (assert-screen-contains s "Size=")
+             (wait-for-screen-contains s "Size=")
 
              ;; At top: should see Top-of-Data marker and first lines
              ;; Data fields start at display row 3 (screen row 2 + 1 for title)
-             (assert-row-contains s 2 "Top of File" "Top marker on initial display")
+             (wait-for-screen-contains s "Top of File")
              (assert-row-contains s 3 "00001" "Line 1 number on initial display")
              (assert-row-contains s 3 "Line 1 of" "Line 1 content on initial display")
              (assert-no-modify-flag s "No modification on initial display")

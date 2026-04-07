@@ -131,6 +131,22 @@ Queries s3270 for the current status."
   "Wait until an input field is available."
   (send-action session "Wait(InputField)"))
 
+(defun wait-for-screen-contains (session text &key (timeout 5) (interval 0.1))
+  "Poll until the screen contains TEXT. Returns T on success, signals test-failure on timeout."
+  (let ((deadline (+ (get-internal-real-time)
+                     (* timeout internal-time-units-per-second))))
+    (loop
+      (let* ((rows (screen-text session))
+             (full (format nil "~{~A~^~%~}" rows)))
+        (when (search text full)
+          (return t)))
+      (when (> (get-internal-real-time) deadline)
+        (error 'lispf-test:test-failure
+               :description (format nil "Timeout waiting for ~S" text)
+               :expected text
+               :actual (screen-row session 0)))
+      (sleep interval))))
+
 (defun press-pf-wait-screen (session n expected-text &key (timeout 5) (interval 0.1))
   "Press PF N and wait until the screen contains EXPECTED-TEXT.
 Useful when the key press triggers a subapplication exit followed by a
