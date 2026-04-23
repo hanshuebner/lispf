@@ -574,10 +574,10 @@ telnet negotiation."
         (log-message :info "client disconnected"))
       ;; Kubernetes TCP probes and load-balancer health checks open a
       ;; connection and close it without negotiating TN3270 — that
-      ;; races with our banner write and raises a stream error. Treat
-      ;; it as a disconnect, not an app-level error.
-      (simple-stream-error ()
-        (log-message :info "client disconnected (stream closed mid-write)"))
+      ;; races with our banner write and raises a stream error. These
+      ;; happen every few seconds in a k8s deployment; swallow
+      ;; silently rather than flooding the log.
+      (simple-stream-error ())
       (error (c)
         (log-message :error "connection error: ~A" c)
         (unless (error-log-throttled-p)
