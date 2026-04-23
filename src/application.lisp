@@ -585,7 +585,10 @@ telnet negotiation."
       ;; probes or LB health checks that close right after accept.
       ;; After negotiation a stream error is a real 3270 client
       ;; dropping unexpectedly — worth logging.
-      (simple-stream-error (c)
+      ;; cl:stream-error covers sb-int:broken-pipe + the
+      ;; simple-stream-error sub-hierarchy; end-of-file is also a
+      ;; stream-error but is matched by the earlier clause.
+      (stream-error (c)
         (when negotiated-p
           (log-message :error "connection error: ~A" c)))
       (error (c)
