@@ -511,7 +511,13 @@ telnet negotiation."
   (declare (type usocket:stream-usocket socket))
   (let* ((conn-id (next-connection-id))
          (*application* application)
-         (*connection-id* conn-id))
+         (*connection-id* conn-id)
+         ;; Flips to T once cl3270:negotiate-telnet returns a devinfo.
+         ;; Used by the outer handler to distinguish a real 3270 client
+         ;; (past negotiation) from a bare TCP probe that closed before
+         ;; any IAC exchange happened. Probes become silent; post-
+         ;; negotiation errors still log.
+         (negotiated-p nil))
     (handler-case
         (progn
           (when tls-immediate-p
@@ -522,6 +528,7 @@ telnet negotiation."
             (when err
               (log-message :warn "negotiation error: ~A" err)
               (return-from handle-connection))
+            (setf negotiated-p t)
             (when tls-immediate-p
               (setf (cl3270:tls-p devinfo) t))
             (let* ((addr (ignore-errors (usocket:get-peer-address socket)))
@@ -569,15 +576,18 @@ telnet negotiation."
                 (cl3270:unnegotiate-telnet socket 1)))))
       (idle-timeout-error ())
       (end-of-file ()
-        (log-message :info "client disconnected"))
+        (when negotiated-p
+          (log-message :info "client disconnected")))
       (cl+ssl::ssl-error/handle ()
-        (log-message :info "client disconnected"))
-      ;; Kubernetes TCP probes and load-balancer health checks open a
-      ;; connection and close it without negotiating TN3270 — that
-      ;; races with our banner write and raises a stream error. These
-      ;; happen every few seconds in a k8s deployment; swallow
-      ;; silently rather than flooding the log.
-      (simple-stream-error ())
+        (when negotiated-p
+          (log-message :info "client disconnected")))
+      ;; Stream errors before negotiation are almost always k8s TCP
+      ;; probes or LB health checks that close right after accept.
+      ;; After negotiation a stream error is a real 3270 client
+      ;; dropping unexpectedly — worth logging.
+      (simple-stream-error (c)
+        (when negotiated-p
+          (log-message :error "connection error: ~A" c)))
       (error (c)
         (log-message :error "connection error: ~A" c)
         (unless (error-log-throttled-p)
